@@ -1,0 +1,39 @@
+<!-- ==================== DELIVERY / SURAT JALAN VIEW ==================== -->
+<section class="view-section" id="view-delivery">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-delivery-status" class="form-control-sm" onchange="renderDeliveryTable()">
+        <option value="ALL">Semua Status</option>
+        <option value="Packing / Ready">Packing / Ready</option>
+        <option value="In Transit">In Transit</option>
+        <option value="Delivered / Received">Delivered / Received</option>
+        <option value="Returned">Returned</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="exportToCSV('delivery')"><i data-lucide="download"></i> Export CSV</button>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>No. Surat Jalan</th>
+            <th>No. Order</th>
+            <th>Penerima & Alamat</th>
+            <th>Tgl Kirim</th>
+            <th>Ekspedisi & Driver</th>
+            <th>Item</th>
+            <th>Status</th>
+            <th class="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-delivery-body">
+          <!-- Data loaded dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

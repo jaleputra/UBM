@@ -1,0 +1,55 @@
+<!-- ==================== ORDERS VIEW ==================== -->
+<section class="view-section" id="view-orders">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-order-status" class="form-control-sm" onchange="filterOrders()">
+        <option value="ALL">Semua Status Order</option>
+        <option value="Pengajuan">Pengajuan</option>
+        <option value="Accepted">Accepted (Disetujui)</option>
+        <option value="Confirmed">Confirmed</option>
+        <option value="In Production">In Production</option>
+        <option value="Delivered">Delivered</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="exportDataToCSV('orders')"><i data-lucide="download"></i> Export CSV</button>
+    </div>
+  </div>
+
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+    <div class="table-orders-container">
+      <table class="data-table table-orders" id="table-orders-main">
+        <colgroup>
+          <col style="width: 10%;">    <!-- No. Order -->
+          <col style="width: 11.5%;">  <!-- Pelanggan (diperkecil) -->
+          <col style="width: 12%;">    <!-- Project Lead -->
+          <col style="width: 9%;">     <!-- Dokumen PO -->
+          <col style="width: 8%;">     <!-- Tanggal Order -->
+          <col style="width: 8%;">     <!-- Due Date -->
+          <col style="width: 5%;">     <!-- Item -->
+          <col style="width: 11.5%;">  <!-- Total Nilai -->
+          <col style="width: 10.5%;">  <!-- Status -->
+          <col style="width: 14.5%;">  <!-- Aksi -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>No. Order</th>
+            <th>Pelanggan</th>
+            <th>Project Lead</th>
+            <th style="text-align: center;">Dokumen PO</th>
+            <th>Tgl Order</th>
+            <th>Due Date</th>
+            <th style="text-align: center;">Item</th>
+            <th style="text-align: right;">Total Nilai</th>
+            <th style="text-align: center;">Status</th>
+            <th class="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-orders-body">
+          <!-- Data loaded dynamically via orders.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,77 @@
+<!-- ==================== KEUANGAN & PROFITABILITAS VIEW ==================== -->
+<section class="view-section" id="view-finance">
+  <!-- INFO BANNER -->
+  <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #3b82f6; margin-bottom: 16px;">
+    <i data-lucide="calculator" style="width: 18px; height: 18px; color: #2563eb; flex-shrink: 0;"></i>
+    <div>
+      <strong>Keuangan & Analisis Profitabilitas Project</strong>: Menampilkan ringkasan finansial proyek meliputi <strong>Harga Modal (HPP / Biaya Bahan & Operasional)</strong>, <strong>Harga Jual Proyek</strong>, <strong>Alokasi & Realisasi Garansi</strong>, serta <strong>Keuntungan Bersih (Net Profit)</strong> dan <strong>Margin Laba (%)</strong>.
+    </div>
+  </div>
+
+  <!-- STAT SUMMARY CARDS -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
+      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Jual (Omzet)</div>
+      <div id="kpi-finance-total-revenue" class="font-mono" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
+      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Modal (HPP)</div>
+      <div id="kpi-finance-total-cogs" class="font-mono" style="font-size: 17px; font-weight: 800; color: #b45309; margin-top: 4px;">Rp 0</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
+      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Alokasi Garansi (5%)</div>
+      <div id="kpi-finance-total-warranty" class="font-mono" style="font-size: 17px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #e11d48;">
+      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Klaim Garansi Terpakai</div>
+      <div id="kpi-finance-total-claims" class="font-mono" style="font-size: 17px; font-weight: 800; color: #e11d48; margin-top: 4px;">Rp 0</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
+      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Keuntungan Bersih (Net Profit)</div>
+      <div id="kpi-finance-total-net-profit" class="font-mono" style="font-size: 18px; font-weight: 800; color: #15803d; margin-top: 4px;">Rp 0</div>
+      <div id="kpi-finance-avg-margin" style="font-size: 11px; color: #15803d; font-weight: 700; margin-top: 2px;">Avg. Margin: 0%</div>
+    </div>
+  </div>
+
+  <!-- ACTION & FILTER BAR -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
+        <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
+        <option value="PAID">💵 Lunas (Invoice Paid)</option>
+        <option value="PARTIAL">💳 Sebagian (Invoice Partial)</option>
+        <option value="UNPAID">⏳ Belum Dibayar (Invoice Unpaid)</option>
+        <option value="HIGH">🟢 Sangat Menguntungkan (&gt; 30%)</option>
+        <option value="GOOD">🔵 Menguntungkan (10% - 30%)</option>
+        <option value="LOW">🟡 Margin Tipis (0% - 10%)</option>
+        <option value="LOSS">🔴 Defisit / Rugi (&lt; 0%)</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="exportFinanceToCSV()" style="height: 36px;">
+        <i data-lucide="download"></i> Export CSV Keuangan
+      </button>
+    </div>
+  </div>
+
+  <!-- TABEL DATA KEUANGAN PROJECT -->
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+      <table class="data-table" id="table-finance-main" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+            <th style="width: 125px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+            <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+            <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Modal (HPP)</th>
+            <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Jual</th>
+            <th style="width: 165px; font-size: 11px; text-transform: uppercase;">Garansi (Plafon / Klaim)</th>
+            <th style="width: 165px; text-align: right; font-size: 11px; text-transform: uppercase;">Keuntungan Bersih</th>
+            <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Margin (%)</th>
+            <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-finance-body">
+          <!-- Populated dynamically via finance.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

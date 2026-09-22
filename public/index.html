@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UBM - Universal Business Management System</title>
+  <meta name="description" content="Aplikasi Enterprise Terpadu UBM: Order, PO, Invoice, Purchasing, BOM, dan Delivery">
+  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="theme-light">
+  <div class="app-layout">
+    
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="logo-box">
+            <i data-lucide="layers"></i>
+          </div>
+          <div class="logo-text">
+            <h2>UBM Enterprise</h2>
+            <p>Management System</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Menu Utama</div>
+        <button class="nav-item active" data-view="dashboard">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <div class="nav-section-label">Sales & Produksi</div>
+        <button class="nav-item" data-view="quotations">
+          <i data-lucide="file-check-2"></i>
+          <span>Quotation</span>
+          <span class="badge badge-count" id="badge-quotation-count">0</span>
+        </button>
+        <button class="nav-item" data-view="orders">
+          <i data-lucide="shopping-cart"></i>
+          <span>Order Penjualan</span>
+          <span class="badge badge-count" id="badge-order-count">0</span>
+        </button>
+        <button class="nav-item" data-view="bom">
+          <i data-lucide="boxes"></i>
+          <span>Bill of Materials (BOM)</span>
+          <span class="badge badge-count" id="badge-bom-count">0</span>
+        </button>
+        <button class="nav-item" data-view="purchasing">
+          <i data-lucide="clipboard-check"></i>
+          <span>Purchasing</span>
+          <span class="badge badge-count" id="badge-purchasing-count">0</span>
+        </button>
+        <button class="nav-item" data-view="project-reports">
+          <i data-lucide="file-spreadsheet"></i>
+          <span>Laporan Project</span>
+          <span class="badge badge-count" id="badge-project-reports-count">0</span>
+        </button>
+
+        <div class="nav-section-label">Pengiriman & Penagihan</div>
+        <button class="nav-item" data-view="invoices">
+          <i data-lucide="receipt"></i>
+          <span>Invoice / Faktur</span>
+          <span class="badge badge-count" id="badge-invoice-count">0</span>
+        </button>
+        <button class="nav-item" data-view="bast">
+          <i data-lucide="file-signature"></i>
+          <span>BAST</span>
+          <span class="badge badge-count" id="badge-bast-count">0</span>
+        </button>
+        <button class="nav-item" data-view="finance">
+          <i data-lucide="calculator"></i>
+          <span>Keuangan Project</span>
+          <span class="badge badge-count" id="badge-finance-count">0</span>
+        </button>
+
+        <div class="nav-section-label">After Sales</div>
+        <button class="nav-item" data-view="service">
+          <i data-lucide="shield-check"></i>
+          <span>Service</span>
+          <span class="badge badge-count" id="badge-service-count">0</span>
+        </button>
+        <button class="nav-item" data-view="maintenance">
+          <i data-lucide="wrench"></i>
+          <span>Maintenance</span>
+          <span class="badge badge-count" id="badge-maintenance-count">0</span>
+        </button>
+
+        <div class="nav-section-label">Sistem & Profil</div>
+        <button class="nav-item" data-view="settings">
+          <i data-lucide="settings"></i>
+          <span>Pengaturan Profil</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <div class="status-indicator online"></div>
+          <div class="status-info">
+            <span class="status-title">UBM Cloud Online</span>
+            <span class="status-sub" id="live-time">00:00:00 WIB</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <main class="main-wrapper">
+      
+      <!-- TOPBAR -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn-icon mobile-menu-toggle" id="mobile-toggle">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="breadcrumb-container">
+            <span class="breadcrumb-root">Aplikasi</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current" id="page-title">Dashboard</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Search Bar -->
+          <div class="search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="global-search" placeholder="Cari data, ID, transaksi...">
+            <kbd class="search-kbd">⌘K</kbd>
+          </div>
+
+          <!-- Quick Action Add Button -->
+          <button class="btn btn-primary" id="btn-quick-create">
+            <i data-lucide="plus"></i>
+            <span id="quick-create-label">Tambah Data</span>
+          </button>
+
+          <!-- Notification Icon -->
+          <div class="notification-btn" title="Notifikasi Sistem">
+            <i data-lucide="bell"></i>
+            <span class="dot-indicator"></span>
+          </div>
+
+          <!-- User Profile -->
+          <div class="user-pill">
+            <div class="avatar">UB</div>
+            <div class="user-details">
+              <span class="user-name">Admin</span>
+              <span class="user-role">Operations</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- DYNAMIC VIEW CONTAINER -->
+      <div class="content-container">
+        
+        <!-- ==================== DASHBOARD VIEW ==================== -->
+        <section class="view-section active" id="view-dashboard">
+          <!-- Summary Cards Grid 1: Transaksi & Finansial (4 Kolom Proporsional) -->
+          <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+            <!-- 1. Card Quotation -->
+            <div class="kpi-card accent-purple">
+              <div class="kpi-header">
+                <span class="kpi-title">Quotation (Penawaran)</span>
+                <div class="kpi-icon"><i data-lucide="file-check-2"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-quotations-val">0 Penawaran</div>
+              <div class="kpi-footer">
+                <span class="text-purple" id="kpi-quotations-amount">Rp 0</span>
+                <span class="text-muted">Total Nilai Penawaran</span>
+              </div>
+            </div>
+
+            <!-- 2. Card Total Sales Order -->
+            <div class="kpi-card accent-blue">
+              <div class="kpi-header">
+                <span class="kpi-title">Total Sales Order</span>
+                <div class="kpi-icon"><i data-lucide="shopping-cart"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-orders-val">0 Order</div>
+              <div class="kpi-footer">
+                <span class="text-success" id="kpi-orders-amount">Rp 0</span>
+                <span class="text-muted">Total Nilai Order</span>
+              </div>
+            </div>
+
+            <!-- 3. Card Tagihan -->
+            <div class="kpi-card accent-amber">
+              <div class="kpi-header">
+                <span class="kpi-title">Tagihan & Piutang</span>
+                <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-invoices-val">0 Faktur</div>
+              <div class="kpi-footer">
+                <span class="text-warning" id="kpi-invoices-amount">Rp 0</span>
+                <span class="text-muted">Outstanding Invoice</span>
+              </div>
+            </div>
+
+            <!-- 4. Card Delivery -->
+            <div class="kpi-card accent-emerald">
+              <div class="kpi-header">
+                <span class="kpi-title">Delivery & Surat Jalan</span>
+                <div class="kpi-icon"><i data-lucide="truck"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-delivery-val">0 Pengiriman</div>
+              <div class="kpi-footer">
+                <span class="text-emerald" id="kpi-delivery-active">Pengiriman Aktif</span>
+                <span class="text-muted">Status Ekspedisi</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Summary Cards Grid 2: Status & Performa Project Timeline (3 Kolom Proporsional) -->
+          <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 24px;">
+            <!-- 5. Card Project In Progress -->
+            <div class="kpi-card accent-indigo">
+              <div class="kpi-header">
+                <span class="kpi-title">Total Project In Progress</span>
+                <div class="kpi-icon"><i data-lucide="play-circle"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-proj-inprogress-val">0 Project</div>
+              <div class="kpi-footer">
+                <span class="text-indigo" id="kpi-proj-inprogress-sub">Sedang Dikerjakan</span>
+                <span class="text-muted">Project Berjalan & Aktif</span>
+              </div>
+            </div>
+
+            <!-- 6. Card Project Completed -->
+            <div class="kpi-card accent-emerald">
+              <div class="kpi-header">
+                <span class="kpi-title">Total Project Completed</span>
+                <div class="kpi-icon"><i data-lucide="check-circle-2"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-proj-completed-val">0 Project</div>
+              <div class="kpi-footer">
+                <span class="text-emerald" id="kpi-proj-completed-sub">Selesai 100%</span>
+                <span class="text-muted">Pesanan Tuntas Dikerjakan</span>
+              </div>
+            </div>
+
+            <!-- 7. Card Persentase Project Overdue -->
+            <div class="kpi-card accent-rose">
+              <div class="kpi-header">
+                <span class="kpi-title">Persentase Project Overdue</span>
+                <div class="kpi-icon"><i data-lucide="alert-triangle"></i></div>
+              </div>
+              <div class="kpi-value" id="kpi-proj-overdue-val" style="color: #e11d48;">0%</div>
+              <div class="kpi-footer">
+                <span class="text-rose" id="kpi-proj-overdue-sub">0 dari 0 Project</span>
+                <span class="text-muted">Tingkat Keterlambatan Jadwal</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SEARCH BAR TABEL DASHBOARD ==================== -->
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+            <div style="position: relative; max-width: 440px; width: 100%;">
+              <i data-lucide="search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #94a3b8; pointer-events: none;"></i>
+              <input type="text" id="dashboard-search-input" class="form-control" placeholder="Cari order, customer, project, PIC... (min. 3 huruf)" oninput="onDashboardSearchInput(this.value)" style="padding-left: 36px; padding-right: 32px; height: 38px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border-color); background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+              <button type="button" id="dashboard-search-clear-btn" onclick="clearDashboardSearch()" style="display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px;" title="Hapus Pencarian">
+                <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+              </button>
+            </div>
+            <div id="dashboard-search-result-hint" style="font-size: 12px; color: var(--text-muted); font-weight: 500;">
+              <!-- Populated dynamically via JS -->
+            </div>
+          </div>
+
+          <!-- ==================== TABEL MONITORING SALES ORDER & GANTT CHART ==================== -->
+          <div class="table-responsive" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-x: auto; background: #ffffff; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <table class="data-table" style="margin: 0; width: 100%;">
+              <thead style="background: #f8fafc;">
+                <tr>
+                  <th style="width: 4%; text-align: center;">NO.</th>
+                  <th style="width: 9%;">NO. ORDER</th>
+                  <th style="width: 15%;">NAMA PERUSAHAAN</th>
+                  <th style="width: 15%;">NAMA PROJECT</th>
+                  <th style="width: 11%;">PIC LEAD & TIM</th>
+                  <th style="width: 12%;">JADWAL PROJECT</th>
+                  <th style="width: 11%; text-align: center;">OVERDUE MILESTONE</th>
+                  <th style="width: 12%;">PROGRESS & TASK</th>
+                  <th style="width: 9%; text-align: center;">STATUS</th>
+                  <th style="width: 10%; text-align: right;">GANTT CHART</th>
+                </tr>
+              </thead>
+              <tbody id="gantt-chart-table-body">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==================== QUOTATIONS VIEW (SURAT PENAWARAN HARGA) ==================== -->
+        <section class="view-section" id="view-quotations">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="filter-quotation-status" class="form-control-sm" onchange="filterQuotations()">
+                <option value="ALL">Semua Status Penawaran</option>
+                <option value="Draft">Draft</option>
+                <option value="Sent">Sent (Terkirim)</option>
+                <option value="Pengajuan">Pengajuan</option>
+                <option value="Accepted">Accepted (Disetujui)</option>
+                <option value="Rejected">Rejected (Ditolak)</option>
+                <option value="Expired">Expired (Kadaluarsa)</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('quotations')"><i data-lucide="download"></i> Export CSV</button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <!-- Container strictly prevents horizontal scrolling; only scrolls vertically when full -->
+            <div class="table-quotations-container">
+              <table class="data-table table-quotations" id="table-quotations-main">
+                <colgroup>
+                  <col style="width: 10%;">
+                  <col style="width: 16%;">
+                  <col style="width: 11%;">
+                  <col style="width: 8.5%;">
+                  <col style="width: 8.5%;">
+                  <col style="width: 12%;">
+                  <col style="width: 5.5%;">
+                  <col style="width: 10.5%;">
+                  <col style="width: 7%;">
+                  <col style="width: 11%;">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>No. Quotation</th>
+                    <th>Calon Pelanggan</th>
+                    <th>Kontak / WhatsApp</th>
+                    <th>Tgl Penawaran</th>
+                    <th>Masa Berlaku</th>
+                    <th>Garansi & Ketentuan</th>
+                    <th style="text-align: center;">Item</th>
+                    <th>Total Penawaran</th>
+                    <th style="text-align: center;">Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-quotations-body">
+                  <!-- Data loaded dynamically via quotations.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== ORDERS VIEW ==================== -->
+        <section class="view-section" id="view-orders">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="filter-order-status" class="form-control-sm" onchange="filterOrders()">
+                <option value="ALL">Semua Status Order</option>
+                <option value="Pengajuan">Pengajuan</option>
+                <option value="Accepted">Accepted (Disetujui)</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="In Production">In Production</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('orders')"><i data-lucide="download"></i> Export CSV</button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div class="table-orders-container">
+              <table class="data-table table-orders" id="table-orders-main">
+                <colgroup>
+                  <col style="width: 10%;">    <!-- No. Order -->
+                  <col style="width: 11.5%;">  <!-- Pelanggan (diperkecil) -->
+                  <col style="width: 12%;">    <!-- Project Lead -->
+                  <col style="width: 9%;">     <!-- Dokumen PO -->
+                  <col style="width: 8%;">     <!-- Tanggal Order -->
+                  <col style="width: 8%;">     <!-- Due Date -->
+                  <col style="width: 5%;">     <!-- Item -->
+                  <col style="width: 11.5%;">  <!-- Total Nilai -->
+                  <col style="width: 10.5%;">  <!-- Status -->
+                  <col style="width: 14.5%;">  <!-- Aksi -->
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>No. Order</th>
+                    <th>Pelanggan</th>
+                    <th>Project Lead</th>
+                    <th style="text-align: center;">Dokumen PO</th>
+                    <th>Tgl Order</th>
+                    <th>Due Date</th>
+                    <th style="text-align: center;">Item</th>
+                    <th style="text-align: right;">Total Nilai</th>
+                    <th style="text-align: center;">Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-orders-body">
+                  <!-- Data loaded dynamically via orders.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== PROJECT MANAGEMENT VIEW ==================== -->
+        <section class="view-section" id="view-projects">
+          <!-- Top Bar: Info & Search Filter -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; background: #f1f5f9; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #4f46e5;">
+              <i data-lucide="mouse-pointer-click" style="width: 16px; height: 16px; color: #4f46e5;"></i>
+              <span>Klik pada project untuk membuka <strong>Detail Timeline, Jadwal & Milestone Pengerjaan</strong></span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <select id="filter-project-status" class="form-control-sm" onchange="filterProjectsTable()" style="height: 36px;">
+                <option value="ALL">Semua Status Project</option>
+                <option value="Planning">Planning (Perencanaan)</option>
+                <option value="In Progress">In Progress (Pengerjaan)</option>
+                <option value="Testing & QC">Testing & QC</option>
+                <option value="Completed">Completed (Selesai)</option>
+                <option value="On Hold">On Hold (Tertunda)</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('projects')" style="height: 36px;">
+                <i data-lucide="download"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- Project Management Table (Hanya Project Saja) -->
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div class="table-responsive" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+              <table class="data-table" id="table-projects-main" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                    <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Project Lead (PIC Utama)</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Tim Pelaksana</th>
+                    <th style="width: 155px; font-size: 11px; text-transform: uppercase;">Jadwal / Deadline</th>
+                    <th style="width: 160px; font-size: 11px; text-transform: uppercase;">Progress Timeline</th>
+                    <th style="width: 110px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+                    <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Detail Timeline</th>
+                  </tr>
+                </thead>
+                <tbody id="table-projects-body">
+                  <!-- Populated dynamically via projects.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== PROJECT MANAGEMENT & TIMELINE VIEW ==================== -->
+        <section class="view-section" id="view-timeline">
+          <div class="card" style="margin-bottom: 24px; padding: 22px 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <button type="button" class="btn btn-sm btn-ghost" id="timeline-back-link-btn" onclick="navigateBackFromTimeline()" style="margin-bottom: 6px; padding-left: 0; color: #4f46e5; font-weight: 600;">
+                  <i data-lucide="arrow-left"></i> Kembali ke Order Penjualan
+                </button>
+                <h2 id="timeline-page-title" style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <i data-lucide="folder-kanban" style="color: #4f46e5;"></i> Detail Timeline & Milestone: <span id="timeline-header-order-id" class="mono-id">ORD-2026-001</span>
+                </h2>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 3px 0 0 0;">Pengaturan status pengerjaan, rentang tanggal project, dan daftar tahapan milestone pengerjaan</p>
+              </div>
+              <div class="btn-group">
+                <button type="button" class="btn btn-outline" onclick="navigateBackFromTimeline()"><i data-lucide="x"></i> Tutup</button>
+                <button type="button" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5;" onclick="saveProjectTimelineData()"><i data-lucide="save"></i> Simpan Timeline & Milestone</button>
+              </div>
+            </div>
+
+            <!-- OVERVIEW BAR: ORDER SELECTOR, STATUS & PROGRESS -->
+            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 16px 18px; border-radius: 8px; border: 1px solid var(--border-color);">
+              <div>
+                <label class="form-label font-bold" style="font-size: 11px;">Pilih Referensi Order Penjualan</label>
+                <select id="timeline-order-select" class="form-control" onchange="switchTimelineOrder(this.value)">
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              <div>
+                <label class="form-label font-bold" style="font-size: 11px;">Status Pengerjaan Project</label>
+                <select id="timeline-status-select" class="form-control" onchange="updateTimelineHeaderBadge()">
+                  <option value="Planning" selected>🔵 Planning (Perencanaan)</option>
+                  <option value="In Progress">🟡 In Progress (Pengerjaan)</option>
+                  <option value="Testing & QC">🟣 Testing & QC (Uji Fungsi)</option>
+                  <option value="Completed">🟢 Completed (Selesai)</option>
+                  <option value="On Hold">⚪ On Hold (Tertunda)</option>
+                </select>
+              </div>
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label class="form-label font-bold" style="font-size: 11px; margin: 0;">Progress Keseluruhan</label>
+                  <span id="timeline-progress-label" class="font-bold text-main" style="font-size: 12px; color: #4f46e5;">50% Selesai</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
+                  <div id="timeline-progress-bar" style="width: 50%; height: 100%; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TIMELINE SCHEDULE DATES -->
+            <div class="card" style="border: 1px solid var(--border-color); padding: 18px; margin-bottom: 20px;">
+              <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="calendar" style="width: 17px; height: 17px; color: #2563eb;"></i> Jadwal Pengerjaan Project Keseluruhan
+              </h3>
+              <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 14px;">
+                <div class="form-group">
+                  <label class="form-label">Tanggal Mulai Project</label>
+                  <input type="date" id="timeline-start-date" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Target Deadline Selesai</label>
+                  <input type="date" id="timeline-due-date" class="form-control">
+                </div>
+              </div>
+            </div>
+
+            <!-- MILESTONES CARD -->
+            <div class="card" style="border: 1px solid var(--border-color); padding: 18px; margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                <div>
+                  <h3 style="font-size: 15px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <i data-lucide="calendar-range" style="color: #4f46e5;"></i> Kalender Blok & Tahapan Kerja Milestone Project
+                  </h3>
+                  <p style="font-size: 11.5px; color: var(--text-muted); margin: 3px 0 0 0;">
+                    Setiap milestone memiliki <strong>blok warna tersendiri</strong>. Klik pada blok warna untuk membuka detail sub-task, laporan teknis, dan tautan hasil kerja.
+                  </p>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addNewMilestoneInteractive()"><i data-lucide="plus"></i> + Tambah Milestone</button>
+              </div>
+
+              <!-- 1. HORIZONTAL CALENDAR BLOCKS CONTAINER (BERBEDA WARNA SETIAP MILESTONE) -->
+              <div id="timeline-calendar-blocks" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px;">
+                <!-- Populated dynamically via projects.js -->
+              </div>
+
+              <!-- 2. MONTHLY CALENDAR GRID (KALENDER BULANAN INTERAKTIF DENGAN TIKET WARNA) -->
+              <div id="timeline-month-calendar" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 18px; margin-bottom: 8px;">
+                <!-- Monthly day-cells with colored milestone tags -->
+              </div>
+
+              <!-- Hidden container to keep DOM compatibility for existing save routines -->
+              <div id="timeline-milestones-list" style="display: none;">
+                <!-- Underlying milestone forms for persistence & saving -->
+              </div>
+            </div>
+
+            <!-- FIELD NOTES & INSTRUCTIONS -->
+            <div class="card" style="border: 1px solid var(--border-color); padding: 18px; margin-bottom: 20px;">
+              <h3 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="file-text" style="width: 16px; height: 16px; color: #64748b;"></i> Catatan Khusus & Instruksi Teknis Pengerjaan
+              </h3>
+              <textarea id="timeline-notes" class="form-control" rows="3" placeholder="Instruksi perakitan khusus, standar toleransi, koordinasi dengan customer, atau kendala lapangan..."></textarea>
+            </div>
+
+            <!-- BOTTOM ACTION -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+              <button type="button" class="btn btn-outline" onclick="navigateTo('orders')">Batal</button>
+              <button type="button" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5; padding: 10px 24px;" onclick="saveProjectTimelineData()">
+                <i data-lucide="save"></i> Simpan Timeline & Milestone
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== BOM VIEW ==================== -->
+        <section class="view-section" id="view-bom">
+          <!-- Top Tab Navigation -->
+          <div class="submodule-tabs-header">
+            <div class="submodule-nav-tabs">
+              <button type="button" class="submodule-tab-btn active" id="tab-btn-bom-orders" onclick="switchBOMTab('orders')">
+                <i data-lucide="layers"></i>
+                <span>Order Penjualan (Input Formulasi BOM)</span>
+                <span class="tab-badge" id="badge-tab-bom-orders-count">0</span>
+              </button>
+              <button type="button" class="submodule-tab-btn" id="tab-btn-bom-master" onclick="switchBOMTab('master')">
+                <i data-lucide="copy"></i>
+                <span>Template BOM</span>
+                <span class="tab-badge" id="badge-tab-bom-master-count">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 1: ORDER PENJUALAN (INPUT FORMULASI BOM) -->
+          <div id="bom-tab-orders-content">
+            <div class="module-action-bar" style="margin-bottom: 14px;">
+              <div>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Pilih item pesanan penjualan di bawah ini untuk mengisi, memvalidasi status pengajuan/accepted, dan melihat formula BOM terkait</p>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" onclick="exportDataToCSV('orders')"><i data-lucide="download"></i> Export CSV</button>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No. Order</th>
+                      <th>Pelanggan</th>
+                      <th>Nama Produk / Item Pesanan</th>
+                      <th>Qty Pesanan</th>
+                      <th>Target Selesai</th>
+                      <th>Status BOM</th>
+                      <th class="text-right">Aksi Formulasi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-bom-orders-body">
+                    <!-- Loaded dynamically from orders -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: TEMPLATE BOM -->
+          <div id="bom-tab-master-content" style="display: none;">
+            <div class="module-action-bar">
+              <div class="filter-group">
+                <span class="font-bold text-main" style="font-size: 13px;">Daftar Template Master BOM (Acuan Formula Produk)</span>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" onclick="exportDataToCSV('bom')"><i data-lucide="download"></i> Export CSV</button>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Kode BOM</th>
+                      <th>Ref Order</th>
+                      <th>Nama Produk Jadi</th>
+                      <th>Kategori</th>
+                      <th>Revisi</th>
+                      <th>Komponen</th>
+                      <th>Biaya Material</th>
+                      <th>Estimasi HPP</th>
+                      <th>Status</th>
+                      <th class="text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-bom-body">
+                    <!-- Data loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== BOM FORM VIEW (DEDICATED FULL PAGE) ==================== -->
+        <section class="view-section" id="view-bom-form">
+          <div class="card" style="margin-bottom: 24px; padding: 22px 26px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <button type="button" class="btn btn-sm btn-ghost" id="bom-back-link-btn" onclick="navigateBackFromBOM()" style="margin-bottom: 6px; padding-left: 0; color: var(--text-muted);">
+                  <i data-lucide="arrow-left"></i> Kembali ke Daftar BOM
+                </button>
+                <h2 id="bom-page-form-title" style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0;">Buat Master Bill of Materials (BOM)</h2>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 3px 0 0 0;">Formulasi struktur bahan baku, komponen dari PR, biaya tenaga kerja, dan kalkulasi HPP produksi</p>
+              </div>
+              <div class="btn-group">
+                <button type="button" class="btn btn-outline" onclick="navigateBackFromBOM()"><i data-lucide="x"></i> Batal</button>
+                <button type="button" class="btn btn-primary" onclick="submitBOMPageForm()"><i data-lucide="save"></i> Simpan Master BOM</button>
+              </div>
+            </div>
+
+            <form id="bom-page-form" onsubmit="handleBOMPageSubmit(event)">
+              <input type="hidden" id="page-bom-edit-id" value="">
+              
+              <!-- Card: Informasi Produk & Order -->
+              <div class="card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 22px 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 18px;">
+                  <div>
+                    <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                      <i data-lucide="package" style="width: 17px; height: 17px; color: #2563eb;"></i> Informasi Produk Jadi & Acuan Order
+                    </h4>
+                    <span style="font-size: 11.5px; color: #64748b; margin-top: 2px; display: block;">Lengkapi identitas produk manufaktur, kode SKU, dan referensi order penjualan</span>
+                  </div>
+                </div>
+
+                <!-- Section 1: Referensi Order & Template BOM -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+                  <div style="background: #f8fafc; padding: 12px 14px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <label class="form-label" style="font-weight: 700; color: #1e293b; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
+                      <i data-lucide="shopping-cart" style="width: 14px; height: 14px; color: #2563eb;"></i> Referensi Order Penjualan (Opsional)
+                    </label>
+                    <select id="page-bom-order-select" class="form-control" onchange="autoFillBOMPageFromOrder(this.value)" style="background: #ffffff; font-size: 12.5px;">
+                      <option value="">-- Template Umum / Tanpa Kaitan Order --</option>
+                    </select>
+                    <span style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Pilih order untuk mengisi nama dan kode produk otomatis</span>
+                  </div>
+
+                  <div style="background: #eff6ff; padding: 12px 14px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                    <label class="form-label" style="font-weight: 700; color: #1e40af; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
+                      <i data-lucide="copy" style="width: 14px; height: 14px; color: #1d4ed8;"></i> Gunakan Template BOM Tersimpan
+                    </label>
+                    <select id="page-bom-template-select" class="form-control" onchange="applyBOMTemplate(this.value)" style="border-color: #93c5fd; background: #ffffff; font-size: 12.5px;">
+                      <option value="">-- Pilih Template BOM Tersimpan --</option>
+                    </select>
+                    <span style="font-size: 11px; color: #1e40af; margin-top: 4px; display: block;">Gunakan formula dari template BOM tersimpan</span>
+                  </div>
+                </div>
+
+                <!-- Section 2: Detail Identitas Produk Jadi -->
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;">
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Nama Produk Jadi <span style="color: #dc2626;">*</span></label>
+                      <input type="text" id="page-bom-name" class="form-control" required placeholder="Contoh: Panel Distribusi Listrik 3 Phase" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Kode SKU / Model Produk <span style="color: #dc2626;">*</span></label>
+                      <input type="text" id="page-bom-code" class="form-control mono-id" required placeholder="Contoh: PNL-DIST-100K" style="font-size: 13px; font-weight: 600;">
+                    </div>
+                  </div>
+
+                  <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;">
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Kategori Produk</label>
+                      <input type="text" id="page-bom-category" class="form-control" placeholder="Contoh: Electrical / Mechanical / Automation" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Versi / Revisi Formula</label>
+                      <input type="text" id="page-bom-revision" class="form-control" placeholder="Contoh: v1.0" style="font-size: 13px;">
+                    </div>
+                  </div>
+
+                  <div class="form-group" style="margin: 0;">
+                    <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Catatan Standar Produksi / QC Pabrik</label>
+                    <input type="text" id="page-bom-notes" class="form-control" placeholder="Contoh: Standar toleransi ±0.5mm, proteksi IP65, standar uji QC UBM" style="font-size: 13px;">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: Struktur Komponen & Bahan Baku (Full Width) -->
+              <div class="card" style="border: 1px solid var(--border-color); padding: 20px;">
+                <div class="items-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 6px;">
+                      <i data-lucide="boxes" style="width: 18px; height: 18px; color: #2563eb;"></i> Struktur Komponen & Bahan Baku
+                    </h3>
+                    <span class="text-muted font-sm" style="font-size: 11px;">Pilih bahan dan komponen langsung dari data Inventory</span>
+                  </div>
+                  <div id="bom-components-action-btns" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="openPRPickerModal()" title="Pilih bahan dan komponen dari Inventory">
+                      <i data-lucide="boxes"></i> Inventory
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff;" onclick="redirectToPurchasingPR()" title="Ajukan pengadaan bahan baku ke Purchasing jika tidak ada di Inventory">
+                      <i data-lucide="shopping-cart"></i> Purchasing
+                    </button>
+                  </div>
+                </div>
+
+                <div id="page-bom-components-list"></div>
+              </div>
+
+              <!-- Bottom Action Bar -->
+              <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
+                <button type="button" class="btn btn-outline" onclick="navigateTo('bom')">Batal</button>
+                <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600;"><i data-lucide="save"></i> Simpan Master BOM</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- ==================== PURCHASING VIEW ==================== -->
+        <section class="view-section" id="view-purchasing">
+          <!-- Top Tab Navigation -->
+          <div class="submodule-tabs-header">
+            <div class="submodule-nav-tabs">
+              <button type="button" class="submodule-tab-btn active" id="tab-btn-pr-docs" onclick="switchPurchasingTab('docs')">
+                <i data-lucide="file-text"></i>
+                <span>Daftar Dokumen PR</span>
+                <span class="tab-badge" id="badge-tab-pr-docs-count">0</span>
+              </button>
+              <button type="button" class="submodule-tab-btn" id="tab-btn-pr-process" onclick="switchPurchasingTab('process')">
+                <i data-lucide="shopping-cart"></i>
+                <span>Proses Pembelian Barang</span>
+                <span class="tab-badge" id="badge-tab-pr-process-count">0</span>
+              </button>
+              <button type="button" class="submodule-tab-btn" id="tab-btn-pr-items" onclick="switchPurchasingTab('items')">
+                <i data-lucide="boxes"></i>
+                <span>Database Master Barang (PR)</span>
+                <span class="tab-badge" id="badge-tab-pr-items-count">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 1: DAFTAR DOKUMEN PR -->
+          <div id="purchasing-docs-tab-content">
+            <div class="module-action-bar">
+              <div class="filter-group">
+                <select id="filter-purchasing-status" class="form-control-sm" onchange="renderPurchasingTable()">
+                  <option value="ALL">Semua Status PR</option>
+                  <option value="Pengajuan">🟡 Pengajuan</option>
+                  <option value="Disetujui">🟢 Disetujui</option>
+                  <option value="Ditolak">🔴 Ditolak</option>
+                </select>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" onclick="exportToCSV('purchasing')"><i data-lucide="download"></i> Export CSV</button>
+                <button class="btn btn-primary" onclick="openPurchasingModal()"><i data-lucide="plus"></i> + Buat Request PR</button>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>No. PR</th>
+                      <th>Pemohon & Divisi</th>
+                      <th>Tanggal Pengajuan</th>
+                      <th>Urgensi</th>
+                      <th>Jumlah Barang</th>
+                      <th>Total Estimasi</th>
+                      <th>Status Persetujuan</th>
+                      <th class="text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-purchasing-body">
+                    <!-- Data loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: PROSES PEMBELIAN BARANG (BARANG DARI PR DISETUJUI) -->
+          <div id="purchasing-process-tab-content" style="display: none;">
+            <!-- Stat Summary Cards for Procurement Process -->
+            <div class="purchasing-stats-row">
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon blue">
+                  <i data-lucide="clipboard-list"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Barang Disetujui</span>
+                  <span class="purchasing-stat-value" id="pr-proc-stat-total">0 Item</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon amber">
+                  <i data-lucide="truck"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Sedang Dipesan / Dikirim</span>
+                  <span class="purchasing-stat-value" id="pr-proc-stat-pending">0 Item</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon emerald">
+                  <i data-lucide="check-circle-2"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Sesuai (Masuk Master)</span>
+                  <span class="purchasing-stat-value text-success" id="pr-proc-stat-matched">0 Item</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon rose">
+                  <i data-lucide="alert-triangle"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Tidak Sesuai / Retur</span>
+                  <span class="purchasing-stat-value text-danger" id="pr-proc-stat-rejected">0 Item</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Filter & Action Bar for Process Table -->
+            <div class="module-action-bar">
+              <div class="filter-group" style="flex: 1; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <div style="position: relative; flex: 1; min-width: 240px; max-width: 360px;">
+                  <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: #94a3b8;"></i>
+                  <input type="text" id="filter-purchasing-process-search" class="form-control-sm" placeholder="Cari nama barang, no PR, link pemesanan..." oninput="renderPurchasingProcessTable()" style="padding-left: 32px; width: 100%;">
+                </div>
+                <select id="filter-purchasing-process-status" class="form-control-sm" onchange="renderPurchasingProcessTable()">
+                  <option value="ALL">Semua Status Barang</option>
+                  <option value="Belum Dipesan">🟡 Belum Dipesan</option>
+                  <option value="Dalam Pengiriman">🔵 Dalam Pengiriman</option>
+                  <option value="Sesuai">🟢 Sesuai (Masuk Master)</option>
+                  <option value="Tidak Sesuai">🔴 Tidak Sesuai</option>
+                  <option value="Dikembalikan">↩️ Dikembalikan / Retur</option>
+                </select>
+                <select id="filter-purchasing-process-dept" class="form-control-sm" onchange="renderPurchasingProcessTable()">
+                  <option value="ALL">Semua Departemen / Divisi</option>
+                  <option value="Engineering & Produksi">Engineering & Produksi</option>
+                  <option value="Fabrikasi & Las">Fabrikasi & Las</option>
+                  <option value="Quality Control (QC)">Quality Control (QC)</option>
+                  <option value="Logistik & Gudang">Logistik & Gudang</option>
+                  <option value="Umum & Operasional">Umum & Operasional</option>
+                </select>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" onclick="exportPurchasingProcessToCSV()"><i data-lucide="download"></i> Export CSV Proses</button>
+              </div>
+            </div>
+
+            <!-- Table of Procurement Processing -->
+            <div class="table-card">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;">No.</th>
+                      <th>Barang & Spesifikasi</th>
+                      <th>Asal PR & Pemohon</th>
+                      <th>Tgl Pemesanan</th>
+                      <th>Link Pemesanan</th>
+                      <th class="text-right">Harga Beli</th>
+                      <th>Tgl Sampai & Penerima</th>
+                      <th class="text-center">Foto / Bukti</th>
+                      <th class="text-center">Status Barang</th>
+                      <th class="text-right" style="width: 110px;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-purchasing-process-body">
+                    <!-- Data loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: DATABASE MASTER BARANG (PR) -->
+          <div id="purchasing-items-tab-content" style="display: none;">
+            <!-- Stat Summary Cards -->
+            <div class="purchasing-stats-row">
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon blue">
+                  <i data-lucide="package"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Total Jenis Master Barang</span>
+                  <span class="purchasing-stat-value" id="pr-stat-total-items">0 Barang</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon emerald">
+                  <i data-lucide="layers"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Total Kuantitas Tersedia</span>
+                  <span class="purchasing-stat-value" id="pr-stat-total-qty">0 Unit</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon indigo">
+                  <i data-lucide="calculator"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Total Nilai Master Stok</span>
+                  <span class="purchasing-stat-value text-primary" id="pr-stat-total-val">Rp 0</span>
+                </div>
+              </div>
+              <div class="purchasing-stat-card">
+                <div class="purchasing-stat-icon amber">
+                  <i data-lucide="building-2"></i>
+                </div>
+                <div class="purchasing-stat-info">
+                  <span class="purchasing-stat-label">Divisi Terkait</span>
+                  <span class="purchasing-stat-value" id="pr-stat-total-depts">0 Divisi</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Filter & Action Bar for Items -->
+            <div class="module-action-bar">
+              <div class="filter-group" style="flex: 1; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <div style="position: relative; flex: 1; min-width: 240px; max-width: 360px;">
+                  <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: #94a3b8;"></i>
+                  <input type="text" id="filter-purchasing-items-search" class="form-control-sm" placeholder="Cari master barang, spesifikasi..." oninput="renderPurchasingItemsTable()" style="padding-left: 32px; width: 100%;">
+                </div>
+                <select id="filter-purchasing-items-dept" class="form-control-sm" onchange="renderPurchasingItemsTable()">
+                  <option value="ALL">Semua Departemen / Divisi</option>
+                  <option value="Engineering & Produksi">Engineering & Produksi</option>
+                  <option value="Fabrikasi & Las">Fabrikasi & Las</option>
+                  <option value="Quality Control (QC)">Quality Control (QC)</option>
+                  <option value="Logistik & Gudang">Logistik & Gudang</option>
+                  <option value="Umum & Operasional">Umum & Operasional</option>
+                </select>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" onclick="exportPurchasingItemsToCSV()"><i data-lucide="download"></i> Export CSV Master Barang</button>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 45px;">No.</th>
+                      <th>Nama Barang & Spesifikasi</th>
+                      <th>Departemen & Sumber PR</th>
+                      <th class="text-center">Total Stok (Qty)</th>
+                      <th class="text-center">Satuan</th>
+                      <th class="text-right">Harga Beli Satuan</th>
+                      <th class="text-right">Total Nilai Stok</th>
+                      <th class="text-center">Status Stok</th>
+                      <th class="text-right" style="width: 100px;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-purchasing-items-body">
+                    <!-- Data loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== PO VIEW ==================== -->
+        <section class="view-section" id="view-po">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="po-status-filter" class="form-control-sm" onchange="filterPO()">
+                <option value="ALL">Semua Status PO</option>
+                <option value="Pending Approval">Pending Approval</option>
+                <option value="Approved">Approved</option>
+                <option value="Received">Received</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('po')"><i data-lucide="download"></i> Export CSV</button>
+              <button class="btn btn-primary" onclick="openPOModal()"><i data-lucide="plus"></i> Buat PO Baru</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>No. PO</th>
+                    <th>Nama Vendor</th>
+                    <th>Tanggal PO</th>
+                    <th>Target Tiba</th>
+                    <th>Termin</th>
+                    <th>Total Biaya</th>
+                    <th>Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-po-body">
+                  <!-- Data loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== DELIVERY VIEW ==================== -->
+        <section class="view-section" id="view-delivery">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="delivery-status-filter" class="form-control-sm" onchange="filterDelivery()">
+                <option value="ALL">Semua Status Pengiriman</option>
+                <option value="Packing / Ready">Packing / Ready</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Delivered">Delivered (Selesai)</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('delivery')"><i data-lucide="download"></i> Export CSV</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>No. Surat Jalan</th>
+                    <th>Ref Order</th>
+                    <th>Pelanggan</th>
+                    <th>Tanggal Kirim</th>
+                    <th>Ekspedisi / Armada</th>
+                    <th>Driver</th>
+                    <th>Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-delivery-body">
+                  <!-- Data loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== INVOICE VIEW ==================== -->
+        <section class="view-section" id="view-invoices">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="invoice-status-filter" class="form-control-sm" onchange="filterInvoices()">
+                <option value="ALL">Semua Status Bayar</option>
+                <option value="Paid">Paid (Lunas)</option>
+                <option value="Partial">Partial (DP / Sebagian)</option>
+                <option value="Unpaid">Unpaid (Belum Lunas)</option>
+                <option value="Overdue">Overdue</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" style="color: #4338ca; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; background: #eef2ff;" onclick="openPrintInvoiceSelector()"><i data-lucide="printer"></i> Cetak Invoice</button>
+              <button class="btn btn-outline" onclick="exportDataToCSV('invoices')"><i data-lucide="download"></i> Export CSV</button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div class="table-invoices-container">
+              <table class="data-table table-invoices" id="table-invoices-main">
+                <colgroup>
+                  <col style="width: 11%;">    <!-- No. Faktur -->
+                  <col style="width: 10%;">    <!-- Ref Order -->
+                  <col style="width: 18%;">    <!-- Pelanggan & Kontak -->
+                  <col style="width: 9%;">     <!-- Tgl Faktur -->
+                  <col style="width: 9%;">     <!-- Jatuh Tempo -->
+                  <col style="width: 13%;">    <!-- Total Tagihan -->
+                  <col style="width: 13%;">    <!-- Sisa Bayar -->
+                  <col style="width: 7%;">     <!-- Status -->
+                  <col style="width: 10%;">    <!-- Aksi -->
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>No. Faktur</th>
+                    <th>Ref Order</th>
+                    <th>Pelanggan</th>
+                    <th>Tgl Faktur</th>
+                    <th>Jatuh Tempo</th>
+                    <th>Total Tagihan</th>
+                    <th>Sisa Bayar</th>
+                    <th style="text-align: center;">Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-invoices-body">
+                  <!-- Data loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== DELIVERY VIEW ==================== -->
+        <section class="view-section" id="view-delivery">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="delivery-status-filter" class="form-control-sm" onchange="filterDelivery()">
+                <option value="ALL">Semua Status Pengiriman</option>
+                <option value="Packing / Ready">Packing / Ready</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Delivered">Delivered (Selesai)</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('delivery')"><i data-lucide="download"></i> Export CSV</button>
+              <button class="btn btn-primary" onclick="openDeliveryModal()"><i data-lucide="plus"></i> Buat Surat Jalan</button>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>No. Surat Jalan</th>
+                    <th>Ref Order</th>
+                    <th>Penerima / Customer</th>
+                    <th>Tgl Kirim</th>
+                    <th>Armada / Ekspedisi</th>
+                    <th>No. Resi/Tracking</th>
+                    <th>Status</th>
+                    <th class="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-delivery-body">
+                  <!-- Data loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== BAST VIEW (BERITA ACARA SERAH TERIMA) ==================== -->
+        <section class="view-section" id="view-bast">
+          <div class="module-action-bar">
+            <div class="filter-group">
+              <select id="filter-bast-status" class="form-control-sm" onchange="filterBastTable()">
+                <option value="ALL">Semua Status BAST</option>
+                <option value="Completed">Selesai Diserahterimakan</option>
+                <option value="Draft">Draft Berita Acara</option>
+              </select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" onclick="exportDataToCSV('bast')"><i data-lucide="download"></i> Export CSV</button>
+              <button class="btn btn-primary" onclick="openDeliveryModal()"><i data-lucide="truck"></i> Buat Surat Jalan / DO</button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div class="table-bast-container">
+              <table class="data-table table-bast" id="table-bast-main">
+                <colgroup>
+                  <col style="width: 12%;">   <!-- 1. No. BAST -->
+                  <col style="width: 9%;">    <!-- 2. Tanggal -->
+                  <col style="width: 22%;">   <!-- 3. Nama Project -->
+                  <col style="width: 16%;">   <!-- 4. Pelanggan -->
+                  <col style="width: 14%;">   <!-- 5. Penanggung Jawab -->
+                  <col style="width: 6%;">    <!-- 6. Item -->
+                  <col style="width: 11%;">   <!-- 7. Upload Berkas -->
+                  <col style="width: 9%;">    <!-- 8. Status -->
+                  <col style="width: 9%;">    <!-- 9. Aksi -->
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>No. BAST</th>
+                    <th>Tanggal</th>
+                    <th>Nama Project</th>
+                    <th>Pelanggan</th>
+                    <th>Penanggung Jawab</th>
+                    <th style="text-align: center;">Item</th>
+                    <th style="text-align: center;">Upload Berkas</th>
+                    <th style="text-align: center;">Status</th>
+                    <th style="text-align: right;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-bast-body">
+                  <!-- Populated dynamically via bast.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== LAPORAN PELAKSANAAN PROJECT VIEW ==================== -->
+        <section class="view-section" id="view-project-reports">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; background: #f0fdf4; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #16a34a;">
+              <i data-lucide="clipboard-check" style="width: 16px; height: 16px; color: #16a34a;"></i>
+              <span>Daftar project <strong>Completed</strong>. Klik project untuk mengisi <strong>Penggunaan Barang Aktual</strong> & otomatis mengembalikan sisa material ke Database Master Barang.</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <select id="filter-report-status" class="form-control-sm" onchange="filterProjectReportsTable()" style="height: 36px;">
+                <option value="ALL">Semua Status Pelaporan</option>
+                <option value="Unreported">⚪ Belum Dilaporkan</option>
+                <option value="Reported">🟢 Sudah Dilaporkan</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('project_reports')" style="height: 36px;">
+                <i data-lucide="download"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div class="table-responsive" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+              <table class="data-table" id="table-project-reports-main" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                    <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+                    <th style="width: 180px; font-size: 11px; text-transform: uppercase;">Project Lead (PIC)</th>
+                    <th style="width: 140px; font-size: 11px; text-transform: uppercase;">Tgl Selesai</th>
+                    <th style="width: 150px; font-size: 11px; text-transform: uppercase; text-align: center;">Komponen BOM</th>
+                    <th style="width: 160px; font-size: 11px; text-transform: uppercase; text-align: center;">Sisa Material</th>
+                    <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Status Laporan</th>
+                    <th style="width: 150px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-project-reports-body">
+                  <!-- Populated dynamically via project_reports.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SERVICE & GARANSI VIEW (AFTER SALES) ==================== -->
+        <section class="view-section" id="view-service">
+          <!-- Top Tab Navigation -->
+          <div class="submodule-tabs-header">
+            <div class="submodule-nav-tabs">
+              <button type="button" class="submodule-tab-btn active" id="tab-btn-service-warranty" onclick="switchServiceTab('warranty')">
+                <i data-lucide="shield-check"></i>
+                <span>Garansi Project</span>
+                <span class="tab-badge" id="badge-tab-service-warranty-count">0</span>
+              </button>
+              <button type="button" class="submodule-tab-btn" id="tab-btn-service-tickets" onclick="switchServiceTab('tickets')">
+                <i data-lucide="wrench"></i>
+                <span>Service & Pengajuan Biaya</span>
+                <span class="tab-badge" id="badge-tab-service-tickets-count">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 1: GARANSI PROJECT (HALAMAN GARANSI RESMI) -->
+          <div id="service-warranty-tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #2563eb;">
+                <i data-lucide="shield-check" style="width: 16px; height: 16px; color: #2563eb;"></i>
+                <span>Layanan <strong>Garansi Project</strong> (Completed). Memuat status masa berlaku jaminan produk resmi sesuai Quotation/BAST dan pencetakan Kartu Garansi.</span>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="filter-service-status" class="form-control-sm" onchange="filterServiceTable()" style="height: 36px;">
+                  <option value="ALL">Semua Status Garansi</option>
+                  <option value="Active">🟢 Garansi Aktif (Covered)</option>
+                  <option value="Expired">🔴 Garansi Telah Habis</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('projects')" style="height: 36px;">
+                  <i data-lucide="download"></i> Export CSV
+                </button>
+              </div>
+            </div>
+
+            <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div class="table-responsive" style="max-height: calc(100vh - 250px); overflow-y: auto;">
+                <table class="data-table" id="table-service-main" style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                      <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+                      <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+                      <th style="width: 240px; font-size: 11px; text-transform: uppercase;">Ketentuan & Plafon Garansi</th>
+                      <th style="width: 145px; font-size: 11px; text-transform: uppercase;">Periode Garansi</th>
+                      <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Masa Berlaku</th>
+                      <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+                      <th style="width: 230px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-service-body">
+                    <!-- Populated dynamically via service.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: INPUT SERVICE & PENGAJUAN BIAYA SERVICE (NON-GARANSI) -->
+          <div id="service-tickets-tab-content" style="display: none;">
+            
+            <!-- INFO BANNER -->
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #78350f; background: #fffbeb; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #f59e0b; margin-bottom: 16px;">
+              <i data-lucide="wrench" style="width: 18px; height: 18px; color: #d97706; flex-shrink: 0;"></i>
+              <div>
+                <strong>Layanan Service & Pengajuan Biaya (Non-Garansi)</strong>: Pencatatan perbaikan manual di luar garansi untuk customer, unit mesin, atau peralatan dengan rincian biaya jasa dan suku cadang secara terpisah.
+              </div>
+            </div>
+
+            <!-- STAT SUMMARY CARDS -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px;">
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Pengajuan Service</div>
+                <div id="kpi-service-total-tickets" style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">0 Pengajuan</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Pengajuan Biaya</div>
+                <div id="kpi-service-total-cost" class="font-mono" style="font-size: 18px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Dalam Pengerjaan</div>
+                <div id="kpi-service-progress-count" style="font-size: 16px; font-weight: 800; color: #b45309; margin-top: 4px;">0 Berjalan</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Service Selesai</div>
+                <div id="kpi-service-resolved-count" style="font-size: 16px; font-weight: 800; color: #15803d; margin-top: 4px;">0 Selesai</div>
+              </div>
+            </div>
+
+            <!-- ACTION & FILTER BAR -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select id="filter-ticket-status" class="form-control-sm" onchange="filterServiceTicketsTable()" style="height: 36px;">
+                  <option value="ALL">Semua Status Service</option>
+                  <option value="Open">🔵 Open (Diajukan / Menunggu Jadwal)</option>
+                  <option value="In Progress">🟡 In Progress (Sedang Dikerjakan)</option>
+                  <option value="Resolved">🟢 Resolved (Service Selesai)</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('service_tickets')" style="height: 36px;">
+                  <i data-lucide="download"></i> Export CSV
+                </button>
+              </div>
+              <button class="btn btn-primary" onclick="openCreateServiceModal()" style="background: #2563eb; border-color: #2563eb; font-weight: 700; font-size: 12.5px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;">
+                <i data-lucide="plus-circle"></i> + Input Service & Pengajuan Biaya
+              </button>
+            </div>
+
+            <!-- TABEL TIKET & PENGAJUAN BIAYA NON-GARANSI -->
+            <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+                <table class="data-table" id="table-service-tickets-main" style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                      <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Tiket Service</th>
+                      <th style="font-size: 11px; text-transform: uppercase;">Customer & Unit Mesin</th>
+                      <th style="width: 220px; font-size: 11px; text-transform: uppercase;">Kategori & Keluhan</th>
+                      <th style="width: 140px; font-size: 11px; text-transform: uppercase;">Teknisi PIC</th>
+                      <th style="width: 150px; font-size: 11px; text-transform: uppercase;">Rincian Biaya</th>
+                      <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Total Pengajuan</th>
+                      <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+                      <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-service-tickets-body">
+                    <!-- Populated dynamically via service.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== KEUANGAN & PROFITABILITAS VIEW ==================== -->
+        <section class="view-section" id="view-finance">
+          <!-- INFO BANNER -->
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #3b82f6; margin-bottom: 16px;">
+            <i data-lucide="calculator" style="width: 18px; height: 18px; color: #2563eb; flex-shrink: 0;"></i>
+            <div>
+              <strong>Keuangan & Analisis Profitabilitas Project</strong>: Menampilkan ringkasan finansial proyek meliputi <strong>Harga Modal (HPP / Biaya Bahan & Operasional)</strong>, <strong>Harga Jual Proyek</strong>, <strong>Alokasi & Realisasi Garansi</strong>, serta <strong>Keuntungan Bersih (Net Profit)</strong> dan <strong>Margin Laba (%)</strong>.
+            </div>
+          </div>
+
+          <!-- STAT SUMMARY CARDS -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Jual (Omzet)</div>
+              <div id="kpi-finance-total-revenue" class="font-mono" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Modal (HPP)</div>
+              <div id="kpi-finance-total-cogs" class="font-mono" style="font-size: 17px; font-weight: 800; color: #b45309; margin-top: 4px;">Rp 0</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Alokasi Garansi (5%)</div>
+              <div id="kpi-finance-total-warranty" class="font-mono" style="font-size: 17px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #e11d48;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Klaim Garansi Terpakai</div>
+              <div id="kpi-finance-total-claims" class="font-mono" style="font-size: 17px; font-weight: 800; color: #e11d48; margin-top: 4px;">Rp 0</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Keuntungan Bersih (Net Profit)</div>
+              <div id="kpi-finance-total-net-profit" class="font-mono" style="font-size: 18px; font-weight: 800; color: #15803d; margin-top: 4px;">Rp 0</div>
+              <div id="kpi-finance-avg-margin" style="font-size: 11px; color: #15803d; font-weight: 700; margin-top: 2px;">Avg. Margin: 0%</div>
+            </div>
+          </div>
+
+          <!-- ACTION & FILTER BAR -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
+                <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
+                <option value="PAID">💵 Lunas (Invoice Paid)</option>
+                <option value="PARTIAL">💳 Sebagian (Invoice Partial)</option>
+                <option value="UNPAID">⏳ Belum Dibayar (Invoice Unpaid)</option>
+                <option value="HIGH">🟢 Sangat Menguntungkan (&gt; 30%)</option>
+                <option value="GOOD">🔵 Menguntungkan (10% - 30%)</option>
+                <option value="LOW">🟡 Margin Tipis (0% - 10%)</option>
+                <option value="LOSS">🔴 Defisit / Rugi (&lt; 0%)</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="exportFinanceToCSV()" style="height: 36px;">
+                <i data-lucide="download"></i> Export CSV Keuangan
+              </button>
+            </div>
+          </div>
+
+          <!-- TABEL DATA KEUANGAN PROJECT -->
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+              <table class="data-table" id="table-finance-main" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                    <th style="width: 125px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+                    <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Modal (HPP)</th>
+                    <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Jual</th>
+                    <th style="width: 165px; font-size: 11px; text-transform: uppercase;">Garansi (Plafon / Klaim)</th>
+                    <th style="width: 165px; text-align: right; font-size: 11px; text-transform: uppercase;">Keuntungan Bersih</th>
+                    <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Margin (%)</th>
+                    <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-finance-body">
+                  <!-- Populated dynamically via finance.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== MAINTENANCE VIEW (AFTER SALES) ==================== -->
+        <section class="view-section" id="view-maintenance">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #0369a1; background: #f0f9ff; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #0284c7;">
+              <i data-lucide="wrench" style="width: 16px; height: 16px; color: #0284c7;"></i>
+              <span>Daftar project <strong>Completed</strong>. Klik project mana saja untuk membuka <strong>Formulir Maintenance & Pemeliharaan</strong>.</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <select id="filter-maintenance-status" class="form-control-sm" onchange="filterMaintenanceTable()" style="height: 36px;">
+                <option value="ALL">Semua Status Maintenance</option>
+                <option value="Maintained">🟢 Sudah Ada Riwayat Perawatan</option>
+                <option value="Pending">⚪ Belum Ada Perawatan</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('maintenance')" style="height: 36px;">
+                <i data-lucide="download"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div class="table-responsive" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+              <table class="data-table" id="table-maintenance-main" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                    <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+                    <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+                    <th style="width: 200px; font-size: 11px; text-transform: uppercase;">Teknisi / PIC</th>
+                    <th style="width: 160px; font-size: 11px; text-transform: uppercase;">Jadwal Perawatan</th>
+                    <th style="width: 110px; text-align: center; font-size: 11px; text-transform: uppercase;">Riwayat</th>
+                    <th style="width: 160px; text-align: center; font-size: 11px; text-transform: uppercase;">Kondisi Mesin</th>
+                    <th style="width: 180px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="table-maintenance-body">
+                  <!-- Populated dynamically via maintenance.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== PENGATURAN PROFIL PERUSAHAAN VIEW ==================== -->
+        <section class="view-section" id="view-settings">
+          <div id="view-settings-container">
+            <!-- Rendered dynamically via settings.js -->
+          </div>
+        </section>
+
+      </div>
+
+      <!-- APP FOOTER (Copyright Bisnis Digital Takumi) -->
+      <footer class="app-footer">
+        <div class="footer-content">
+          <div class="footer-left">
+            <span id="app-footer-copyright-text">&copy; 2026 <strong>Bisnis Digital Takumi</strong> &bull; UBM Enterprise Management System</span>
+          </div>
+          <div class="footer-right">
+            <span class="footer-badge">Teaching Factory & Engineering Solutions</span>
+            <span class="footer-ver">v2.4 Pro</span>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- 1. GENERIC DYNAMIC FORM MODAL (Create / Edit) -->
+  <div class="modal-overlay" id="form-modal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="form-modal-title">Formulir Data</h3>
+        <button class="btn-close" onclick="closeModal('form-modal')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="form-modal-body">
+        <!-- Form content dynamically injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. DETAIL VIEW & PRINT PREVIEW MODAL -->
+  <div class="modal-overlay" id="preview-modal">
+    <div class="modal-container modal-lg">
+      <div class="modal-header no-print">
+        <h3 id="preview-modal-title"><i data-lucide="file-text" style="color: #2563eb;"></i> Dokumen Pratinjau</h3>
+        <div class="modal-header-actions">
+          <button type="button" class="btn btn-primary btn-sm" onclick="printCurrentDocument()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 14px; background: #2563eb; color: #ffffff; border-color: #2563eb;">
+            <i data-lucide="printer"></i> Cetak / Simpan PDF
+          </button>
+          <button type="button" class="btn-close" onclick="closeModal('preview-modal')" title="Tutup"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="modal-body print-document-container" id="preview-modal-body">
+        <div id="preview-modal-content">
+          <!-- Document preview template dynamically injected -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. PR ITEMS CHECKLIST PICKER MODAL -->
+  <div class="modal-overlay" id="pr-picker-modal">
+    <div class="modal-container modal-lg" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px; font-size: 15px;">
+          <i data-lucide="boxes" style="color: #2563eb;"></i> Pilih Komponen & Bahan Baku dari Inventory
+        </h3>
+        <button class="btn-close" onclick="closeModal('pr-picker-modal')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 18px 20px;">
+        <div style="display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 220px;">
+            <input type="text" id="pr-picker-search" class="form-control" placeholder="Cari nama barang atau sumber PR..." oninput="renderPRPickerItems()">
+          </div>
+          <div style="min-width: 220px;">
+            <select id="pr-picker-filter" class="form-control" onchange="renderPRPickerItems()">
+              <option value="ALL">Semua Request Pengadaan (PR)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px;">
+          <table class="data-table" style="margin: 0;">
+            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 2;">
+              <tr>
+                <th style="width: 42px; text-align: center;">
+                  <input type="checkbox" id="pr-picker-select-all" onchange="toggleSelectAllPRPicker(this)">
+                </th>
+                <th>Nama Barang / Material</th>
+                <th style="width: 110px; text-align: center;">Stok Tersedia</th>
+                <th style="width: 135px; text-align: center;">Kebutuhan Qty</th>
+                <th style="width: 110px; text-align: center;">Sisa Stok</th>
+                <th>Estimasi Harga Satuan</th>
+                <th>Sumber Dokumen</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="pr-picker-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid var(--border-color); background: #f8fafc;">
+        <div>
+          <span id="pr-picker-selected-count" class="font-bold text-main font-sm">0 barang dipilih</span>
+        </div>
+        <div class="btn-group">
+          <button type="button" class="btn btn-outline" onclick="closeModal('pr-picker-modal')">Batal</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-pr-picker" onclick="confirmPRPickerSelection()">
+            <i data-lucide="check"></i> Gunakan Barang Terpilih
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. GANTT CHART DETAIL POPUP MODAL -->
+  <div class="modal-overlay" id="gantt-detail-modal">
+    <div class="modal-container modal-lg" style="max-width: 960px;">
+      <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid var(--border-color); padding: 16px 20px;">
+        <div>
+          <h3 id="gantt-modal-title" style="font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px; margin: 0;">
+            <i data-lucide="bar-chart-3" style="color: #4f46e5;"></i> Gantt Chart Timeline: <span id="gantt-modal-order-id" class="mono-id">ORD-2026-001</span>
+          </h3>
+          <p id="gantt-modal-subtitle" style="font-size: 12px; color: var(--text-muted); margin: 3px 0 0 0;">Visualisasi jadwal pengerjaan, milestone, dan status tugas harian</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="btn btn-sm btn-outline" id="gantt-modal-edit-btn" onclick="openProjectManagementPage()"><i data-lucide="edit-3"></i> Edit Tim & Project</button>
+          <button class="btn-close" onclick="closeModal('gantt-detail-modal')"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <!-- Project Metadata Strip -->
+        <div id="gantt-modal-meta" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px;">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- Interactive Visual Gantt Chart Bars Container -->
+        <div style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: #ffffff;">
+          <div style="background: #f1f5f9; padding: 10px 16px; border-bottom: 1px solid var(--border-color); font-weight: 700; font-size: 12.5px; color: #334155; display: flex; justify-content: space-between; align-items: center;">
+            <span>Rincian Milestone & Jadwal Gantt Bar</span>
+            <span id="gantt-modal-progress-text" class="text-primary font-bold">50% Selesai</span>
+          </div>
+          <div id="gantt-modal-chart-content" style="padding: 16px; overflow-x: auto;">
+            <!-- Dynamically populated Gantt bar chart -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
+        <button type="button" class="btn btn-primary" onclick="closeModal('gantt-detail-modal')">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. WHATSAPP PDF SHARE MODAL -->
+  <div class="modal-overlay" id="wa-share-modal">
+    <div class="modal-container" style="max-width: 580px; width: 92vw; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);">
+      <div class="modal-header" style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 16px 20px;">
+        <h3 style="color: #15803d; font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 0;">
+          <i data-lucide="message-circle" style="color: #16a34a;"></i>
+          Kirim Dokumen Quotation ke WhatsApp (PDF)
+        </h3>
+        <button class="btn-close" onclick="closeModal('wa-share-modal')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="wa-share-modal-body" style="padding: 22px 24px; background: #ffffff;">
+        <!-- Populated dynamically via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. PROJECT MANAGEMENT DETAIL POPUP MODAL -->
+  <div class="modal-overlay" id="project-detail-modal">
+    <div class="modal-container modal-lg" style="max-width: 860px; width: 92vw; border-radius: 10px; overflow: hidden;">
+      <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid var(--border-color); padding: 16px 20px;">
+        <h3 style="font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 0; color: #0f172a;">
+          <i data-lucide="folder-kanban" style="color: #4f46e5;"></i> Detail Project Management
+        </h3>
+        <button class="btn-close" onclick="closeModal('project-detail-modal')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="project-detail-modal-body" style="padding: 22px 24px; max-height: 80vh; overflow-y: auto;">
+        <!-- Populated dynamically via projects.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. TEAM ASSIGNMENT WORKSPACE MODAL -->
+  <div class="modal-overlay" id="team-assignment-modal">
+    <div class="modal-container modal-lg" style="max-width: 900px; width: 94vw; border-radius: 10px; overflow: hidden;">
+      <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid var(--border-color); padding: 16px 20px;">
+        <div>
+          <h3 id="pm-page-title" style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="users" style="color: #6366f1;"></i> Penugasan Tim & PIC: <span id="pm-header-order-id" class="mono-id">ORD-2026-001</span>
+          </h3>
+          <p style="font-size: 11.5px; color: var(--text-muted); margin: 2px 0 0 0;">Alokasi Project Lead, penugasan teknisi pelaksana, dan divisi pengerjaan</p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-sm btn-outline" style="color: #4338ca; border-color: #c7d2fe;" onclick="exportTeamAssignmentLetterPDF()"><i data-lucide="printer"></i> Cetak Surat Tugas</button>
+          <button class="btn-close" onclick="closeModal('team-assignment-modal')"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px; max-height: 80vh; overflow-y: auto;">
+        <!-- ORDER SELECTOR & QUICK LINK TO TIMELINE -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div>
+            <label class="form-label font-bold" style="font-size: 11px;">Pilih Referensi Order Penjualan</label>
+            <select id="pm-order-select" class="form-control" onchange="switchProjectOrder(this.value)">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div id="pm-quick-action-container" style="display: flex; align-items: center; justify-content: flex-end;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('team-assignment-modal'); openProjectTimelinePage(currentActiveProjectOrderId)">
+              <i data-lucide="folder-kanban" style="color: #4f46e5;"></i> Buka Timeline Gantt &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- TEAM & PIC ASSIGNMENT FORM -->
+        <div class="card" style="border: 1px solid var(--border-color); padding: 18px; margin-bottom: 16px; background: #ffffff;">
+          <h3 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="user-check" style="width: 16px; height: 16px; color: #4f46e5;"></i> Penanggung Jawab Utama (Project Lead) & Divisi
+          </h3>
+
+          <div class="form-grid" style="grid-template-columns: 1.5fr 1fr; gap: 14px; margin-bottom: 16px;">
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="form-label" style="margin: 0;">Project Lead / Penanggung Jawab Utama (PIC) *</label>
+                <span id="pm-lead-lock-badge"></span>
+              </div>
+              <input type="text" id="pm-lead-name" class="form-control" placeholder="Contoh: Ir. Budi Santoso (Lead Electrical Engineer)" required>
+              <small id="pm-lead-hint" class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Masukkan nama Project Lead. Setelah disimpan, Lead Project akan terkunci secara permanen.</small>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Departemen / Divisi Pelaksana</label>
+              <input type="text" id="pm-department" class="form-control" placeholder="Contoh: Engineering, Assembly, Fabrikasi, QC">
+            </div>
+          </div>
+
+          <!-- Team Members Dynamic List -->
+          <div style="border-top: 1px dashed var(--border-color); padding-top: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div>
+                <label class="form-label font-bold" style="margin: 0; font-size: 12.5px;">Daftar Anggota Tim Pelaksana (Team Members)</label>
+                <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Tambahkan teknisi, drafter, assembler, atau staf QC yang ditugaskan</p>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline" onclick="addProjectTeamMemberRow()"><i data-lucide="user-plus"></i> + Tambah Anggota Tim</button>
+            </div>
+            <div id="pm-team-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER ACTION -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('team-assignment-modal')">Batal</button>
+          <button type="button" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5; padding: 9px 24px;" onclick="saveTeamAssignmentData()">
+            <i data-lucide="save"></i> Simpan Penugasan Tim
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. MILESTONE DETAIL MODAL (SUBTASK, LAPORAN, LINK, FOTO) -->
+  <div class="modal-overlay" id="milestone-detail-modal">
+    <div class="modal-container modal-lg" style="max-width: 880px; width: 94vw; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);">
+      <div class="modal-header" id="milestone-modal-header" style="background: #4f46e5; color: #ffffff; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div id="milestone-modal-icon-wrap" style="width: 38px; height: 38px; border-radius: 8px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i data-lucide="calendar-check" style="color: #ffffff; width: 22px; height: 22px;"></i>
+          </div>
+          <div>
+            <h3 id="milestone-modal-title" style="font-size: 16.5px; font-weight: 800; margin: 0; color: #ffffff; letter-spacing: -0.2px;">Detail Tahapan Milestone</h3>
+            <div id="milestone-modal-subtitle" style="font-size: 12px; opacity: 0.92; margin-top: 3px; color: rgba(255,255,255,0.9);">Rincian subtask, laporan teknis, dan tautan hasil kerja</div>
+          </div>
+        </div>
+        <button class="btn-close" onclick="closeModal('milestone-detail-modal')" style="filter: brightness(0) invert(1); opacity: 0.9;"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="milestone-modal-body" style="padding: 22px 24px; max-height: 80vh; overflow-y: auto; background: #ffffff;">
+        <!-- Populated dynamically via projects.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. EDIT PURCHASING ITEM MODAL -->
+  <div class="modal-overlay" id="modal-edit-purchasing-item">
+    <div class="modal-container" style="max-width: 580px; width: 92vw;">
+      <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid var(--border-color); padding: 16px 20px;">
+        <h3 style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #0f172a; margin: 0;">
+          <i data-lucide="edit-3" style="color: #2563eb;"></i> Edit Data Barang PR
+        </h3>
+        <button class="btn-close" onclick="closeModal('modal-edit-purchasing-item')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <form id="form-edit-purchasing-item" onsubmit="saveEditedPurchasingItem(event)" style="display: flex; flex-direction: column; gap: 14px;">
+          <input type="hidden" id="edit-pr-item-pr-id">
+          <input type="hidden" id="edit-pr-item-index">
+
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 600; font-size: 12px;">Dokumen PR Sumber</label>
+            <div id="edit-pr-item-source-info" style="font-size: 12.5px; font-weight: 700; color: #2563eb; background: #eff6ff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
+              PR-2026-001 (Engineering & Produksi)
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 600; font-size: 12px;">Nama Barang / Komponen / Part Number *</label>
+            <input type="text" id="edit-pr-item-name" class="form-control" required placeholder="Contoh: MCB 3 Phase 63A Schneider" style="font-weight: 600;">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 600; font-size: 12px;">Spesifikasi Teknis / Keterangan</label>
+            <input type="text" id="edit-pr-item-specs" class="form-control" placeholder="Contoh: DIN Rail, C-Curve 10kA, 400V">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Jumlah Kuantitas (Qty) *</label>
+              <input type="number" id="edit-pr-item-qty" class="form-control" min="0.01" step="any" required oninput="calculateEditPRItemTotal()" style="font-weight: 700;">
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Satuan *</label>
+              <input type="text" id="edit-pr-item-unit" class="form-control" list="pr-unit-options-list" required placeholder="Pcs / Unit / Meter">
+              <datalist id="pr-unit-options-list">
+                <option value="Pcs">
+                <option value="Unit">
+                <option value="Set">
+                <option value="Meter">
+                <option value="Batang">
+                <option value="Lembar">
+                <option value="Box">
+                <option value="Kg">
+                <option value="Lot">
+              </datalist>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Estimasi Harga Satuan (Rp) *</label>
+              <input type="number" id="edit-pr-item-price" class="form-control" min="0" step="any" required oninput="calculateEditPRItemTotal()" style="font-weight: 700;">
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Total Estimasi (Rp)</label>
+              <input type="text" id="edit-pr-item-total" class="form-control font-bold" readonly style="background: #f8fafc; color: #1e293b; font-size: 13px;">
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            <button type="button" class="btn btn-outline" onclick="closeModal('modal-edit-purchasing-item')">Batal</button>
+            <button type="submit" class="btn btn-primary" style="padding: 8px 20px;">
+              <i data-lucide="check"></i> Simpan Perubahan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. PROSES PEMBELIAN BARANG MODAL -->
+  <div class="modal-overlay" id="modal-process-purchasing-item">
+    <div class="modal-container" style="max-width: 680px; width: 92vw;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #ffffff; padding: 16px 20px;">
+        <div>
+          <h3 style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #ffffff; margin: 0;">
+            <i data-lucide="shopping-cart" style="color: #93c5fd;"></i> Proses Pembelian & Pemeriksaan Barang
+          </h3>
+          <div style="font-size: 11.5px; opacity: 0.9; margin-top: 2px;">Input data pembelian aktual & status kesesuaian barang dari PR yang disetujui</div>
+        </div>
+        <button class="btn-close" onclick="closeModal('modal-process-purchasing-item')" style="filter: brightness(0) invert(1);"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 20px; max-height: 80vh; overflow-y: auto;">
+        <form id="form-process-purchasing-item" onsubmit="saveProcessPurchasingItem(event)" style="display: flex; flex-direction: column; gap: 14px;">
+          <input type="hidden" id="proc-item-pr-id">
+          <input type="hidden" id="proc-item-index">
+
+          <!-- INFO BARANG & ASAL PR -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px;">
+              <div>
+                <span class="badge badge-outline mono-id font-bold" id="proc-item-pr-badge">PR-2026-000</span>
+                <span class="text-muted font-sm" id="proc-item-dept-info" style="margin-left: 6px;">Divisi</span>
+              </div>
+              <div id="proc-item-qty-badge" class="badge badge-secondary font-bold">1 Pcs</div>
+            </div>
+            <div id="proc-item-name-display" class="font-bold text-main" style="font-size: 14px;">Nama Barang</div>
+            <div id="proc-item-specs-display" class="text-muted font-sm" style="margin-top: 2px; font-size: 11.5px;">Spesifikasi</div>
+          </div>
+
+          <!-- TANGGAL & LINK PEMESANAN -->
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Tanggal Pemesanan</label>
+              <input type="date" id="proc-item-order-date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Link Pemesanan (URL / Toko) <span id="proc-link-required-mark" style="color: #dc2626; font-weight: 700; display: none;">* (Wajib jika Sesuai)</span></label>
+              <input type="url" id="proc-item-order-link" class="form-control" placeholder="https://tokopedia.com/... atau https://shopee.co.id/...">
+              <small id="proc-link-hint" style="display: none; font-size: 11px; margin-top: 3px; font-weight: 600;">⚠️ Wajib diisi saat status diset ke Sesuai (Master Barang)</small>
+            </div>
+          </div>
+
+          <!-- HARGA BELI & TANGGAL SAMPAI -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Harga Beli Satuan (Rp) *</label>
+              <input type="number" id="proc-item-price" class="form-control" min="0" step="any" required oninput="calculateProcItemTotal()" style="font-weight: 700;">
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Total Biaya Aktual (Rp)</label>
+              <input type="text" id="proc-item-total" class="form-control font-bold" readonly style="background: #f8fafc; color: #1e293b;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Tanggal Barang Sampai</label>
+              <input type="date" id="proc-item-arrival-date" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Nama Penerima Barang</label>
+              <input type="text" id="proc-item-recipient" class="form-control" placeholder="Nama staf / penanggung jawab penerima">
+            </div>
+          </div>
+
+          <!-- UPLOAD FOTO / BUKTI BARANG -->
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 600; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+              <span>Upload Foto / Bukti Fisik Barang</span>
+              <span class="text-muted font-xs">Maksimal 5MB (JPG/PNG/WebP)</span>
+            </label>
+            <input type="file" id="proc-item-photo-file" accept="image/*" style="display: none;" onchange="handleProcPhotoUpload(event)">
+            <input type="hidden" id="proc-item-photo-data">
+            
+            <div id="proc-photo-preview-box" class="photo-upload-box" onclick="document.getElementById('proc-item-photo-file').click()">
+              <div id="proc-photo-empty-state">
+                <i data-lucide="upload-cloud" style="width: 28px; height: 28px; color: #3b82f6; margin-bottom: 6px;"></i>
+                <div style="font-size: 12.5px; font-weight: 600; color: #334155;">Klik untuk upload foto barang / bukti penerimaan</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Format gambar JPG, PNG, atau WEBP</div>
+              </div>
+              <div id="proc-photo-filled-state" style="display: none; align-items: center; justify-content: center; gap: 14px; position: relative;">
+                <img id="proc-photo-preview-img" src="" alt="Pratinjau Foto" style="max-height: 110px; max-width: 160px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <div style="text-align: left;">
+                  <div style="font-size: 12px; font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 4px;">
+                    <i data-lucide="check-circle" style="width: 14px; height: 14px;"></i> Foto Berhasil Diunggah
+                  </div>
+                  <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Klik untuk mengganti foto</div>
+                  <button type="button" class="btn btn-xs btn-outline" style="margin-top: 8px; color: #dc2626; border-color: #fecaca;" onclick="event.stopPropagation(); removeProcPhoto();">
+                    <i data-lucide="trash-2"></i> Hapus Foto
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STATUS BARANG & CATATAN -->
+          <div style="display: grid; grid-template-columns: 1.2fr 1.8fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 700; font-size: 12px; color: #0f172a;">Status Pemeriksaan Barang *</label>
+              <select id="proc-item-status" class="form-control" required style="font-weight: 700; font-size: 12.5px;">
+                <option value="Belum Dipesan">🟡 Belum Dipesan</option>
+                <option value="Dalam Pengiriman">🔵 Dalam Pengiriman</option>
+                <option value="Sesuai">🟢 Sesuai (Masuk Master Barang)</option>
+                <option value="Tidak Sesuai">🔴 Tidak Sesuai Spesifikasi</option>
+                <option value="Dikembalikan">↩️ Dikembalikan / Retur</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="font-weight: 600; font-size: 12px;">Catatan Pemeriksaan / Pembelian</label>
+              <input type="text" id="proc-item-notes" class="form-control" placeholder="Kondisi fisik barang, no resi, toko, dll...">
+            </div>
+          </div>
+
+          <!-- ALERT STATUS TERKUNCI JIKA SESUAI -->
+          <div id="proc-item-locked-alert" style="display: none; background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px; padding: 12px 14px; font-size: 12px; color: #065f46; align-items: flex-start; gap: 8px;">
+            <i data-lucide="lock" style="width: 16px; height: 16px; color: #059669; flex-shrink: 0; margin-top: 1px;"></i>
+            <div>
+              <strong>Status Barang Terkunci (Sesuai):</strong> Barang ini telah selesai diperiksa dan secara resmi masuk ke <strong>Database Master Barang</strong>. Data dan status barang tidak dapat diedit atau diubah kembali.
+            </div>
+          </div>
+
+          <!-- ALERT INTEGRASI MASTER BARANG -->
+          <div id="proc-item-normal-alert" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 14px; font-size: 11.5px; color: #166534; display: flex; align-items: flex-start; gap: 8px;">
+            <i data-lucide="info" style="width: 16px; height: 16px; color: #16a34a; flex-shrink: 0; margin-top: 1px;"></i>
+            <div>
+              <strong>Ketentuan Master Barang:</strong> Hanya barang yang berstatus <strong>Sesuai</strong> yang akan otomatis masuk ke <strong>Database Master Barang (PR)</strong> dan siap digunakan untuk BOM & Proyek.
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            <button type="button" class="btn btn-outline" id="proc-item-close-btn" onclick="closeModal('modal-process-purchasing-item')">Batal</button>
+            <button type="submit" class="btn btn-primary" id="proc-item-submit-btn" style="padding: 8px 24px; font-weight: 600;">
+              <i data-lucide="save"></i> Simpan Proses Pembelian
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. PURCHASING IMAGE PREVIEW MODAL -->
+  <div class="modal-overlay" id="modal-purchasing-image-preview">
+    <div class="modal-container" style="max-width: 600px; width: 90vw; background: transparent; box-shadow: none; border: none;">
+      <div style="background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+          <div id="purchasing-image-preview-title" class="font-bold text-main" style="font-size: 13.5px;">Foto Bukti Barang</div>
+          <button class="btn-close" onclick="closeModal('modal-purchasing-image-preview')"><i data-lucide="x"></i></button>
+        </div>
+        <div style="padding: 16px; text-align: center; background: #0f172a; display: flex; justify-content: center; align-items: center; min-height: 250px;">
+          <img id="purchasing-image-preview-img" src="" alt="Foto Barang" style="max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 4px;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. TOAST CONTAINER -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- External PDF Generation Engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Application Logic Modular Scripts -->
+  <script src="js/modules/utils.js"></script>
+  <script src="js/modules/dashboard.js"></script>
+  <script src="js/modules/quotations.js"></script>
+  <script src="js/modules/orders.js"></script>
+  <script src="js/modules/projects.js"></script>
+  <script src="js/modules/bom.js"></script>
+  <script src="js/modules/purchasing.js"></script>
+  <script src="js/modules/po.js"></script>
+  <script src="js/modules/delivery.js"></script>
+  <script src="js/modules/invoices.js"></script>
+  <script src="js/modules/bast.js"></script>
+  <script src="js/modules/project_reports.js"></script>
+  <script src="js/modules/service.js"></script>
+  <script src="js/modules/maintenance.js"></script>
+  <script src="js/modules/finance.js"></script>
+  <script src="js/modules/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

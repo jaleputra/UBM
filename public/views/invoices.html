@@ -1,0 +1,52 @@
+<!-- ==================== INVOICES VIEW ==================== -->
+<section class="view-section" id="view-invoices">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-invoice-status" class="form-control-sm" onchange="renderInvoicesTable()">
+        <option value="ALL">Semua Status</option>
+        <option value="Unpaid">Unpaid</option>
+        <option value="Partial">Partial</option>
+        <option value="Paid">Paid (Lunas)</option>
+        <option value="Overdue">Overdue</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" style="color: #4338ca; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; background: #eef2ff;" onclick="openPrintInvoiceSelector()"><i data-lucide="printer"></i> Cetak Invoice</button>
+      <button class="btn btn-outline" onclick="exportToCSV('invoices')"><i data-lucide="download"></i> Export CSV</button>
+    </div>
+  </div>
+
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+    <div class="table-invoices-container">
+      <table class="data-table table-invoices" id="table-invoices-main">
+        <colgroup>
+          <col style="width: 11%;">    <!-- No. Faktur -->
+          <col style="width: 10%;">    <!-- No. Order -->
+          <col style="width: 18%;">    <!-- Pelanggan & Kontak -->
+          <col style="width: 9%;">     <!-- Tanggal Faktur -->
+          <col style="width: 9%;">     <!-- Jatuh Tempo -->
+          <col style="width: 13%;">    <!-- Total Tagihan -->
+          <col style="width: 13%;">    <!-- Sisa Tagihan -->
+          <col style="width: 7%;">     <!-- Status -->
+          <col style="width: 10%;">    <!-- Aksi -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>No. Faktur</th>
+            <th>No. Order</th>
+            <th>Pelanggan</th>
+            <th>Tanggal Faktur</th>
+            <th>Jatuh Tempo</th>
+            <th>Total Tagihan</th>
+            <th>Sisa Tagihan</th>
+            <th style="text-align: center;">Status</th>
+            <th class="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-invoices-body">
+          <!-- Data loaded dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

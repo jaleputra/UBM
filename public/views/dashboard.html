@@ -1,0 +1,136 @@
+<!-- ==================== DASHBOARD VIEW ==================== -->
+<section class="view-section active" id="view-dashboard">
+  <!-- Summary Cards Grid 1: Transaksi & Finansial (4 Kolom Proporsional) -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+    <!-- 1. Card Quotation -->
+    <div class="kpi-card accent-purple">
+      <div class="kpi-header">
+        <span class="kpi-title">Quotation (Penawaran)</span>
+        <div class="kpi-icon"><i data-lucide="file-check-2"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-quotations-val">0 Penawaran</div>
+      <div class="kpi-footer">
+        <span class="text-purple" id="kpi-quotations-amount">Rp 0</span>
+        <span class="text-muted">Total Nilai Penawaran</span>
+      </div>
+    </div>
+
+    <!-- 2. Card Total Sales Order -->
+    <div class="kpi-card accent-blue">
+      <div class="kpi-header">
+        <span class="kpi-title">Total Sales Order</span>
+        <div class="kpi-icon"><i data-lucide="shopping-cart"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-orders-val">0 Order</div>
+      <div class="kpi-footer">
+        <span class="text-success" id="kpi-orders-amount">Rp 0</span>
+        <span class="text-muted">Total Nilai Order</span>
+      </div>
+    </div>
+
+    <!-- 3. Card Tagihan -->
+    <div class="kpi-card accent-amber">
+      <div class="kpi-header">
+        <span class="kpi-title">Tagihan & Piutang</span>
+        <div class="kpi-icon"><i data-lucide="receipt"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-invoices-val">0 Faktur</div>
+      <div class="kpi-footer">
+        <span class="text-warning" id="kpi-invoices-amount">Rp 0</span>
+        <span class="text-muted">Outstanding Invoice</span>
+      </div>
+    </div>
+
+    <!-- 4. Card Delivery -->
+    <div class="kpi-card accent-emerald">
+      <div class="kpi-header">
+        <span class="kpi-title">Delivery & Surat Jalan</span>
+        <div class="kpi-icon"><i data-lucide="truck"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-delivery-val">0 Pengiriman</div>
+      <div class="kpi-footer">
+        <span class="text-emerald" id="kpi-delivery-active">Pengiriman Aktif</span>
+        <span class="text-muted">Status Ekspedisi</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Cards Grid 2: Status & Performa Project Timeline (3 Kolom Proporsional) -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 24px;">
+    <!-- 5. Card Project In Progress -->
+    <div class="kpi-card accent-indigo">
+      <div class="kpi-header">
+        <span class="kpi-title">Total Project In Progress</span>
+        <div class="kpi-icon"><i data-lucide="play-circle"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-proj-inprogress-val">0 Project</div>
+      <div class="kpi-footer">
+        <span class="text-indigo" id="kpi-proj-inprogress-sub">Sedang Dikerjakan</span>
+        <span class="text-muted">Project Berjalan & Aktif</span>
+      </div>
+    </div>
+
+    <!-- 6. Card Project Completed -->
+    <div class="kpi-card accent-emerald">
+      <div class="kpi-header">
+        <span class="kpi-title">Total Project Completed</span>
+        <div class="kpi-icon"><i data-lucide="check-circle-2"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-proj-completed-val">0 Project</div>
+      <div class="kpi-footer">
+        <span class="text-emerald" id="kpi-proj-completed-sub">Selesai 100%</span>
+        <span class="text-muted">Pesanan Tuntas Dikerjakan</span>
+      </div>
+    </div>
+
+    <!-- 7. Card Persentase Project Overdue -->
+    <div class="kpi-card accent-rose">
+      <div class="kpi-header">
+        <span class="kpi-title">Persentase Project Overdue</span>
+        <div class="kpi-icon"><i data-lucide="alert-triangle"></i></div>
+      </div>
+      <div class="kpi-value" id="kpi-proj-overdue-val" style="color: #e11d48;">0%</div>
+      <div class="kpi-footer">
+        <span class="text-rose" id="kpi-proj-overdue-sub">0 dari 0 Project</span>
+        <span class="text-muted">Tingkat Keterlambatan Jadwal</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SEARCH BAR TABEL DASHBOARD ==================== -->
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+    <div style="position: relative; max-width: 440px; width: 100%;">
+      <i data-lucide="search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #94a3b8; pointer-events: none;"></i>
+      <input type="text" id="dashboard-search-input" class="form-control" placeholder="Cari order, customer, project, PIC... (min. 3 huruf)" oninput="onDashboardSearchInput(this.value)" style="padding-left: 36px; padding-right: 32px; height: 38px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border-color); background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+      <button type="button" id="dashboard-search-clear-btn" onclick="clearDashboardSearch()" style="display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px;" title="Hapus Pencarian">
+        <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+      </button>
+    </div>
+    <div id="dashboard-search-result-hint" style="font-size: 12px; color: var(--text-muted); font-weight: 500;">
+      <!-- Populated dynamically via JS -->
+    </div>
+  </div>
+
+  <!-- ==================== TABEL MONITORING SALES ORDER & GANTT CHART ==================== -->
+  <div class="table-responsive" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-x: auto; background: #ffffff; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <table class="data-table" style="margin: 0; width: 100%;">
+      <thead style="background: #f8fafc;">
+        <tr>
+          <th style="width: 4%; text-align: center;">NO.</th>
+          <th style="width: 9%;">NO. ORDER</th>
+          <th style="width: 15%;">NAMA PERUSAHAAN</th>
+          <th style="width: 15%;">NAMA PROJECT</th>
+          <th style="width: 11%;">PIC LEAD & TIM</th>
+          <th style="width: 12%;">JADWAL PROJECT</th>
+          <th style="width: 11%; text-align: center;">OVERDUE MILESTONE</th>
+          <th style="width: 12%;">PROGRESS & TASK</th>
+          <th style="width: 9%; text-align: center;">STATUS</th>
+          <th style="width: 10%; text-align: right;">GANTT CHART</th>
+        </tr>
+      </thead>
+      <tbody id="gantt-chart-table-body">
+        <!-- Populated dynamically via JS -->
+      </tbody>
+    </table>
+  </div>
+</section>

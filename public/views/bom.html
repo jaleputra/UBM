@@ -1,0 +1,87 @@
+<!-- ==================== BOM VIEW ==================== -->
+<section class="view-section" id="view-bom">
+  <!-- Top Tab Navigation -->
+  <div class="submodule-tabs-header">
+    <div class="submodule-nav-tabs">
+      <button type="button" class="submodule-tab-btn active" id="tab-btn-bom-orders" onclick="switchBOMTab('orders')">
+        <i data-lucide="layers"></i>
+        <span>Order Penjualan (Input Formulasi BOM)</span>
+        <span class="tab-badge" id="badge-tab-bom-orders-count">0</span>
+      </button>
+      <button type="button" class="submodule-tab-btn" id="tab-btn-bom-master" onclick="switchBOMTab('master')">
+        <i data-lucide="copy"></i>
+        <span>Template BOM</span>
+        <span class="tab-badge" id="badge-tab-bom-master-count">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: ORDER PENJUALAN (INPUT FORMULASI BOM) -->
+  <div id="bom-tab-orders-content">
+    <div class="module-action-bar" style="margin-bottom: 14px;">
+      <div>
+        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Pilih item pesanan penjualan di bawah ini untuk mengisi, memvalidasi status pengajuan/accepted, dan melihat formula BOM terkait</p>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="exportDataToCSV('orders')"><i data-lucide="download"></i> Export CSV</button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>No. Order</th>
+              <th>Pelanggan</th>
+              <th>Nama Produk / Item Pesanan</th>
+              <th>Qty Pesanan</th>
+              <th>Target Selesai</th>
+              <th>Status BOM</th>
+              <th class="text-right">Aksi Formulasi</th>
+            </tr>
+          </thead>
+          <tbody id="table-bom-orders-body">
+            <!-- Loaded dynamically from orders -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: TEMPLATE BOM -->
+  <div id="bom-tab-master-content" style="display: none;">
+    <div class="module-action-bar">
+      <div class="filter-group">
+        <span class="font-bold text-main" style="font-size: 13px;">Daftar Template Master BOM (Acuan Formula Produk)</span>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="exportDataToCSV('bom')"><i data-lucide="download"></i> Export CSV</button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Kode BOM</th>
+              <th>Ref Order</th>
+              <th>Nama Produk Jadi</th>
+              <th>Kategori</th>
+              <th>Revisi</th>
+              <th>Komponen</th>
+              <th>Biaya Material</th>
+              <th>Estimasi HPP</th>
+              <th>Status</th>
+              <th class="text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-bom-body">
+            <!-- Data loaded dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

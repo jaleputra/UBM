@@ -1,0 +1,29 @@
+{
+  "name": "ubm-app",
+  "version": "1.0.0",
+  "description": "UBM - Universal Business Management Web Application (Order, PO, Invoice, Purchasing, BOM, Delivery)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "erp",
+    "order",
+    "po",
+    "invoice",
+    "purchasing",
+    "bom",
+    "delivery",
+    "nodejs"
+  ],
+  "author": "UBM Dev Team",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.113.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0"
+  }
+}

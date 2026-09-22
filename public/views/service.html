@@ -1,0 +1,133 @@
+<!-- ==================== SERVICE & GARANSI VIEW (AFTER SALES) ==================== -->
+<section class="view-section" id="view-service">
+  <!-- Top Tab Navigation -->
+  <div class="submodule-tabs-header">
+    <div class="submodule-nav-tabs">
+      <button type="button" class="submodule-tab-btn active" id="tab-btn-service-warranty" onclick="switchServiceTab('warranty')">
+        <i data-lucide="shield-check"></i>
+        <span>Garansi Project</span>
+        <span class="tab-badge" id="badge-tab-service-warranty-count">0</span>
+      </button>
+      <button type="button" class="submodule-tab-btn" id="tab-btn-service-tickets" onclick="switchServiceTab('tickets')">
+        <i data-lucide="wrench"></i>
+        <span>Service & Pengajuan Biaya</span>
+        <span class="tab-badge" id="badge-tab-service-tickets-count">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: GARANSI PROJECT (HALAMAN GARANSI RESMI) -->
+  <div id="service-warranty-tab-content">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #2563eb;">
+        <i data-lucide="shield-check" style="width: 16px; height: 16px; color: #2563eb;"></i>
+        <span>Layanan <strong>Garansi Project</strong> (Completed). Memuat status masa berlaku jaminan produk resmi sesuai Quotation/BAST dan pencetakan Kartu Garansi.</span>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <select id="filter-service-status" class="form-control-sm" onchange="filterServiceTable()" style="height: 36px;">
+          <option value="ALL">Semua Status Garansi</option>
+          <option value="Active">🟢 Garansi Aktif (Covered)</option>
+          <option value="Expired">🔴 Garansi Telah Habis</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('projects')" style="height: 36px;">
+          <i data-lucide="download"></i> Export CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div class="table-responsive" style="max-height: calc(100vh - 250px); overflow-y: auto;">
+        <table class="data-table" id="table-service-main" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+              <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+              <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+              <th style="width: 240px; font-size: 11px; text-transform: uppercase;">Ketentuan & Plafon Garansi</th>
+              <th style="width: 145px; font-size: 11px; text-transform: uppercase;">Periode Garansi</th>
+              <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Masa Berlaku</th>
+              <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+              <th style="width: 230px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-service-body">
+            <!-- Populated dynamically via service.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: INPUT SERVICE & PENGAJUAN BIAYA SERVICE (NON-GARANSI) -->
+  <div id="service-tickets-tab-content" style="display: none;">
+    
+    <!-- INFO BANNER -->
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #78350f; background: #fffbeb; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #f59e0b; margin-bottom: 16px;">
+      <i data-lucide="wrench" style="width: 18px; height: 18px; color: #d97706; flex-shrink: 0;"></i>
+      <div>
+        <strong>Layanan Service & Pengajuan Biaya (Non-Garansi)</strong>: Pencatatan perbaikan manual di luar garansi untuk customer, unit mesin, atau peralatan dengan rincian biaya jasa dan suku cadang secara terpisah.
+      </div>
+    </div>
+
+    <!-- STAT SUMMARY CARDS -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px;">
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Pengajuan Service</div>
+        <div id="kpi-service-total-tickets" style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">0 Pengajuan</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Pengajuan Biaya</div>
+        <div id="kpi-service-total-cost" class="font-mono" style="font-size: 18px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Dalam Pengerjaan</div>
+        <div id="kpi-service-progress-count" style="font-size: 16px; font-weight: 800; color: #b45309; margin-top: 4px;">0 Berjalan</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Service Selesai</div>
+        <div id="kpi-service-resolved-count" style="font-size: 16px; font-weight: 800; color: #15803d; margin-top: 4px;">0 Selesai</div>
+      </div>
+    </div>
+
+    <!-- ACTION & FILTER BAR -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <select id="filter-ticket-status" class="form-control-sm" onchange="filterServiceTicketsTable()" style="height: 36px;">
+          <option value="ALL">Semua Status Service</option>
+          <option value="Open">🔵 Open (Diajukan / Menunggu Jadwal)</option>
+          <option value="In Progress">🟡 In Progress (Sedang Dikerjakan)</option>
+          <option value="Resolved">🟢 Resolved (Service Selesai)</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('service_tickets')" style="height: 36px;">
+          <i data-lucide="download"></i> Export CSV
+        </button>
+      </div>
+      <button class="btn btn-primary" onclick="openCreateServiceModal()" style="background: #2563eb; border-color: #2563eb; font-weight: 700; font-size: 12.5px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;">
+        <i data-lucide="plus-circle"></i> + Input Service & Pengajuan Biaya
+      </button>
+    </div>
+
+    <!-- TABEL TIKET & PENGAJUAN BIAYA NON-GARANSI -->
+    <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+        <table class="data-table" id="table-service-tickets-main" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+              <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Tiket Service</th>
+              <th style="font-size: 11px; text-transform: uppercase;">Customer & Unit Mesin</th>
+              <th style="width: 220px; font-size: 11px; text-transform: uppercase;">Kategori & Keluhan</th>
+              <th style="width: 140px; font-size: 11px; text-transform: uppercase;">Teknisi PIC</th>
+              <th style="width: 150px; font-size: 11px; text-transform: uppercase;">Rincian Biaya</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Total Pengajuan</th>
+              <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-service-tickets-body">
+            <!-- Populated dynamically via service.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</section>

@@ -1,0 +1,43 @@
+<!-- ==================== LAPORAN PELAKSANAAN PROJECT VIEW ==================== -->
+<section class="view-section" id="view-project-reports">
+  <!-- Top Bar: Info & Search Filter -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; background: #f0fdf4; padding: 8px 14px; border-radius: 6px; border-left: 3px solid #16a34a;">
+      <i data-lucide="clipboard-check" style="width: 16px; height: 16px; color: #16a34a;"></i>
+      <span>Daftar project <strong>Completed</strong>. Klik project untuk mengisi <strong>Penggunaan Barang Aktual</strong> & otomatis mengembalikan sisa material ke Database Master Barang.</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <select id="filter-report-status" class="form-control-sm" onchange="filterProjectReportsTable()" style="height: 36px;">
+        <option value="ALL">Semua Status Pelaporan</option>
+        <option value="Unreported">⚪ Belum Dilaporkan</option>
+        <option value="Reported">🟢 Sudah Dilaporkan</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('project_reports')" style="height: 36px;">
+        <i data-lucide="download"></i> Export CSV
+      </button>
+    </div>
+  </div>
+
+  <!-- Project Reports Table -->
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+    <div class="table-responsive" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+      <table class="data-table" id="table-project-reports-main" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+            <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+            <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+            <th style="width: 180px; font-size: 11px; text-transform: uppercase;">Project Lead (PIC)</th>
+            <th style="width: 140px; font-size: 11px; text-transform: uppercase;">Tgl Selesai</th>
+            <th style="width: 150px; font-size: 11px; text-transform: uppercase; text-align: center;">Komponen BOM</th>
+            <th style="width: 160px; font-size: 11px; text-transform: uppercase; text-align: center;">Sisa Material</th>
+            <th style="width: 130px; text-align: center; font-size: 11px; text-transform: uppercase;">Status Laporan</th>
+            <th style="width: 150px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-project-reports-body">
+          <!-- Populated dynamically via project_reports.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

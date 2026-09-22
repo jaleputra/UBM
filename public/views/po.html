@@ -1,0 +1,41 @@
+<!-- ==================== PURCHASE ORDER VIEW ==================== -->
+<section class="view-section" id="view-po">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-po-status" class="form-control-sm" onchange="renderPOTable()">
+        <option value="ALL">Semua Status</option>
+        <option value="Draft">Draft</option>
+        <option value="Sent">Sent</option>
+        <option value="Approved">Approved</option>
+        <option value="Received">Received</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="exportToCSV('po')"><i data-lucide="download"></i> Export CSV</button>
+      <button class="btn btn-primary" onclick="openPOModal()"><i data-lucide="plus"></i> PO Baru</button>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>No. PO</th>
+            <th>Vendor / Supplier</th>
+            <th>Tanggal PO</th>
+            <th>Expected Delivery</th>
+            <th>Item</th>
+            <th>Total Pembelian</th>
+            <th>Status</th>
+            <th class="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-po-body">
+          <!-- Data loaded dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

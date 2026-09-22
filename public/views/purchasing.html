@@ -1,0 +1,247 @@
+<!-- ==================== PURCHASING (PR) VIEW ==================== -->
+<section class="view-section" id="view-purchasing">
+  <!-- Top Tab Navigation -->
+  <div class="submodule-tabs-header">
+    <div class="submodule-nav-tabs">
+      <button type="button" class="submodule-tab-btn active" id="tab-btn-pr-docs" onclick="switchPurchasingTab('docs')">
+        <i data-lucide="file-text"></i>
+        <span>Daftar Dokumen PR</span>
+        <span class="tab-badge" id="badge-tab-pr-docs-count">0</span>
+      </button>
+      <button type="button" class="submodule-tab-btn" id="tab-btn-pr-process" onclick="switchPurchasingTab('process')">
+        <i data-lucide="shopping-cart"></i>
+        <span>Proses Pembelian Barang</span>
+        <span class="tab-badge" id="badge-tab-pr-process-count">0</span>
+      </button>
+      <button type="button" class="submodule-tab-btn" id="tab-btn-pr-items" onclick="switchPurchasingTab('items')">
+        <i data-lucide="boxes"></i>
+        <span>Database Master Barang (PR)</span>
+        <span class="tab-badge" id="badge-tab-pr-items-count">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: DAFTAR DOKUMEN PR -->
+  <div id="purchasing-docs-tab-content">
+    <div class="module-action-bar">
+      <div class="filter-group">
+        <select id="filter-purchasing-status" class="form-control-sm" onchange="renderPurchasingTable()">
+          <option value="ALL">Semua Status PR</option>
+          <option value="Pengajuan">🟡 Pengajuan</option>
+          <option value="Disetujui">🟢 Disetujui</option>
+          <option value="Ditolak">🔴 Ditolak</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="exportToCSV('purchasing')"><i data-lucide="download"></i> Export CSV</button>
+        <button class="btn btn-primary" onclick="openPurchasingModal()"><i data-lucide="plus"></i> + Buat Request PR</button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>No. PR</th>
+              <th>Pemohon & Divisi</th>
+              <th>Tanggal Pengajuan</th>
+              <th>Urgensi</th>
+              <th>Jumlah Barang</th>
+              <th>Total Estimasi</th>
+              <th>Status Persetujuan</th>
+              <th class="text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-purchasing-body">
+            <!-- Data loaded dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: PROSES PEMBELIAN BARANG (BARANG DARI PR DISETUJUI) -->
+  <div id="purchasing-process-tab-content" style="display: none;">
+    <!-- Stat Summary Cards for Procurement Process -->
+    <div class="purchasing-stats-row">
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon blue">
+          <i data-lucide="clipboard-list"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Barang Disetujui</span>
+          <span class="purchasing-stat-value" id="pr-proc-stat-total">0 Item</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon amber">
+          <i data-lucide="truck"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Sedang Dipesan / Dikirim</span>
+          <span class="purchasing-stat-value" id="pr-proc-stat-pending">0 Item</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon emerald">
+          <i data-lucide="check-circle-2"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Sesuai (Masuk Master)</span>
+          <span class="purchasing-stat-value text-success" id="pr-proc-stat-matched">0 Item</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon rose">
+          <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Tidak Sesuai / Retur</span>
+          <span class="purchasing-stat-value text-danger" id="pr-proc-stat-rejected">0 Item</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Action Bar for Process Table -->
+    <div class="module-action-bar">
+      <div class="filter-group" style="flex: 1; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <div style="position: relative; flex: 1; min-width: 240px; max-width: 360px;">
+          <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: #94a3b8;"></i>
+          <input type="text" id="filter-purchasing-process-search" class="form-control-sm" placeholder="Cari nama barang, no PR, link pemesanan..." oninput="renderPurchasingProcessTable()" style="padding-left: 32px; width: 100%;">
+        </div>
+        <select id="filter-purchasing-process-status" class="form-control-sm" onchange="renderPurchasingProcessTable()">
+          <option value="ALL">Semua Status Barang</option>
+          <option value="Belum Dipesan">🟡 Belum Dipesan</option>
+          <option value="Dalam Pengiriman">🔵 Dalam Pengiriman</option>
+          <option value="Sesuai">🟢 Sesuai (Masuk Master)</option>
+          <option value="Tidak Sesuai">🔴 Tidak Sesuai</option>
+          <option value="Dikembalikan">↩️ Dikembalikan / Retur</option>
+        </select>
+        <select id="filter-purchasing-process-dept" class="form-control-sm" onchange="renderPurchasingProcessTable()">
+          <option value="ALL">Semua Departemen / Divisi</option>
+          <option value="Engineering & Produksi">Engineering & Produksi</option>
+          <option value="Fabrikasi & Las">Fabrikasi & Las</option>
+          <option value="Quality Control (QC)">Quality Control (QC)</option>
+          <option value="Logistik & Gudang">Logistik & Gudang</option>
+          <option value="Umum & Operasional">Umum & Operasional</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="exportPurchasingProcessToCSV()"><i data-lucide="download"></i> Export CSV Proses</button>
+      </div>
+    </div>
+
+    <!-- Table of Procurement Processing -->
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;">No.</th>
+              <th>Barang & Spesifikasi</th>
+              <th>Asal PR & Pemohon</th>
+              <th>Tgl Pemesanan</th>
+              <th>Link Pemesanan</th>
+              <th class="text-right">Harga Beli</th>
+              <th>Tgl Sampai & Penerima</th>
+              <th class="text-center">Foto / Bukti</th>
+              <th class="text-center">Status Barang</th>
+              <th class="text-right" style="width: 110px;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-purchasing-process-body">
+            <!-- Data loaded dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: DATABASE MASTER BARANG (PR) -->
+  <div id="purchasing-items-tab-content" style="display: none;">
+    <!-- Stat Summary Cards -->
+    <div class="purchasing-stats-row">
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon blue">
+          <i data-lucide="package"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Total Jenis Master Barang</span>
+          <span class="purchasing-stat-value" id="pr-stat-total-items">0 Barang</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon emerald">
+          <i data-lucide="layers"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Total Kuantitas Tersedia</span>
+          <span class="purchasing-stat-value" id="pr-stat-total-qty">0 Unit</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon indigo">
+          <i data-lucide="calculator"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Total Nilai Master Stok</span>
+          <span class="purchasing-stat-value text-primary" id="pr-stat-total-val">Rp 0</span>
+        </div>
+      </div>
+      <div class="purchasing-stat-card">
+        <div class="purchasing-stat-icon amber">
+          <i data-lucide="building-2"></i>
+        </div>
+        <div class="purchasing-stat-info">
+          <span class="purchasing-stat-label">Divisi Terkait</span>
+          <span class="purchasing-stat-value" id="pr-stat-total-depts">0 Divisi</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Action Bar for Items -->
+    <div class="module-action-bar">
+      <div class="filter-group" style="flex: 1; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <div style="position: relative; flex: 1; min-width: 240px; max-width: 360px;">
+          <i data-lucide="search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: #94a3b8;"></i>
+          <input type="text" id="filter-purchasing-items-search" class="form-control-sm" placeholder="Cari master barang, spesifikasi..." oninput="renderPurchasingItemsTable()" style="padding-left: 32px; width: 100%;">
+        </div>
+        <select id="filter-purchasing-items-dept" class="form-control-sm" onchange="renderPurchasingItemsTable()">
+          <option value="ALL">Semua Departemen / Divisi</option>
+          <option value="Engineering & Produksi">Engineering & Produksi</option>
+          <option value="Fabrikasi & Las">Fabrikasi & Las</option>
+          <option value="Quality Control (QC)">Quality Control (QC)</option>
+          <option value="Logistik & Gudang">Logistik & Gudang</option>
+          <option value="Umum & Operasional">Umum & Operasional</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-outline" onclick="exportPurchasingItemsToCSV()"><i data-lucide="download"></i> Export CSV Master Barang</button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 45px;">No.</th>
+              <th>Nama Barang & Spesifikasi</th>
+              <th>Departemen & Sumber PR</th>
+              <th class="text-center">Total Stok (Qty)</th>
+              <th class="text-center">Satuan</th>
+              <th class="text-right">Harga Beli Satuan</th>
+              <th class="text-right">Total Nilai Stok</th>
+              <th class="text-center">Status Stok</th>
+              <th class="text-right" style="width: 100px;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-purchasing-items-body">
+            <!-- Data loaded dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

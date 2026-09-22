@@ -1,0 +1,50 @@
+<!-- ==================== BAST VIEW (BERITA ACARA SERAH TERIMA) ==================== -->
+<section class="view-section" id="view-bast">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-bast-status" class="form-control-sm" onchange="filterBastTable()">
+        <option value="ALL">Semua Status BAST</option>
+        <option value="Completed">Selesai Diserahterimakan</option>
+        <option value="Draft">Draft Berita Acara</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="exportDataToCSV('bast')"><i data-lucide="download"></i> Export CSV</button>
+      <button class="btn btn-primary" onclick="openDeliveryModal()"><i data-lucide="truck"></i> Buat Surat Jalan / DO</button>
+    </div>
+  </div>
+
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+    <div class="table-bast-container">
+      <table class="data-table table-bast" id="table-bast-main">
+        <colgroup>
+          <col style="width: 12%;">   <!-- 1. No. BAST -->
+          <col style="width: 9%;">    <!-- 2. Tanggal -->
+          <col style="width: 22%;">   <!-- 3. Nama Project -->
+          <col style="width: 16%;">   <!-- 4. Pelanggan -->
+          <col style="width: 14%;">   <!-- 5. Penanggung Jawab -->
+          <col style="width: 6%;">    <!-- 6. Item -->
+          <col style="width: 11%;">   <!-- 7. Upload Berkas -->
+          <col style="width: 9%;">    <!-- 8. Status -->
+          <col style="width: 9%;">    <!-- 9. Aksi -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>No. BAST</th>
+            <th>Tanggal</th>
+            <th>Nama Project</th>
+            <th>Pelanggan</th>
+            <th>Penanggung Jawab</th>
+            <th style="text-align: center;">Item</th>
+            <th style="text-align: center;">Upload Berkas</th>
+            <th style="text-align: center;">Status</th>
+            <th style="text-align: right;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-bast-body">
+          <!-- Populated dynamically via bast.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

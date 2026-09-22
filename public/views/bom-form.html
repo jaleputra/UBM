@@ -1,0 +1,120 @@
+<!-- ==================== DEDICATED FULL-PAGE BOM FORM VIEW ==================== -->
+<section class="view-section" id="view-bom-form">
+  <div class="card" style="margin-bottom: 24px; padding: 22px 26px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+      <div>
+        <button type="button" class="btn btn-sm btn-ghost" id="bom-back-link-btn" onclick="navigateBackFromBOM()" style="margin-bottom: 6px; padding-left: 0; color: var(--text-muted);">
+          <i data-lucide="arrow-left"></i> Kembali ke Daftar BOM
+        </button>
+        <h2 id="bom-page-form-title" style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="boxes" style="color: #2563eb;"></i> Buat Master Bill of Materials (BOM)
+        </h2>
+        <p style="font-size: 12px; color: var(--text-muted); margin: 3px 0 0 0;">Struktur formula bahan baku, komponen, dan perhitungan estimasi Harga Pokok Produksi (HPP)</p>
+      </div>
+      <div class="btn-group">
+        <button type="button" class="btn btn-outline" onclick="navigateBackFromBOM()"><i data-lucide="x"></i> Batal</button>
+        <button type="button" class="btn btn-primary" onclick="submitBOMPageForm()"><i data-lucide="save"></i> Simpan Master BOM</button>
+      </div>
+    </div>
+
+    <form id="bom-page-form" onsubmit="handleBOMPageSubmit(event)">
+      <input type="hidden" id="page-bom-edit-id" value="">
+
+      <!-- Card: Informasi Produk & Order -->
+      <div class="card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 22px 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 18px;">
+          <div>
+            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+              <i data-lucide="package" style="width: 17px; height: 17px; color: #2563eb;"></i> Informasi Produk Jadi & Acuan Order
+            </h4>
+            <span style="font-size: 11.5px; color: #64748b; margin-top: 2px; display: block;">Lengkapi identitas produk manufaktur, kode SKU, dan referensi order penjualan</span>
+          </div>
+        </div>
+
+        <!-- Section 1: Referensi Order & Template BOM -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px;">
+          <div style="background: #f8fafc; padding: 12px 14px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <label class="form-label" style="font-weight: 700; color: #1e293b; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="shopping-cart" style="width: 14px; height: 14px; color: #2563eb;"></i> Referensi Order Penjualan (Opsional)
+            </label>
+            <select id="page-bom-order-select" class="form-control" onchange="autoFillBOMPageFromOrder(this.value)" style="background: #ffffff; font-size: 12.5px;">
+              <option value="">-- Template Umum / Tanpa Kaitan Order --</option>
+            </select>
+            <span style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Pilih order untuk mengisi nama dan kode produk otomatis</span>
+          </div>
+
+          <div style="background: #eff6ff; padding: 12px 14px; border-radius: 6px; border: 1px solid #bfdbfe;">
+            <label class="form-label" style="font-weight: 700; color: #1e40af; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="copy" style="width: 14px; height: 14px; color: #1d4ed8;"></i> Gunakan Template BOM Tersimpan
+            </label>
+            <select id="page-bom-template-select" class="form-control" onchange="applyBOMTemplate(this.value)" style="border-color: #93c5fd; background: #ffffff; font-size: 12.5px;">
+              <option value="">-- Pilih Template BOM Tersimpan --</option>
+            </select>
+            <span style="font-size: 11px; color: #1e40af; margin-top: 4px; display: block;">Gunakan formula dari template BOM tersimpan</span>
+          </div>
+        </div>
+
+        <!-- Section 2: Detail Identitas Produk Jadi -->
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;">
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Nama Produk Jadi <span style="color: #dc2626;">*</span></label>
+              <input type="text" id="page-bom-name" class="form-control" required placeholder="Contoh: Panel Distribusi Listrik 3 Phase" style="font-size: 13px;">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Kode SKU / Model Produk <span style="color: #dc2626;">*</span></label>
+              <input type="text" id="page-bom-code" class="form-control mono-id" required placeholder="Contoh: PNL-DIST-100K" style="font-size: 13px; font-weight: 600;">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;">
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Kategori Produk</label>
+              <input type="text" id="page-bom-category" class="form-control" placeholder="Contoh: Electrical / Mechanical / Automation" style="font-size: 13px;">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 600; font-size: 12px; margin-bottom: 4px;">Versi / Revisi Formula</label>
+              <input type="text" id="page-bom-revision" class="form-control" placeholder="Contoh: v1.0" style="font-size: 13px;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Component Structure Card -->
+      <div class="card" style="border: 1px solid var(--border-color); margin-bottom: 20px; padding: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="layers" style="width: 17px; height: 17px; color: #2563eb;"></i> Struktur Komponen & Bahan Baku
+            </h3>
+            <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">Pilih bahan baku dan komponen langsung dari data Inventory</p>
+          </div>
+          <div id="bom-components-action-btns" class="btn-group" style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="openPRPickerModal()" title="Pilih bahan baku & komponen dari Inventory">
+              <i data-lucide="boxes"></i> Inventory
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff;" onclick="redirectToPurchasingPR()" title="Ajukan pengadaan bahan baku ke Purchasing jika tidak ada di Inventory">
+              <i data-lucide="shopping-cart"></i> Purchasing
+            </button>
+          </div>
+        </div>
+
+        <div id="page-bom-components-list">
+          <!-- Dynamically populated component rows -->
+        </div>
+      </div>
+
+
+
+      <div class="form-group">
+        <label class="form-label">Catatan & Instruksi Produksi</label>
+        <textarea id="page-bom-notes" class="form-control" rows="2" placeholder="Catatan perakitan, standar QC, atau referensi gambar teknik..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
+        <button type="button" class="btn btn-outline" onclick="navigateTo('bom')">Batal</button>
+        <button type="submit" class="btn btn-primary" style="padding: 10px 24px;"><i data-lucide="save"></i> Simpan Master BOM</button>
+      </div>
+    </form>
+  </div>
+</section>

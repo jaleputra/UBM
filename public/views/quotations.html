@@ -1,0 +1,56 @@
+<!-- ==================== QUOTATIONS VIEW (SURAT PENAWARAN HARGA) ==================== -->
+<section class="view-section" id="view-quotations">
+  <div class="module-action-bar">
+    <div class="filter-group">
+      <select id="filter-quotation-status" class="form-control-sm" onchange="filterQuotations()">
+        <option value="ALL">Semua Status Penawaran</option>
+        <option value="Draft">Draft</option>
+        <option value="Sent">Sent (Terkirim)</option>
+        <option value="Pengajuan">Pengajuan</option>
+        <option value="Accepted">Accepted (Disetujui)</option>
+        <option value="Rejected">Rejected (Ditolak)</option>
+        <option value="Expired">Expired (Kadaluarsa)</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-outline" onclick="exportDataToCSV('quotations')"><i data-lucide="download"></i> Export CSV</button>
+    </div>
+  </div>
+
+  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+    <!-- Container strictly prevents horizontal scrolling; only scrolls vertically when full -->
+    <div class="table-quotations-container">
+      <table class="data-table table-quotations" id="table-quotations-main">
+        <colgroup>
+          <col style="width: 10%;">
+          <col style="width: 16%;">
+          <col style="width: 11%;">
+          <col style="width: 8.5%;">
+          <col style="width: 8.5%;">
+          <col style="width: 12%;">
+          <col style="width: 5.5%;">
+          <col style="width: 10.5%;">
+          <col style="width: 7%;">
+          <col style="width: 11%;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>No. Quotation</th>
+            <th>Calon Pelanggan</th>
+            <th>Kontak / WhatsApp</th>
+            <th>Tgl Penawaran</th>
+            <th>Masa Berlaku</th>
+            <th>Garansi & Ketentuan</th>
+            <th style="text-align: center;">Item</th>
+            <th>Total Penawaran</th>
+            <th style="text-align: center;">Status</th>
+            <th class="text-right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="table-quotations-body">
+          <!-- Data loaded dynamically via quotations.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
