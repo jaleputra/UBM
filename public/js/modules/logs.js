@@ -464,10 +464,9 @@ function renderCalendar() {
     const prevDate = prevMonthLastDay - i;
     const prevMonthDateStr = formatYMD(new Date(year, month - 1, prevDate));
     const dayLogs = getLogsForDate(prevMonthDateStr, logs);
-    const dayStatusClass = getDayStatusClass(dayLogs);
 
     html += `
-      <div class="calendar-cell other-month ${dayStatusClass}" data-date="${prevMonthDateStr}" title="Klik / drag tanggal ${prevDate} ${monthNames[(month + 11) % 12]}">
+      <div class="calendar-cell other-month" data-date="${prevMonthDateStr}" title="Klik / drag tanggal ${prevDate} ${monthNames[(month + 11) % 12]}">
         <div class="calendar-cell-header">
           <span class="calendar-date-number">${prevDate}</span>
           <span class="calendar-cell-add-hint"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></span>
@@ -487,10 +486,9 @@ function renderCalendar() {
     const isToday = isCurrentYearMonth && date === todayDate;
     const dateStr = formatYMD(dateObj);
     const dayLogs = getLogsForDate(dateStr, logs);
-    const dayStatusClass = getDayStatusClass(dayLogs);
 
     html += `
-      <div class="calendar-cell ${isToday ? 'is-today' : ''} ${isWeekend ? 'weekend' : ''} ${dayStatusClass}" 
+      <div class="calendar-cell ${isToday ? 'is-today' : ''} ${isWeekend ? 'weekend' : ''}" 
            data-date="${dateStr}"
            title="Klik atau drag untuk pilih rentang tanggal ${date} ${monthNames[month]} ${year}">
         <div class="calendar-cell-header">
@@ -510,10 +508,9 @@ function renderCalendar() {
   for (let nextDate = 1; nextDate <= remainingCells; nextDate++) {
     const nextMonthDateStr = formatYMD(new Date(year, month + 1, nextDate));
     const dayLogs = getLogsForDate(nextMonthDateStr, logs);
-    const dayStatusClass = getDayStatusClass(dayLogs);
 
     html += `
-      <div class="calendar-cell other-month ${dayStatusClass}" data-date="${nextMonthDateStr}" title="Klik / drag tanggal ${nextDate} ${monthNames[(month + 1) % 12]}">
+      <div class="calendar-cell other-month" data-date="${nextMonthDateStr}" title="Klik / drag tanggal ${nextDate} ${monthNames[(month + 1) % 12]}">
         <div class="calendar-cell-header">
           <span class="calendar-date-number">${nextDate}</span>
           <span class="calendar-cell-add-hint"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></span>

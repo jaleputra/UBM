@@ -904,6 +904,21 @@
   "warranty_claims": [],
   "activity_logs": [
     {
+      "id": "LOG-2026-8210-932",
+      "projectName": "DMI",
+      "task": "Data Pemagang Yuzuru",
+      "pic": "Chowal",
+      "category": "Koordinasi & Sales",
+      "startDate": "2026-09-23",
+      "endDate": "2026-09-25",
+      "startTime": "2026-09-23",
+      "endTime": "2026-09-25",
+      "status": "Sedang Berjalan",
+      "notes": "Memastikan Data Pemagang Yuzuru",
+      "updatedAt": "2026-09-24T05:30:18.132Z",
+      "createdAt": "2026-09-24T05:30:18.210Z"
+    },
+    {
       "id": "LOG-2026-5673-487",
       "projectName": "UBM",
       "task": "Publish Aplikasi UBM",
