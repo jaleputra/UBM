@@ -311,6 +311,7 @@ function renderLogsView() {
   renderCalendar();
   renderLogsTable();
   populatePicFilterDropdowns();
+  populateProjectSuggestions();
 }
 
 // Render Summary Stats
@@ -320,11 +321,20 @@ function renderLogStats() {
   const totalLogsEl = document.getElementById('stat-total-logs');
   const activeLogsEl = document.getElementById('stat-active-logs');
   const doneLogsEl = document.getElementById('stat-done-logs');
+  const overdueLogsEl = document.getElementById('stat-overdue-logs');
   const totalHoursEl = document.getElementById('stat-total-hours');
 
   const totalCount = logs.length;
-  const inProgressCount = logs.filter(l => (l.status || '').toLowerCase().includes('berjalan')).length;
-  const completedCount = logs.filter(l => (l.status || '').toLowerCase().includes('selesai')).length;
+  let overdueCount = 0;
+  let inProgressCount = 0;
+  let completedCount = 0;
+
+  logs.forEach(l => {
+    const eff = getEffectiveLogStatus(l);
+    if (eff === 'Overdue') overdueCount++;
+    else if (eff === 'Sedang Berjalan') inProgressCount++;
+    else if (eff === 'Selesai') completedCount++;
+  });
 
   // Calculate total working days accumulated
   let totalDaysAccumulated = 0;
@@ -339,7 +349,77 @@ function renderLogStats() {
   if (totalLogsEl) totalLogsEl.textContent = totalCount;
   if (activeLogsEl) activeLogsEl.textContent = inProgressCount;
   if (doneLogsEl) doneLogsEl.textContent = completedCount;
+  if (overdueLogsEl) overdueLogsEl.textContent = overdueCount;
   if (totalHoursEl) totalHoursEl.textContent = `${totalDaysAccumulated} Hari`;
+}
+
+// Determine effective status (handles automatic Overdue when past end date and not complete)
+function getEffectiveLogStatus(log) {
+  if (!log) return 'Terjadwal';
+  const rawStatus = (log.status || '').trim();
+  if (rawStatus.toLowerCase() === 'selesai' || rawStatus.toLowerCase() === 'complete') {
+    return 'Selesai';
+  }
+
+  // Check end date against current date (YYYY-MM-DD)
+  const endYMD = (log.endDate || log.endTime || log.startDate || log.startTime || '').slice(0, 10);
+  const todayYMD = formatYMD(new Date());
+
+  if (endYMD && endYMD < todayYMD) {
+    return 'Overdue';
+  }
+
+  if (rawStatus.toLowerCase().includes('berjalan') || rawStatus.toLowerCase().includes('progress')) {
+    return 'Sedang Berjalan';
+  }
+
+  return 'Terjadwal';
+}
+
+// Get logs filtered by PIC for a specific date
+function getLogsForDate(dateStr, allLogs) {
+  return allLogs.filter(log => {
+    if (logCalendarPicFilter !== 'ALL' && log.pic !== logCalendarPicFilter) {
+      return false;
+    }
+    const startYMD = (log.startDate || log.startTime || '').slice(0, 10);
+    const endYMD = (log.endDate || log.endTime || startYMD).slice(0, 10);
+
+    if (startYMD && endYMD) {
+      return dateStr >= startYMD && dateStr <= endYMD;
+    } else if (startYMD) {
+      return dateStr === startYMD;
+    }
+    return false;
+  });
+}
+
+// Determine the full-block date status class for a given day
+function getDayStatusClass(dayLogs) {
+  if (!dayLogs || dayLogs.length === 0) return '';
+
+  let hasOverdue = false;
+  let hasInProgress = false;
+  let hasScheduled = false;
+  let allComplete = true;
+
+  for (const log of dayLogs) {
+    const eff = getEffectiveLogStatus(log);
+    if (eff === 'Overdue') hasOverdue = true;
+    else if (eff === 'Sedang Berjalan') hasInProgress = true;
+    else if (eff === 'Terjadwal') hasScheduled = true;
+
+    if (eff !== 'Selesai') {
+      allComplete = false;
+    }
+  }
+
+  if (hasOverdue) return 'cell-status-overdue';
+  if (hasInProgress) return 'cell-status-in-progress';
+  if (hasScheduled) return 'cell-status-scheduled';
+  if (allComplete) return 'cell-status-completed';
+
+  return 'cell-status-in-progress';
 }
 
 // Render Calendar Grid
@@ -383,14 +463,17 @@ function renderCalendar() {
   for (let i = startingDayOfWeek - 1; i >= 0; i--) {
     const prevDate = prevMonthLastDay - i;
     const prevMonthDateStr = formatYMD(new Date(year, month - 1, prevDate));
+    const dayLogs = getLogsForDate(prevMonthDateStr, logs);
+    const dayStatusClass = getDayStatusClass(dayLogs);
+
     html += `
-      <div class="calendar-cell other-month" data-date="${prevMonthDateStr}" title="Klik / drag tanggal ${prevDate} ${monthNames[(month + 11) % 12]}">
+      <div class="calendar-cell other-month ${dayStatusClass}" data-date="${prevMonthDateStr}" title="Klik / drag tanggal ${prevDate} ${monthNames[(month + 11) % 12]}">
         <div class="calendar-cell-header">
           <span class="calendar-date-number">${prevDate}</span>
           <span class="calendar-cell-add-hint"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></span>
         </div>
         <div class="calendar-events-list">
-          ${renderDayEventsHtml(prevMonthDateStr, logs)}
+          ${renderDayEventsHtml(dayLogs)}
         </div>
       </div>
     `;
@@ -403,9 +486,11 @@ function renderCalendar() {
     const isWeekend = (dayOfWeek === 5 || dayOfWeek === 6); // Sat & Sun
     const isToday = isCurrentYearMonth && date === todayDate;
     const dateStr = formatYMD(dateObj);
+    const dayLogs = getLogsForDate(dateStr, logs);
+    const dayStatusClass = getDayStatusClass(dayLogs);
 
     html += `
-      <div class="calendar-cell ${isToday ? 'is-today' : ''} ${isWeekend ? 'weekend' : ''}" 
+      <div class="calendar-cell ${isToday ? 'is-today' : ''} ${isWeekend ? 'weekend' : ''} ${dayStatusClass}" 
            data-date="${dateStr}"
            title="Klik atau drag untuk pilih rentang tanggal ${date} ${monthNames[month]} ${year}">
         <div class="calendar-cell-header">
@@ -413,7 +498,7 @@ function renderCalendar() {
           <span class="calendar-cell-add-hint" title="Tambah kegiatan"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></span>
         </div>
         <div class="calendar-events-list">
-          ${renderDayEventsHtml(dateStr, logs)}
+          ${renderDayEventsHtml(dayLogs)}
         </div>
       </div>
     `;
@@ -424,14 +509,17 @@ function renderCalendar() {
   const remainingCells = (7 - (totalCellsRendered % 7)) % 7;
   for (let nextDate = 1; nextDate <= remainingCells; nextDate++) {
     const nextMonthDateStr = formatYMD(new Date(year, month + 1, nextDate));
+    const dayLogs = getLogsForDate(nextMonthDateStr, logs);
+    const dayStatusClass = getDayStatusClass(dayLogs);
+
     html += `
-      <div class="calendar-cell other-month" data-date="${nextMonthDateStr}" title="Klik / drag tanggal ${nextDate} ${monthNames[(month + 1) % 12]}">
+      <div class="calendar-cell other-month ${dayStatusClass}" data-date="${nextMonthDateStr}" title="Klik / drag tanggal ${nextDate} ${monthNames[(month + 1) % 12]}">
         <div class="calendar-cell-header">
           <span class="calendar-date-number">${nextDate}</span>
           <span class="calendar-cell-add-hint"><i data-lucide="plus" style="width: 12px; height: 12px;"></i></span>
         </div>
         <div class="calendar-events-list">
-          ${renderDayEventsHtml(nextMonthDateStr, logs)}
+          ${renderDayEventsHtml(dayLogs)}
         </div>
       </div>
     `;
@@ -446,39 +534,35 @@ function formatYMD(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-// Render event pills for specific date string YYYY-MM-DD
-function renderDayEventsHtml(dateStr, allLogs) {
-  const filtered = allLogs.filter(log => {
-    if (logCalendarPicFilter !== 'ALL' && log.pic !== logCalendarPicFilter) {
-      return false;
-    }
-    const startYMD = (log.startDate || log.startTime || '').slice(0, 10);
-    const endYMD = (log.endDate || log.endTime || startYMD).slice(0, 10);
+// Render event pills for specific date
+function renderDayEventsHtml(dayLogs) {
+  if (!dayLogs || dayLogs.length === 0) return '';
 
-    if (startYMD && endYMD) {
-      return dateStr >= startYMD && dateStr <= endYMD;
-    } else if (startYMD) {
-      return dateStr === startYMD;
-    }
-    return false;
-  });
-
-  if (filtered.length === 0) return '';
-
-  return filtered.map(log => {
+  return dayLogs.map(log => {
+    const effStatus = getEffectiveLogStatus(log);
     let statusClass = 'status-terjadwal';
-    const status = (log.status || '').toLowerCase();
-    if (status.includes('selesai')) statusClass = 'status-selesai';
-    else if (status.includes('berjalan')) statusClass = 'status-sedang-berjalan';
+    let statusLabel = 'Terjadwal';
 
-    const safeTitle = escapeAttr(`${log.task} (${log.pic || 'PIC -'}) [${log.status || ''}]`);
+    if (effStatus === 'Overdue') {
+      statusClass = 'status-overdue';
+      statusLabel = 'Overdue';
+    } else if (effStatus === 'Selesai') {
+      statusClass = 'status-selesai';
+      statusLabel = 'Selesai';
+    } else if (effStatus === 'Sedang Berjalan') {
+      statusClass = 'status-sedang-berjalan';
+      statusLabel = 'Berjalan';
+    }
+
+    const projectPrefix = log.projectName ? `<span style="font-weight: 700; color: #4338ca; margin-right: 2px;">[${escapeHtml(log.projectName)}]</span> ` : '';
+    const safeTitle = escapeAttr(`${log.projectName ? '[' + log.projectName + '] ' : ''}${log.task} (${log.pic || 'PIC -'}) [${statusLabel}]`);
 
     return `
       <div class="cal-event-pill ${statusClass}" 
            title="${safeTitle}" 
            onmousedown="event.stopPropagation()"
            onclick="event.stopPropagation(); openLogDetailModal('${log.id}')">
-        <span><b>${escapeHtml(log.task)}</b> <small style="opacity: 0.85;">(${escapeHtml(log.pic || '-')})</small></span>
+        <span>${projectPrefix}<b>${escapeHtml(log.task)}</b> <small style="opacity: 0.85;">(${escapeHtml(log.pic || '-')})</small></span>
       </div>
     `;
   }).join('');
@@ -558,10 +642,38 @@ function populatePicFilterDropdowns() {
   }
 }
 
+// Populate Project Name suggestions from projects, orders, and existing logs
+function populateProjectSuggestions() {
+  const projects = new Set();
+
+  (state.projects || []).forEach(p => {
+    const name = p.projectName || p.name || p.title;
+    if (name && name.trim()) projects.add(name.trim());
+  });
+
+  (state.orders || []).forEach(o => {
+    if (o.projectName && o.projectName.trim()) projects.add(o.projectName.trim());
+  });
+
+  (state.activity_logs || []).forEach(l => {
+    if (l.projectName && l.projectName.trim()) projects.add(l.projectName.trim());
+  });
+
+  const datalist = document.getElementById('datalist-project-suggestions');
+  if (datalist) {
+    let dlHtml = '';
+    projects.forEach(p => {
+      dlHtml += `<option value="${escapeAttr(p)}"></option>`;
+    });
+    datalist.innerHTML = dlHtml;
+  }
+}
+
 // ==================== FORM SUBMIT (CREATE / UPDATE) ====================
 async function handleLogFormSubmit(e) {
   e.preventDefault();
 
+  const projectName = document.getElementById('log-project-name')?.value.trim() || '';
   const task = document.getElementById('log-task')?.value.trim();
   const pic = document.getElementById('log-pic')?.value.trim();
   const category = document.getElementById('log-category')?.value || 'Produksi';
@@ -594,6 +706,7 @@ async function handleLogFormSubmit(e) {
 
   // Exact Supabase & REST API schema compatible payload
   const logPayload = {
+    projectName,
     task,
     pic,
     category,
@@ -668,6 +781,9 @@ function resetLogForm() {
   const form = document.getElementById('form-activity-log');
   if (form) form.reset();
 
+  const projectEl = document.getElementById('log-project-name');
+  if (projectEl) projectEl.value = '';
+
   const titleEl = document.getElementById('log-form-title-text');
   const badgeEl = document.getElementById('log-form-mode-badge');
   const submitBtn = document.getElementById('btn-submit-log');
@@ -681,6 +797,7 @@ function resetLogForm() {
     submitBtn.innerHTML = `<i data-lucide="save"></i> <span>Simpan Kegiatan UBM</span>`;
   }
 
+  populateProjectSuggestions();
   setDefaultLogDates();
   if (window.lucide) lucide.createIcons();
 }
@@ -690,6 +807,10 @@ function editLog(id) {
   if (!log) return;
 
   currentEditingLogId = id;
+
+  populateProjectSuggestions();
+  const projectEl = document.getElementById('log-project-name');
+  if (projectEl) projectEl.value = log.projectName || '';
 
   document.getElementById('log-task').value = log.task || '';
   document.getElementById('log-pic').value = log.pic || '';
@@ -763,14 +884,26 @@ function renderLogsTable() {
     if (logTableSearchQuery) {
       const q = logTableSearchQuery.toLowerCase();
       const match = (log.task || '').toLowerCase().includes(q) ||
+                    (log.projectName || '').toLowerCase().includes(q) ||
                     (log.pic || '').toLowerCase().includes(q) ||
                     (log.notes || '').toLowerCase().includes(q) ||
                     (log.id || '').toLowerCase().includes(q);
       if (!match) return false;
     }
-    // Status
-    if (logTableStatusFilter !== 'ALL' && log.status !== logTableStatusFilter) {
-      return false;
+    // Status Filter
+    if (logTableStatusFilter !== 'ALL') {
+      const effStatus = getEffectiveLogStatus(log);
+      if (logTableStatusFilter === 'Overdue') {
+        if (effStatus !== 'Overdue') return false;
+      } else if (logTableStatusFilter === 'Selesai') {
+        if (effStatus !== 'Selesai') return false;
+      } else if (logTableStatusFilter === 'Sedang Berjalan') {
+        if (effStatus !== 'Sedang Berjalan') return false;
+      } else if (logTableStatusFilter === 'Terjadwal') {
+        if (effStatus !== 'Terjadwal') return false;
+      } else if (log.status !== logTableStatusFilter) {
+        return false;
+      }
     }
     // Category
     if (logTableCategoryFilter !== 'ALL' && log.category !== logTableCategoryFilter) {
@@ -782,7 +915,7 @@ function renderLogsTable() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+        <td colspan="8" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
           <i data-lucide="clipboard-x" style="width: 40px; height: 40px; stroke-width: 1.5; margin-bottom: 8px; color: #cbd5e1;"></i>
           <p style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">Tidak ada catatan kegiatan UBM</p>
           <p style="font-size: 12px; color: var(--text-dim);">Silakan klik tanggal pada kalender untuk mencatat kegiatan baru.</p>
@@ -824,11 +957,13 @@ function renderLogsTable() {
     }
 
     // Status Badge
+    const effStatus = getEffectiveLogStatus(log);
     let statusBadge = '<span class="log-status-badge terjadwal"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Terjadwal</span>';
-    const st = (log.status || '').toLowerCase();
-    if (st.includes('selesai')) {
+    if (effStatus === 'Overdue') {
+      statusBadge = '<span class="log-status-badge overdue"><i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i> Overdue</span>';
+    } else if (effStatus === 'Selesai') {
       statusBadge = '<span class="log-status-badge selesai"><i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Selesai</span>';
-    } else if (st.includes('berjalan')) {
+    } else if (effStatus === 'Sedang Berjalan') {
       statusBadge = '<span class="log-status-badge sedang-berjalan"><i data-lucide="play-circle" style="width: 12px; height: 12px;"></i> Sedang Berjalan</span>';
     }
 
@@ -838,32 +973,42 @@ function renderLogsTable() {
     return `
       <tr class="clickable-log-row" onclick="openLogDetailModal('${log.id}')" title="Klik baris untuk melihat detail kegiatan">
         <td style="font-weight: 600; color: var(--text-muted); font-size: 11px; width: 40px; text-align: center;">${index + 1}</td>
-        <td style="width: 260px;">
+        <td style="width: 170px;">
+          ${log.projectName ? `
+            <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #3730a3; font-size: 12.5px;">
+              <i data-lucide="folder" style="width: 13px; height: 13px; color: #4f46e5; flex-shrink: 0;"></i>
+              <span class="truncate" title="${escapeAttr(log.projectName)}">${escapeHtml(log.projectName)}</span>
+            </div>
+          ` : `
+            <span style="color: var(--text-dim); font-size: 11.5px; font-style: italic;">- Umum -</span>
+          `}
+        </td>
+        <td style="width: 240px;">
           <div style="font-weight: 600; color: var(--text-main); font-size: 13px;">${escapeHtml(log.task)}</div>
           <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
             <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);">${escapeHtml(log.id)}</span>
             ${categoryBadge}
           </div>
         </td>
-        <td style="width: 150px;">
-          <div style="display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-body);">
-            <i data-lucide="user" style="width: 14px; height: 14px; color: var(--primary-accent); flex-shrink: 0;"></i>
+        <td style="width: 140px;">
+          <div style="display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-body); font-size: 12.5px;">
+            <i data-lucide="user" style="width: 13px; height: 13px; color: var(--primary-accent); flex-shrink: 0;"></i>
             <span>${escapeHtml(log.pic || '-')}</span>
           </div>
         </td>
-        <td style="width: 200px;">
+        <td style="width: 180px;">
           ${dateRangeFormatted}
           ${durationFormatted}
         </td>
-        <td style="width: 140px; text-align: center;">
+        <td style="width: 130px; text-align: center;">
           ${statusBadge}
         </td>
-        <td style="max-width: 260px; color: var(--text-body); font-size: 12px;">
+        <td style="max-width: 240px; color: var(--text-body); font-size: 12px;">
           <div style="max-height: 48px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${escapeAttr(log.notes || '-')}">
             ${escapeHtml(log.notes || '-')}
           </div>
         </td>
-        <td style="width: 85px; text-align: right;" onclick="event.stopPropagation()">
+        <td style="width: 80px; text-align: right;" onclick="event.stopPropagation()">
           <div class="table-actions" style="justify-content: flex-end;">
             <button class="btn-icon" title="Edit Kegiatan" onclick="event.stopPropagation(); editLog('${log.id}')">
               <i data-lucide="edit-3"></i>
@@ -898,6 +1043,206 @@ function onLogTableCategoryChange(val) {
 // Quick action from header button
 function focusLogForm() {
   openLogFormModal();
+}
+
+// ==================== SUMMARY CARDS CLICKABLE POPUP MODAL ====================
+let currentSummaryModalLogs = [];
+let currentSummaryModalType = '';
+
+function openLogSummaryModal(cardType) {
+  const allLogs = state.activity_logs || [];
+  currentSummaryModalType = cardType;
+
+  const titleEl = document.getElementById('log-summary-modal-title');
+  const subtitleEl = document.getElementById('log-summary-modal-subtitle');
+  const iconEl = document.getElementById('log-summary-modal-icon');
+  const badgeEl = document.getElementById('log-summary-modal-badge');
+  const searchInput = document.getElementById('log-summary-modal-search');
+
+  if (searchInput) searchInput.value = '';
+
+  let filtered = [];
+  let title = 'Semua Kegiatan UBM';
+  let subtitle = 'Menampilkan seluruh catatan kegiatan UBM';
+  let iconClass = 'primary';
+  let iconName = 'clipboard-list';
+
+  if (cardType === 'Sedang Berjalan') {
+    filtered = allLogs.filter(l => getEffectiveLogStatus(l) === 'Sedang Berjalan');
+    title = 'Kegiatan Sedang Berjalan (In Progress)';
+    subtitle = 'Daftar kegiatan yang saat ini aktif dikerjakan';
+    iconClass = 'warning';
+    iconName = 'activity';
+  } else if (cardType === 'Selesai') {
+    filtered = allLogs.filter(l => getEffectiveLogStatus(l) === 'Selesai');
+    title = 'Kegiatan Selesai (Completed)';
+    subtitle = 'Daftar pekerjaan yang telah tuntas dilaksanakan';
+    iconClass = 'success';
+    iconName = 'check-circle-2';
+  } else if (cardType === 'Overdue') {
+    filtered = allLogs.filter(l => getEffectiveLogStatus(l) === 'Overdue');
+    title = 'Kegiatan Overdue (Lewat Tenggat)';
+    subtitle = 'Daftar kegiatan yang telah melewati batas jadwal dan belum berstatus Selesai';
+    iconClass = 'danger';
+    iconName = 'alert-triangle';
+  } else if (cardType === 'DURATION') {
+    // Sort by duration descending
+    filtered = [...allLogs].sort((a, b) => {
+      const sA = (a.startDate || a.startTime || '').slice(0, 10);
+      const eA = (a.endDate || a.endTime || sA).slice(0, 10);
+      const sB = (b.startDate || b.startTime || '').slice(0, 10);
+      const eB = (b.endDate || b.endTime || sB).slice(0, 10);
+      return calculateDaysBetween(sB, eB) - calculateDaysBetween(sA, eA);
+    });
+    title = 'Rincian Akumulasi Hari Kerja Kegiatan';
+    subtitle = 'Daftar kegiatan diurutkan berdasarkan akumulasi durasi pengerjaan';
+    iconClass = 'purple';
+    iconName = 'calendar';
+  } else {
+    // 'ALL'
+    filtered = [...allLogs];
+  }
+
+  currentSummaryModalLogs = filtered;
+
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+  if (iconEl) {
+    iconEl.className = `log-stat-icon ${iconClass}`;
+    iconEl.innerHTML = `<i data-lucide="${iconName}" style="width: 18px; height: 18px;"></i>`;
+  }
+  if (badgeEl) {
+    badgeEl.textContent = `${filtered.length} Kegiatan`;
+    badgeEl.className = `badge badge-${iconClass === 'danger' ? 'danger' : (iconClass === 'success' ? 'success' : (iconClass === 'warning' ? 'warning' : 'primary'))}`;
+  }
+
+  renderLogSummaryModalContent(filtered);
+  openModal('modal-log-summary-list');
+  if (window.lucide) lucide.createIcons();
+}
+
+function filterLogSummaryListModal(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    renderLogSummaryModalContent(currentSummaryModalLogs);
+    return;
+  }
+
+  const filtered = currentSummaryModalLogs.filter(log => {
+    return (log.task || '').toLowerCase().includes(q) ||
+           (log.projectName || '').toLowerCase().includes(q) ||
+           (log.pic || '').toLowerCase().includes(q) ||
+           (log.notes || '').toLowerCase().includes(q) ||
+           (log.category || '').toLowerCase().includes(q) ||
+           (log.id || '').toLowerCase().includes(q);
+  });
+
+  renderLogSummaryModalContent(filtered);
+}
+
+function renderLogSummaryModalContent(logsList) {
+  const bodyEl = document.getElementById('log-summary-modal-body');
+  if (!bodyEl) return;
+
+  if (!logsList || logsList.length === 0) {
+    bodyEl.innerHTML = `
+      <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+        <i data-lucide="clipboard-x" style="width: 36px; height: 36px; color: #cbd5e1; margin-bottom: 8px;"></i>
+        <p style="font-size: 13px; font-weight: 500; margin: 0;">Tidak ada kegiatan yang sesuai dalam kategori ini</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  let html = `
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 12.5px;">
+        <thead>
+          <tr>
+            <th style="width: 35px; text-align: center;">NO</th>
+            <th style="width: 160px;">NAMA PROJECT</th>
+            <th style="min-width: 200px;">TASK & KATEGORI</th>
+            <th style="width: 140px;">PIC</th>
+            <th style="width: 170px;">JADWAL & DURASI</th>
+            <th style="width: 125px; text-align: center;">STATUS</th>
+            <th style="width: 75px; text-align: center;">AKSI</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  logsList.forEach((log, idx) => {
+    const sRaw = (log.startDate || log.startTime || '').slice(0, 10);
+    const eRaw = (log.endDate || log.endTime || sRaw).slice(0, 10);
+    const days = calculateDaysBetween(sRaw, eRaw);
+
+    const effStatus = getEffectiveLogStatus(log);
+    let statusBadge = '<span class="log-status-badge terjadwal"><i data-lucide="calendar" style="width: 11px; height: 11px;"></i> Terjadwal</span>';
+    if (effStatus === 'Overdue') {
+      statusBadge = '<span class="log-status-badge overdue"><i data-lucide="alert-triangle" style="width: 11px; height: 11px;"></i> Overdue</span>';
+    } else if (effStatus === 'Selesai') {
+      statusBadge = '<span class="log-status-badge selesai"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> Selesai</span>';
+    } else if (effStatus === 'Sedang Berjalan') {
+      statusBadge = '<span class="log-status-badge sedang-berjalan"><i data-lucide="play-circle" style="width: 11px; height: 11px;"></i> Berjalan</span>';
+    }
+
+    const sDate = new Date(sRaw + 'T00:00:00');
+    const eDate = new Date(eRaw + 'T00:00:00');
+    const sStr = !isNaN(sDate.getTime()) ? sDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : sRaw;
+    const eStr = !isNaN(eDate.getTime()) ? eDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : sStr;
+    const dateText = sRaw === eRaw ? sStr : `${sStr} - ${eStr}`;
+
+    html += `
+      <tr class="clickable-log-row" onclick="closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}')" title="Klik untuk membuka detail lengkap kegiatan">
+        <td style="text-align: center; color: var(--text-muted); font-size: 11px; font-weight: 600;">${idx + 1}</td>
+        <td>
+          ${log.projectName ? `
+            <div style="font-weight: 600; color: #3730a3; display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="folder" style="width: 13px; height: 13px; color: #4f46e5; flex-shrink: 0;"></i>
+              <span class="truncate" title="${escapeAttr(log.projectName)}">${escapeHtml(log.projectName)}</span>
+            </div>
+          ` : `
+            <span style="color: var(--text-dim); font-size: 11px; font-style: italic;">- Umum -</span>
+          `}
+        </td>
+        <td>
+          <div style="font-weight: 600; color: var(--text-main);">${escapeHtml(log.task)}</div>
+          <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+            <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);">${escapeHtml(log.id)}</span>
+            <span class="badge badge-info" style="font-size: 9.5px; padding: 0 5px;">${escapeHtml(log.category || 'Operasional')}</span>
+          </div>
+        </td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 5px; color: var(--text-body); font-size: 12px;">
+            <i data-lucide="user" style="width: 12px; height: 12px; color: var(--primary-accent); flex-shrink: 0;"></i>
+            <span>${escapeHtml(log.pic || '-')}</span>
+          </div>
+        </td>
+        <td>
+          <div style="font-weight: 600; font-size: 11.5px; color: var(--text-main);">${dateText}</div>
+          <div style="font-size: 10.5px; color: #0284c7; font-weight: 600;">⏱ ${days} Hari</div>
+        </td>
+        <td style="text-align: center;">
+          ${statusBadge}
+        </td>
+        <td style="text-align: center;" onclick="event.stopPropagation()">
+          <button class="btn btn-xs btn-outline" style="font-size: 11px; padding: 2px 8px;" onclick="closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}')" title="Buka Detail">
+            Detail →
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  bodyEl.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
 }
 
 // ==================== DETAIL MODAL POPUP ====================
@@ -936,8 +1281,11 @@ function openLogDetailModal(id) {
       <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
           <div>
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">${escapeHtml(log.id)}</span>
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main); margin-top: 4px;">${escapeHtml(log.task)}</h3>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">${escapeHtml(log.id)}</span>
+              ${log.projectName ? `<span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="folder-git-2" style="width: 12px; height: 12px;"></i> Project: ${escapeHtml(log.projectName)}</span>` : ''}
+            </div>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--text-main); margin-top: 6px;">${escapeHtml(log.task)}</h3>
           </div>
           <span class="badge badge-info">${escapeHtml(log.category || 'Operasional')}</span>
         </div>
@@ -955,12 +1303,34 @@ function openLogDetailModal(id) {
         <div style="border: 1px solid var(--border-color); padding: 12px; border-radius: var(--radius-sm);">
           <div style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Status Pengerjaan</div>
           <div style="margin-top: 4px;">
-            <span class="badge ${log.status === 'Selesai' ? 'badge-success' : (log.status === 'Sedang Berjalan' ? 'badge-info' : 'badge-warning')}">
-              ${escapeHtml(log.status || '-')}
-            </span>
+            ${(() => {
+              const eff = getEffectiveLogStatus(log);
+              if (eff === 'Overdue') {
+                return '<span class="badge badge-danger" style="background: #fff1f2; color: #be123c; border: 1px solid #fecdd3;"><i data-lucide="alert-triangle" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Overdue (Lewat Tenggat)</span>';
+              } else if (eff === 'Selesai') {
+                return '<span class="badge badge-success"><i data-lucide="check-circle" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Selesai</span>';
+              } else if (eff === 'Sedang Berjalan') {
+                return '<span class="badge badge-info"><i data-lucide="play-circle" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Sedang Berjalan</span>';
+              } else {
+                return '<span class="badge badge-warning"><i data-lucide="calendar" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 3px;"></i> Terjadwal</span>';
+              }
+            })()}
           </div>
         </div>
       </div>
+
+      ${(() => {
+        const eff = getEffectiveLogStatus(log);
+        if (eff === 'Overdue') {
+          return `
+            <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: var(--radius-sm); padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #be123c;">
+              <i data-lucide="alert-circle" style="width: 16px; height: 16px; flex-shrink: 0;"></i>
+              <span><strong>Perhatian:</strong> Kegiatan ini telah melewati batas jadwal pengerjaan namun status belum diubah menjadi Selesai.</span>
+            </div>
+          `;
+        }
+        return '';
+      })()}
 
       <div style="border: 1px solid var(--border-color); padding: 14px; border-radius: var(--radius-sm); background: #ffffff;">
         <div style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 8px;">Jadwal Tanggal Pengerjaan</div>

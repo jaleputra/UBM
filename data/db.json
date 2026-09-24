@@ -1,169 +1,6 @@
 {
-  "quotations": [
-    {
-      "id": "QUO-2026-9023-895",
-      "customerName": "PT Nagomi",
-      "projectName": "Smart Door",
-      "picName": "Reza",
-      "customerPhone": "0898234723984",
-      "customerEmail": "reza@gmail.com",
-      "customerAddress": "Cikarang",
-      "quotationDate": "2026-09-16",
-      "validUntil": "2026-09-20",
-      "status": "Accepted",
-      "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
-      "warrantyFee": 1875000,
-      "mainItemsTotal": 33000000,
-      "servicesTotal": 4500000,
-      "itemsTotal": 37500000,
-      "leadTime": "14 hari kerja setelah PO resmi diterima",
-      "paymentTerms": "DP 50% saat PO, Pelunasan sebelum pengiriman",
-      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "items": [
-        {
-          "itemName": "Smart Door",
-          "sku": "001",
-          "warranty": "12 Bulan",
-          "qty": 20,
-          "unit": "Unit",
-          "unitPrice": 1650000,
-          "total": 33000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 20,
-          "unit": "Lot",
-          "unitPrice": 200000,
-          "total": 4000000
-        },
-        {
-          "serviceName": "Branding",
-          "qty": 1,
-          "unit": "Lot",
-          "unitPrice": 500000,
-          "total": 500000
-        }
-      ],
-      "subtotal": 39375000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 4331250,
-      "grandTotal": 43706250,
-      "createdAt": "2026-09-16T04:24:19.024Z",
-      "updatedAt": "2026-09-16T08:10:00.333Z"
-    }
-  ],
-  "orders": [
-    {
-      "id": "ORD-2026-8286-667",
-      "quotationId": "",
-      "orderType": "jasa",
-      "quotationType": "jasa",
-      "customerName": "PT Minori",
-      "projectName": "SEO",
-      "customerPhone": "089473487834",
-      "customerAddress": "Cikarang",
-      "orderDate": "2026-09-17",
-      "dueDate": "2026-09-30",
-      "status": "Accepted",
-      "notes": "",
-      "poDocument": {
-        "name": "Berita Acara Pelaksanaan Yudisium Kenaikan Tingkat Bisdi.pdf",
-        "url": "/uploads/po/PO_ORD-2026-8286-667_1789631044156.pdf",
-        "uploadedAt": "2026-09-17T07:44:04.112Z"
-      },
-      "poFileUrl": "/uploads/po/PO_ORD-2026-8286-667_1789631044156.pdf",
-      "poFileName": "Berita Acara Pelaksanaan Yudisium Kenaikan Tingkat Bisdi.pdf",
-      "items": [
-        {
-          "qty": 1,
-          "sku": "001",
-          "unit": "Unit",
-          "total": 90000000,
-          "itemName": "SEO",
-          "unitPrice": 90000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Meeting",
-          "qty": 12,
-          "unit": "kali",
-          "unitPrice": 500000,
-          "total": 6000000
-        }
-      ],
-      "mainItemsTotal": 90000000,
-      "servicesTotal": 6000000,
-      "itemsTotal": 96000000,
-      "warrantyFee": 4800000,
-      "subtotal": 100800000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 11088000,
-      "grandTotal": 111888000,
-      "createdAt": "2026-09-17T07:43:48.289+00:00",
-      "updatedAt": "2026-09-17T07:44:19.823Z"
-    },
-    {
-      "id": "ORD-2026-0332-932",
-      "quotationId": "QUO-2026-9023-895",
-      "customerName": "PT Nagomi",
-      "projectName": "Smart Door",
-      "customerPhone": "0898234723984",
-      "customerAddress": "Cikarang",
-      "orderDate": "2026-09-16",
-      "dueDate": "2026-09-20",
-      "status": "In Production",
-      "notes": "Dikonversi dari Surat Penawaran Harga (Quotation) #QUO-2026-9023-895.\nKetentuan Garansi: Garansi resmi 12 bulan untuk suku cadang dan servis.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\n[KETERANGAN JASA & INSTALASI (NON-BOM)]:\n1. Installasi (20 Lot @ Rp 200.000) = Rp 4.000.000\n2. Branding (1 Lot @ Rp 500.000) = Rp 500.000\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "poDocument": {
-        "name": "Berita Acara Pelaksanaan Yudisium Kenaikan Tingkat Bisdi.pdf",
-        "url": "/uploads/po/PO_ORD-2026-0332-932_1789546226490.pdf",
-        "uploadedAt": "2026-09-16T08:10:26.382Z"
-      },
-      "poFileUrl": "/uploads/po/PO_ORD-2026-0332-932_1789546226490.pdf",
-      "poFileName": "Berita Acara Pelaksanaan Yudisium Kenaikan Tingkat Bisdi.pdf",
-      "items": [
-        {
-          "qty": 20,
-          "sku": "001",
-          "unit": "Unit",
-          "total": 33000000,
-          "itemName": "Smart Door",
-          "unitPrice": 1650000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 20,
-          "unit": "Lot",
-          "unitPrice": 200000,
-          "total": 4000000
-        },
-        {
-          "serviceName": "Branding",
-          "qty": 1,
-          "unit": "Lot",
-          "unitPrice": 500000,
-          "total": 500000
-        }
-      ],
-      "mainItemsTotal": 33000000,
-      "servicesTotal": 4500000,
-      "itemsTotal": 37500000,
-      "warrantyFee": 1875000,
-      "subtotal": 39375000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 4331250,
-      "grandTotal": 43706250,
-      "createdAt": "2026-09-16T08:10:00.332+00:00",
-      "updatedAt": "2026-09-16T08:26:05.797Z"
-    }
-  ],
+  "quotations": [],
+  "orders": [],
   "po": [
     {
       "id": "PO-2026-001",
@@ -268,101 +105,7 @@
       "updatedAt": "2026-09-07T04:35:35.650Z"
     }
   ],
-  "invoices": [
-    {
-      "id": "INV-2026-8286-667",
-      "orderId": "ORD-2026-8286-667",
-      "customerName": "PT Minori",
-      "customerPhone": "089473487834",
-      "customerAddress": "Cikarang",
-      "invoiceDate": "2026-09-17",
-      "dueDate": "2026-09-30",
-      "status": "Unpaid",
-      "paymentMethod": "Bank Transfer (Mandiri)",
-      "items": [
-        {
-          "qty": 1,
-          "sku": "001",
-          "unit": "Unit",
-          "total": 90000000,
-          "itemName": "SEO",
-          "unitPrice": 90000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Meeting",
-          "qty": 12,
-          "unit": "kali",
-          "unitPrice": 500000,
-          "total": 6000000
-        }
-      ],
-      "mainItemsTotal": 90000000,
-      "servicesTotal": 6000000,
-      "itemsTotal": 96000000,
-      "warrantyFee": 4800000,
-      "discount": 0,
-      "subtotal": 100800000,
-      "taxRate": 11,
-      "taxAmount": 11088000,
-      "grandTotal": 111888000,
-      "paidAmount": 0,
-      "balanceDue": 111888000,
-      "notes": "Faktur Tagihan Resmi untuk Sales Order / Project ORD-2026-8286-667",
-      "createdAt": "2026-09-17T07:44:21.954Z"
-    },
-    {
-      "id": "INV-2026-0332-932",
-      "orderId": "ORD-2026-0332-932",
-      "customerName": "PT Nagomi",
-      "customerPhone": "0898234723984",
-      "customerAddress": "Cikarang",
-      "invoiceDate": "2026-09-16",
-      "dueDate": "2026-09-20",
-      "status": "Unpaid",
-      "paymentMethod": "Bank Transfer (Mandiri)",
-      "items": [
-        {
-          "qty": 20,
-          "sku": "001",
-          "unit": "Unit",
-          "total": 33000000,
-          "itemName": "Smart Door",
-          "unitPrice": 1650000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 20,
-          "unit": "Lot",
-          "unitPrice": 200000,
-          "total": 4000000
-        },
-        {
-          "serviceName": "Branding",
-          "qty": 1,
-          "unit": "Lot",
-          "unitPrice": 500000,
-          "total": 500000
-        }
-      ],
-      "mainItemsTotal": 33000000,
-      "servicesTotal": 4500000,
-      "itemsTotal": 37500000,
-      "warrantyFee": 1875000,
-      "discount": 0,
-      "subtotal": 39375000,
-      "taxRate": 11,
-      "taxAmount": 4331250,
-      "grandTotal": 43706250,
-      "paidAmount": 0,
-      "balanceDue": 43706250,
-      "notes": "Faktur Tagihan Resmi untuk Sales Order / Project ORD-2026-0332-932",
-      "createdAt": "2026-09-16T08:10:36.364Z"
-    }
-  ],
+  "invoices": [],
   "purchasing": [
     {
       "id": "PR-2026-2532-829",
@@ -375,10 +118,10 @@
       "status": "Disetujui",
       "items": [
         {
-          "qty": 6,
+          "qty": 11,
           "unit": "pcs",
           "notes": "",
-          "total": 3000000,
+          "total": 5500000,
           "itemName": "PCB",
           "itemPhoto": "",
           "orderDate": "2026-09-16",
@@ -394,10 +137,10 @@
           "estimatedPrice": 500000
         },
         {
-          "qty": 5,
+          "qty": 10,
           "unit": "meter",
           "notes": "",
-          "total": 62500,
+          "total": 125000,
           "itemName": "Kabel",
           "itemPhoto": "",
           "orderDate": "2026-09-16",
@@ -413,10 +156,10 @@
           "estimatedPrice": 12500
         },
         {
-          "qty": 2,
+          "qty": 5,
           "unit": "roll",
           "notes": "",
-          "total": 300000,
+          "total": 750000,
           "itemName": "PLA",
           "itemPhoto": "",
           "orderDate": "2026-09-17",
@@ -432,10 +175,10 @@
           "estimatedPrice": 150000
         },
         {
-          "qty": 8,
+          "qty": 10,
           "unit": "pcs",
           "notes": "",
-          "total": 280000,
+          "total": 350000,
           "itemName": "ESP32",
           "itemPhoto": "",
           "orderDate": "2026-09-17",
@@ -451,65 +194,11 @@
           "estimatedPrice": 35000
         }
       ],
-      "totalEstimated": 3642500,
+      "totalEstimated": 6725000,
       "notes": "Diajukan ulang dari PR-2026-9829-112 | Restock +1 pcs dari sisa Project #PRJ-2026-2171-325",
       "createdAt": "2026-09-16T08:13:32.532+00:00",
       "approvedBy": "-",
-      "updatedAt": "2026-09-16T08:53:06.759Z",
-      "quotationId": "",
-      "poDocument": null,
-      "poFileUrl": "",
-      "poFileName": ""
-    },
-    {
-      "id": "PR-2026-9829-112",
-      "requestor": "TIO",
-      "department": "Engineering & Produksi",
-      "requestDate": "2026-09-16",
-      "requiredDate": "2026-09-18",
-      "urgency": "High",
-      "purpose": "",
-      "status": "Ditolak",
-      "items": [
-        {
-          "qty": 10,
-          "unit": "pcs",
-          "total": 5000000,
-          "itemName": "PCB",
-          "unitPrice": 500000,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 500000,
-          "purchasePrice": 500000,
-          "estimatedPrice": 500000
-        },
-        {
-          "qty": 10,
-          "unit": "meter",
-          "total": 125000,
-          "itemName": "Kabel",
-          "unitPrice": 12500,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 12500,
-          "purchasePrice": 12500,
-          "estimatedPrice": 12500
-        },
-        {
-          "qty": 5,
-          "unit": "roll",
-          "total": 750000,
-          "itemName": "PLA",
-          "unitPrice": 150000,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 150000,
-          "purchasePrice": 150000,
-          "estimatedPrice": 150000
-        }
-      ],
-      "totalEstimated": 5875000,
-      "notes": "",
-      "createdAt": "2026-09-16T08:12:49.831+00:00",
-      "approvedBy": "-",
-      "updatedAt": "2026-09-16T08:13:03.357Z",
+      "updatedAt": "2026-09-24T05:20:01.730Z",
       "quotationId": "",
       "poDocument": null,
       "poFileUrl": "",
@@ -517,57 +206,6 @@
     }
   ],
   "bom": [
-    {
-      "id": "BOM-2026-1861-279",
-      "orderId": "ORD-2026-0332-932",
-      "productName": "Smart Door",
-      "productCode": "001",
-      "category": "General",
-      "revision": "v1.0",
-      "laborCost": 0,
-      "overheadCost": 0,
-      "notes": "",
-      "status": "Accepted",
-      "components": [
-        {
-          "qty": 5,
-          "prId": "PR-2026-2532-829",
-          "unit": "pcs",
-          "unitCost": 500000,
-          "componentName": "PCB"
-        },
-        {
-          "qty": 5,
-          "prId": "PR-2026-2532-829",
-          "unit": "meter",
-          "unitCost": 12500,
-          "componentName": "Kabel"
-        },
-        {
-          "qty": 3,
-          "prId": "PR-2026-2532-829",
-          "unit": "roll",
-          "unitCost": 150000,
-          "componentName": "PLA"
-        },
-        {
-          "qty": 2,
-          "prId": "PR-2026-2532-829",
-          "unit": "pcs",
-          "unitCost": 35000,
-          "componentName": "ESP32"
-        }
-      ],
-      "createdAt": "2026-09-16T08:26:41.861+00:00",
-      "createdDate": "2026-09-16",
-      "materialCost": 0,
-      "totalEstimatedCost": 0,
-      "updatedAt": "2026-09-16T08:32:34.210Z",
-      "quotationId": "",
-      "poDocument": null,
-      "poFileUrl": "",
-      "poFileName": ""
-    },
     {
       "id": "BOM-2026-2710-850",
       "orderId": "ORD-2026-0332-932",
@@ -1266,7 +904,83 @@
   "warranty_claims": [],
   "activity_logs": [
     {
+      "id": "LOG-2026-5673-487",
+      "projectName": "UBM",
+      "task": "Publish Aplikasi UBM",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Produksi",
+      "startDate": "2026-09-24",
+      "endDate": "2026-09-24",
+      "startTime": "2026-09-24",
+      "endTime": "2026-09-24",
+      "status": "Sedang Berjalan",
+      "notes": "Publish Aplikasi UBM Sementara",
+      "updatedAt": "2026-09-24T05:25:45.586Z",
+      "createdAt": "2026-09-24T05:25:45.674Z"
+    },
+    {
+      "id": "LOG-2026-2359-736",
+      "projectName": "UBM",
+      "task": "Timeline Scrum E-Catalogue",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Operasional",
+      "startDate": "2026-09-24",
+      "endDate": "2026-09-24",
+      "startTime": "2026-09-24",
+      "endTime": "2026-09-24",
+      "status": "Sedang Berjalan",
+      "notes": "Membuat Timeline Scrum E-Catalogue",
+      "updatedAt": "2026-09-24T05:23:32.260Z",
+      "createdAt": "2026-09-24T05:23:32.360Z"
+    },
+    {
+      "id": "LOG-2026-4545-364",
+      "projectName": "UBM",
+      "task": "Timeline Website dan Aplikasi UBM dan Landing Page",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Produksi",
+      "startDate": "2026-09-24",
+      "endDate": "2026-09-24",
+      "startTime": "2026-09-24",
+      "endTime": "2026-09-24",
+      "status": "Sedang Berjalan",
+      "notes": "Membuat Timeline Scrum untuk \n- Landing Page UBM\n- Landing page Training Center\n- Aplikasi UBM\n- Aplikasi Training Center",
+      "updatedAt": "2026-09-24T05:23:50.530Z",
+      "createdAt": "2026-09-24T05:12:44.546Z"
+    },
+    {
+      "id": "LOG-2026-4998-880",
+      "projectName": "Smart Laundry",
+      "task": "Observasi perbaikan Smart Laundry",
+      "pic": "Bintang dan pak Asep",
+      "category": "Maintenance",
+      "startDate": "2026-09-28",
+      "endDate": "2026-09-28",
+      "startTime": "2026-09-28",
+      "endTime": "2026-09-28",
+      "status": "Terjadwal",
+      "notes": "- Observasi untuk selanjutnya menjadi rencana perbaikan\n- Menyamakan dengan Minori group dan menjadi 1 dashboard",
+      "updatedAt": "2026-09-24T05:08:34.904Z",
+      "createdAt": "2026-09-24T05:08:34.999Z"
+    },
+    {
+      "id": "LOG-2026-7957-517",
+      "task": "Perbaikan Smart Laundry",
+      "pic": "Bintang dan pak Asep",
+      "category": "Maintenance",
+      "startDate": "2026-09-25",
+      "endDate": "2026-09-25",
+      "startTime": "2026-09-25",
+      "endTime": "2026-09-25",
+      "status": "Terjadwal",
+      "notes": "Upload ulang program di Smart Laundry Minori 10 Mesin",
+      "updatedAt": "2026-09-24T05:21:22.211Z",
+      "createdAt": "2026-09-24T04:49:57.958Z",
+      "projectName": "Smart Laundry"
+    },
+    {
       "id": "LOG-2026-9161-536",
+      "projectName": "Smart Laundry",
       "task": "Checking Smart Laundry",
       "pic": "Lambok Rommy Sulaeman",
       "category": "Maintenance",
@@ -1281,6 +995,7 @@
     },
     {
       "id": "LOG-2026-7731-465",
+      "projectName": "MCU",
       "task": "Interview pak Anca untuk proses MCU Minori",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
       "category": "Koordinasi & Sales",
@@ -1290,7 +1005,7 @@
       "endTime": "2026-09-23",
       "status": "Selesai",
       "notes": "Diskusi dengan pak Anca\n1. Minori bekerjasama dengan klinik samaria\n2. target Minori 2026 2500 pemagang. relisasi saat ini 1700\n3. P3MI untuk MCU lebih khusus untuk pemilihan Rumah Sakit/Klinik harus ada izin Kemnaker\n4. Untuk pemagang lebih mudah tidaK PERLU IZIN KEMNAKER\n5. Waktu yang dibutuhkan untuk mengeluarkan hasil MCU kurang dari 3 hari\n6. Jika tidak sesuai waktu akan dievaluasi untuk mencari Vendor yang bisa memenuhi kebutuhan\n7. masalahnya sistem terintegrasi untuk hasil MCU belum ada\n8. untuk mempercepat waktu MCU bisa menggunakan Sistem dan alat dari Takumi\n9. Takumi akan mencoba menawarkan kerjasama ke Vendor Minori untuk mempercepat pelaksanaan MCU mendapatkan hasil dan terintegrasi dengan sistem Minori.",
-      "updatedAt": "2026-09-24T04:33:57.644Z",
+      "updatedAt": "2026-09-24T05:24:44.340Z",
       "createdAt": "2026-09-24T04:33:57.732Z"
     }
   ],

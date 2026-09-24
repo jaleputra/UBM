@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS public.delivery (
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.activity_logs (
     id VARCHAR(50) PRIMARY KEY,
+    project_name VARCHAR(255),
     task VARCHAR(255) NOT NULL,
     pic VARCHAR(150) NOT NULL,
     category VARCHAR(100) DEFAULT 'Produksi',
@@ -191,10 +192,14 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Migration support for existing Supabase databases
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+
 -- =========================================================
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 -- =========================================================
 CREATE INDEX IF NOT EXISTS idx_activity_logs_status ON public.activity_logs(status);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_project_name ON public.activity_logs(project_name);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_start_date ON public.activity_logs(start_date);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_end_date ON public.activity_logs(end_date);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);

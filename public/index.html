@@ -307,9 +307,9 @@
         <!-- ==================== UBM ACTIVITY LOGS & CALENDAR VIEW ==================== -->
         <section class="view-section" id="view-logs">
           <div class="logs-layout">
-            <!-- 1. Stats Row -->
+            <!-- 1. Stats Row (Clickable Cards with Detail Popup) -->
             <div class="log-stats-row">
-              <div class="log-stat-card">
+              <div class="log-stat-card" onclick="openLogSummaryModal('ALL')" role="button" title="Klik untuk melihat semua daftar kegiatan UBM">
                 <div class="log-stat-icon primary">
                   <i data-lucide="clipboard-list"></i>
                 </div>
@@ -320,7 +320,7 @@
                 </div>
               </div>
 
-              <div class="log-stat-card">
+              <div class="log-stat-card" onclick="openLogSummaryModal('Sedang Berjalan')" role="button" title="Klik untuk melihat kegiatan yang sedang berjalan">
                 <div class="log-stat-icon warning">
                   <i data-lucide="activity"></i>
                 </div>
@@ -331,7 +331,7 @@
                 </div>
               </div>
 
-              <div class="log-stat-card">
+              <div class="log-stat-card" onclick="openLogSummaryModal('Selesai')" role="button" title="Klik untuk melihat kegiatan yang telah selesai">
                 <div class="log-stat-icon success">
                   <i data-lucide="check-circle-2"></i>
                 </div>
@@ -342,7 +342,18 @@
                 </div>
               </div>
 
-              <div class="log-stat-card">
+              <div class="log-stat-card" onclick="openLogSummaryModal('Overdue')" role="button" title="Klik untuk melihat kegiatan yang lewat tenggat (overdue)">
+                <div class="log-stat-icon danger">
+                  <i data-lucide="alert-triangle"></i>
+                </div>
+                <div class="log-stat-info">
+                  <span class="log-stat-label">Overdue</span>
+                  <span class="log-stat-value" id="stat-overdue-logs" style="color: #e11d48;">0</span>
+                  <span class="log-stat-sub">Lewat tenggat jadwal</span>
+                </div>
+              </div>
+
+              <div class="log-stat-card" onclick="openLogSummaryModal('DURATION')" role="button" title="Klik untuk melihat rincian akumulasi durasi hari kerja">
                 <div class="log-stat-icon purple">
                   <i data-lucide="calendar"></i>
                 </div>
@@ -405,21 +416,25 @@
               <div class="calendar-footer-legend">
                 <div class="calendar-legend-items">
                   <div class="calendar-legend-item">
-                    <span class="legend-dot selesai"></span>
+                    <span class="legend-color-box cell-completed"></span>
                     <span>Selesai</span>
                   </div>
                   <div class="calendar-legend-item">
-                    <span class="legend-dot sedang-berjalan"></span>
+                    <span class="legend-color-box cell-in-progress"></span>
                     <span>Sedang Berjalan</span>
                   </div>
                   <div class="calendar-legend-item">
-                    <span class="legend-dot terjadwal"></span>
+                    <span class="legend-color-box cell-scheduled"></span>
                     <span>Terjadwal</span>
+                  </div>
+                  <div class="calendar-legend-item">
+                    <span class="legend-color-box cell-overdue"></span>
+                    <span style="color: #be123c; font-weight: 600;">Overdue (Lewat Tenggat)</span>
                   </div>
                 </div>
                 <span style="color: var(--text-muted); font-size: 11px;">
-                  <i data-lucide="calendar-plus" style="width: 13px; height: 13px; vertical-align: middle; margin-right: 3px; color: var(--primary-accent);"></i>
-                  Klik tanggal pada kalender untuk membuka formulir kegiatan UBM
+                  <i data-lucide="info" style="width: 13px; height: 13px; vertical-align: middle; margin-right: 3px; color: var(--primary-accent);"></i>
+                  Blok tanggal diwarnai otomatis sesuai status. Berubah Overdue jika lewat jadwal & belum Selesai.
                 </span>
               </div>
             </div>
@@ -445,6 +460,7 @@
                     <option value="Selesai">Selesai</option>
                     <option value="Sedang Berjalan">Sedang Berjalan</option>
                     <option value="Terjadwal">Terjadwal</option>
+                    <option value="Overdue">Overdue (Lewat Tenggat)</option>
                   </select>
 
                   <select class="form-control-sm" onchange="onLogTableCategoryChange(this.value)">
@@ -470,12 +486,13 @@
                   <thead>
                     <tr>
                       <th style="width: 40px; text-align: center;">NO</th>
-                      <th style="width: 260px;">TASK & KATEGORI</th>
-                      <th style="width: 150px;">PIC</th>
-                      <th style="width: 200px;">WAKTU PENGERJAAN</th>
-                      <th style="width: 140px; text-align: center;">STATUS</th>
+                      <th style="width: 170px;">NAMA PROJECT</th>
+                      <th style="width: 240px;">TASK & KATEGORI</th>
+                      <th style="width: 140px;">PIC</th>
+                      <th style="width: 180px;">WAKTU PENGERJAAN</th>
+                      <th style="width: 130px; text-align: center;">STATUS</th>
                       <th>KETERANGAN</th>
-                      <th style="width: 85px; text-align: right;">AKSI</th>
+                      <th style="width: 80px; text-align: right;">AKSI</th>
                     </tr>
                   </thead>
                   <tbody id="logs-table-body">
@@ -2261,12 +2278,24 @@
 
       <form id="form-activity-log">
         <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 130px); overflow-y: auto;">
-          <!-- Task / Nama Kegiatan -->
-          <div class="form-group">
-            <label class="form-label" for="log-task">
-              Task / Nama Kegiatan <span class="required">*</span>
-            </label>
-            <input type="text" id="log-task" class="form-control" placeholder="Contoh: Perakitan Modul Smart Door Takumi..." required>
+          <!-- Nama Project & Task / Nama Kegiatan -->
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="log-project-name">
+                Nama Project
+              </label>
+              <input type="text" id="log-project-name" class="form-control" list="datalist-project-suggestions" placeholder="Pilih / ketik nama project..." autocomplete="off">
+              <datalist id="datalist-project-suggestions">
+                <!-- Populated dynamically via JS -->
+              </datalist>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="log-task">
+                Task / Nama Kegiatan <span class="required">*</span>
+              </label>
+              <input type="text" id="log-task" class="form-control" placeholder="Contoh: Perakitan Modul Smart Door Takumi..." required>
+            </div>
           </div>
 
           <!-- PIC & Kategori -->
@@ -2392,6 +2421,50 @@
           <i data-lucide="edit-3"></i> Edit Kegiatan
         </button>
         <button type="button" class="btn btn-primary" onclick="closeModal('modal-log-detail')">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. ACTIVITY LOG SUMMARY LIST MODAL (POPUP SUMMARY CARD) -->
+  <div class="modal-overlay" id="modal-log-summary-list">
+    <div class="modal-container" style="max-width: 920px; width: 92vw;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div id="log-summary-modal-icon" class="log-stat-icon primary" style="width: 36px; height: 36px; border-radius: 9px;">
+            <i data-lucide="clipboard-list" style="width: 18px; height: 18px;"></i>
+          </div>
+          <div>
+            <h3 class="modal-title" id="log-summary-modal-title">Daftar Kegiatan</h3>
+            <p style="font-size: 11px; color: var(--text-muted); margin: 0;" id="log-summary-modal-subtitle">Menampilkan data sesuai card summary yang dipilih</p>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="badge badge-primary" id="log-summary-modal-badge" style="font-size: 11px; padding: 4px 10px;">0 Kegiatan</span>
+          <button class="btn-close" onclick="closeModal('modal-log-summary-list')"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+
+      <div style="padding: 12px 20px 0 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: #ffffff;">
+        <div style="position: relative; flex: 1; max-width: 320px;">
+          <input type="text" id="log-summary-modal-search" class="form-control-sm" placeholder="Cari dalam daftar ini..." oninput="filterLogSummaryListModal(this.value)" style="width: 100%; padding-left: 28px;">
+          <i data-lucide="search" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-muted);"></i>
+        </div>
+        <div style="font-size: 11px; color: var(--text-dim);">
+          <i data-lucide="info" style="width: 12px; height: 12px; vertical-align: middle;"></i> Klik baris kegiatan untuk melihat detail lengkap
+        </div>
+      </div>
+
+      <div class="modal-body" id="log-summary-modal-body" style="padding: 12px 20px 20px 20px; max-height: calc(80vh - 170px); overflow-y: auto;">
+        <!-- Populated dynamically via logs.js -->
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('modal-log-summary-list'); openLogFormModal();">
+          <i data-lucide="plus"></i> Catat Kegiatan Baru
+        </button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('modal-log-summary-list')">
           Tutup
         </button>
       </div>
