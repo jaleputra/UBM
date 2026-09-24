@@ -53,6 +53,47 @@ function processPOFileStorage(item, id) {
 }
 
 module.exports = function(broadcastReload) {
+  // ---------------- AUTHENTICATION ENDPOINTS ----------------
+  const ADMIN_EMAIL = 'admin@ubm.co.id';
+  const ADMIN_PASSWORD = 'bisnisdigital365';
+
+  router.post('/auth/login', (req, res) => {
+    const { email, password } = req.body || {};
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
+
+    if (cleanEmail === ADMIN_EMAIL && cleanPassword === ADMIN_PASSWORD) {
+      const user = {
+        id: 'usr-admin-ubm',
+        email: ADMIN_EMAIL,
+        name: 'Administrator UBM',
+        role: 'Super Administrator',
+        department: 'Operations & Management',
+        avatar: 'AD'
+      };
+      console.log(`🔐 [Auth] Login berhasil untuk akun: ${ADMIN_EMAIL}`);
+      return res.json({
+        success: true,
+        message: 'Login berhasil',
+        user,
+        token: `ubm_token_${Date.now()}`
+      });
+    }
+
+    console.warn(`⚠️ [Auth] Upaya login gagal untuk email: ${cleanEmail || 'kosong'}`);
+    return res.status(401).json({
+      success: false,
+      error: 'Email atau password salah. Silakan coba lagi.'
+    });
+  });
+
+  router.get('/auth/session', (req, res) => {
+    res.json({
+      active: true,
+      allowedEmail: ADMIN_EMAIL
+    });
+  });
+
   // ---------------- SAVE GENERATED QUOTATION PDF ENDPOINT ----------------
   router.post('/quotations/:id/pdf', (req, res) => {
     const { id } = req.params;

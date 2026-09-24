@@ -15,7 +15,91 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="theme-light">
-  <div class="app-layout">
+  <!-- ==================== UBM ENTERPRISE AUTHENTICATION SCREEN ==================== -->
+  <div id="ubm-auth-screen" class="auth-screen-wrapper" style="display: flex;">
+    <div class="auth-card-container">
+      
+      <!-- Brand Header -->
+      <div class="auth-card-header">
+        <div class="auth-brand-badge">
+          <div class="auth-logo-box">
+            <i data-lucide="layers"></i>
+          </div>
+          <div class="auth-brand-title">
+            <h2>UBM Enterprise</h2>
+            <span>Management System</span>
+          </div>
+        </div>
+        <p class="auth-subtitle">Portal Autentikasi Internal • Masuk ke akun Anda untuk mengakses sistem</p>
+      </div>
+
+      <!-- Error Alert Message -->
+      <div id="auth-error-alert" class="auth-alert-box auth-alert-error" style="display: none;">
+        <i data-lucide="alert-circle" class="auth-alert-icon"></i>
+        <span id="auth-error-text">Email atau password salah. Silakan coba lagi.</span>
+      </div>
+
+      <!-- Login Form (Direct email admin@ubm.co.id & bisnisdigital365, no Google/third party) -->
+      <form id="form-ubm-auth" onsubmit="handleAuthLogin(event)" autocomplete="on">
+        
+        <!-- Input Email -->
+        <div class="auth-form-group">
+          <label for="auth-email" class="auth-label">Email Perusahaan</label>
+          <div class="auth-input-wrapper">
+            <span class="auth-input-icon">
+              <i data-lucide="mail"></i>
+            </span>
+            <input type="email" 
+                   id="auth-email" 
+                   class="auth-input" 
+                   placeholder="Email Perusahaan" 
+                   autocomplete="username" 
+                   required 
+                   autofocus>
+          </div>
+        </div>
+
+        <!-- Input Password -->
+        <div class="auth-form-group">
+          <div class="auth-label-row">
+            <label for="auth-password" class="auth-label">Password</label>
+            <span class="auth-badge-protected"><i data-lucide="shield-check"></i> Enkripsi Aman</span>
+          </div>
+          <div class="auth-input-wrapper">
+            <span class="auth-input-icon">
+              <i data-lucide="lock"></i>
+            </span>
+            <input type="password" 
+                   id="auth-password" 
+                   class="auth-input" 
+                   placeholder="Masukkan password" 
+                   autocomplete="current-password" 
+                   required>
+            <button type="button" class="auth-password-toggle" onclick="toggleAuthPassword()" title="Tampilkan / Sembunyikan Password">
+              <i data-lucide="eye" id="auth-eye-icon"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Meta: Remember me -->
+        <div class="auth-form-meta">
+          <label class="auth-checkbox-label">
+            <input type="checkbox" id="auth-remember-me" checked>
+            <span>Ingat sesi masuk di perangkat ini</span>
+          </label>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="btn-auth-submit" class="auth-submit-btn">
+          <span>Masuk ke Sistem</span>
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </form>
+
+    </div>
+  </div>
+
+  <div class="app-layout" id="main-app-layout" style="display: none;">
     
     <!-- SIDEBAR -->
     <aside class="sidebar">
@@ -114,6 +198,10 @@
             <span class="status-sub" id="live-time">00:00:00 WIB</span>
           </div>
         </div>
+        <button type="button" class="sidebar-logout-btn" onclick="handleUbmLogout()" title="Keluar dari sesi sistem">
+          <i data-lucide="log-out"></i>
+          <span>Keluar Sesi</span>
+        </button>
       </div>
     </aside>
 
@@ -154,13 +242,19 @@
           </div>
 
           <!-- User Profile -->
-          <div class="user-pill">
-            <div class="avatar">UB</div>
+          <div class="user-pill" title="Akun Aktif: admin@ubm.co.id">
+            <div class="avatar">AD</div>
             <div class="user-details">
-              <span class="user-name">Admin</span>
-              <span class="user-role">Operations</span>
+              <span class="user-name">Administrator UBM</span>
+              <span class="user-role" id="topbar-user-email">admin@ubm.co.id</span>
             </div>
           </div>
+
+          <!-- Topbar Logout Button -->
+          <button type="button" class="btn btn-sm btn-logout-topbar" id="btn-topbar-logout" onclick="handleUbmLogout()" title="Keluar dari sistem">
+            <i data-lucide="log-out"></i>
+            <span>Keluar</span>
+          </button>
         </div>
       </header>
 
@@ -2479,6 +2573,7 @@
 
   <!-- Application Logic Modular Scripts -->
   <script src="js/modules/utils.js"></script>
+  <script src="js/modules/auth.js"></script>
   <script src="js/modules/dashboard.js"></script>
   <script src="js/modules/logs.js"></script>
   <script src="js/modules/quotations.js"></script>

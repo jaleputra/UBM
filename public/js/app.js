@@ -27,11 +27,17 @@ const state = {
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
+  // 1. Strict Authentication verification before loading app
+  const isAuth = typeof checkAuthAndRender === 'function' ? checkAuthAndRender() : true;
+
   initHotReload();
   initNavigation();
   initSearch();
   startLiveClock();
-  loadAllData();
+
+  if (isAuth) {
+    loadAllData();
+  }
   
   // Mobile toggle
   const mobileToggle = document.getElementById('mobile-toggle');
@@ -130,6 +136,12 @@ function initNavigation() {
 }
 
 function navigateTo(viewName) {
+  // Guard: if not authenticated, redirect to auth screen
+  if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
+    if (typeof checkAuthAndRender === 'function') checkAuthAndRender();
+    return;
+  }
+
   if (state.currentView && state.currentView !== viewName && !['bom-form', 'timeline'].includes(state.currentView)) {
     state.previousMainView = state.currentView;
   }
@@ -217,6 +229,10 @@ function handleQuickCreate() {
 
 // ==================== DATA FETCHING & SYNC ====================
 async function loadAllData() {
+  // Guard: do not fetch data if not logged in
+  if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
+    return;
+  }
   try {
     await Promise.allSettled([
       loadDashboardData(),

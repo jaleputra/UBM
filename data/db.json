@@ -106,151 +106,8 @@
     }
   ],
   "invoices": [],
-  "purchasing": [
-    {
-      "id": "PR-2026-2532-829",
-      "requestor": "TIO",
-      "department": "Engineering & Produksi",
-      "requestDate": "2026-09-16",
-      "requiredDate": "2026-09-18",
-      "urgency": "High",
-      "purpose": "Salinan dari PR-2026-9829-112",
-      "status": "Disetujui",
-      "items": [
-        {
-          "qty": 11,
-          "unit": "pcs",
-          "notes": "",
-          "total": 5500000,
-          "itemName": "PCB",
-          "itemPhoto": "",
-          "orderDate": "2026-09-16",
-          "orderLink": "https://shopee.co.id",
-          "recipient": "Rizal",
-          "unitPrice": 500000,
-          "itemStatus": "Sesuai",
-          "receivedBy": "Rizal",
-          "actualPrice": 500000,
-          "arrivalDate": "2026-09-17",
-          "purchasePrice": 500000,
-          "recipientName": "Rizal",
-          "estimatedPrice": 500000
-        },
-        {
-          "qty": 10,
-          "unit": "meter",
-          "notes": "",
-          "total": 125000,
-          "itemName": "Kabel",
-          "itemPhoto": "",
-          "orderDate": "2026-09-16",
-          "orderLink": "https://shopee.co.id",
-          "recipient": "Rizal",
-          "unitPrice": 12500,
-          "itemStatus": "Sesuai",
-          "receivedBy": "Rizal",
-          "actualPrice": 12500,
-          "arrivalDate": "2026-09-18",
-          "purchasePrice": 12500,
-          "recipientName": "Rizal",
-          "estimatedPrice": 12500
-        },
-        {
-          "qty": 5,
-          "unit": "roll",
-          "notes": "",
-          "total": 750000,
-          "itemName": "PLA",
-          "itemPhoto": "",
-          "orderDate": "2026-09-17",
-          "orderLink": "https://shopee.co.id",
-          "recipient": "Rizal",
-          "unitPrice": 150000,
-          "itemStatus": "Sesuai",
-          "receivedBy": "Rizal",
-          "actualPrice": 150000,
-          "arrivalDate": "2026-09-19",
-          "purchasePrice": 150000,
-          "recipientName": "Rizal",
-          "estimatedPrice": 150000
-        },
-        {
-          "qty": 10,
-          "unit": "pcs",
-          "notes": "",
-          "total": 350000,
-          "itemName": "ESP32",
-          "itemPhoto": "",
-          "orderDate": "2026-09-17",
-          "orderLink": "https://shopee.co.id",
-          "recipient": "Rizal",
-          "unitPrice": 35000,
-          "itemStatus": "Sesuai",
-          "receivedBy": "Rizal",
-          "actualPrice": 35000,
-          "arrivalDate": "2026-09-19",
-          "purchasePrice": 35000,
-          "recipientName": "Rizal",
-          "estimatedPrice": 35000
-        }
-      ],
-      "totalEstimated": 6725000,
-      "notes": "Diajukan ulang dari PR-2026-9829-112 | Restock +1 pcs dari sisa Project #PRJ-2026-2171-325",
-      "createdAt": "2026-09-16T08:13:32.532+00:00",
-      "approvedBy": "-",
-      "updatedAt": "2026-09-24T05:20:01.730Z",
-      "quotationId": "",
-      "poDocument": null,
-      "poFileUrl": "",
-      "poFileName": ""
-    }
-  ],
-  "bom": [
-    {
-      "id": "BOM-2026-2710-850",
-      "orderId": "ORD-2026-0332-932",
-      "productName": "Smart Door",
-      "productCode": "001",
-      "category": "General",
-      "revision": "v1.0",
-      "laborCost": 0,
-      "overheadCost": 0,
-      "notes": "",
-      "status": "Ditolak",
-      "components": [
-        {
-          "qty": 5,
-          "prId": "PR-2026-2532-829",
-          "unit": "pcs",
-          "unitCost": 500000,
-          "componentName": "PCB"
-        },
-        {
-          "qty": 5,
-          "prId": "PR-2026-2532-829",
-          "unit": "meter",
-          "unitCost": 12500,
-          "componentName": "Kabel"
-        },
-        {
-          "qty": 2,
-          "prId": "PR-2026-2532-829",
-          "unit": "roll",
-          "unitCost": 150000,
-          "componentName": "PLA"
-        }
-      ],
-      "createdAt": "2026-09-16T08:26:02.711+00:00",
-      "createdDate": "2026-09-16",
-      "materialCost": 0,
-      "totalEstimatedCost": 0,
-      "updatedAt": "2026-09-16T08:26:23.278Z",
-      "quotationId": "",
-      "poDocument": null,
-      "poFileUrl": "",
-      "poFileName": ""
-    }
-  ],
+  "purchasing": [],
+  "bom": [],
   "delivery": [],
   "projects": [
     {
@@ -903,6 +760,21 @@
   "service_tickets": [],
   "warranty_claims": [],
   "activity_logs": [
+    {
+      "id": "LOG-2026-0674-942",
+      "projectName": "UBM",
+      "task": "Logo dan alur smart laundry",
+      "pic": "Gading",
+      "category": "Operasional",
+      "startDate": "2026-09-30",
+      "endDate": "2026-09-30",
+      "startTime": "2026-09-30",
+      "endTime": "2026-09-30",
+      "status": "Terjadwal",
+      "notes": "pembuatan alur smart laundry dan logo UBM",
+      "updatedAt": "2026-09-24T08:09:00.581Z",
+      "createdAt": "2026-09-24T08:09:00.675Z"
+    },
     {
       "id": "LOG-2026-8210-932",
       "projectName": "DMI",
