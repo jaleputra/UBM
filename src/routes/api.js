@@ -6,19 +6,20 @@ const supabase = require('../config/supabase');
 const { readDB, writeDB, mapToSnakeCase, mapToCamelCase } = require('../utils/dbHelper');
 
 const UPLOADS_PO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'po');
-if (!fs.existsSync(UPLOADS_PO_DIR)) {
-  fs.mkdirSync(UPLOADS_PO_DIR, { recursive: true });
-}
-
 const UPLOADS_QUO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'quotations');
-if (!fs.existsSync(UPLOADS_QUO_DIR)) {
-  fs.mkdirSync(UPLOADS_QUO_DIR, { recursive: true });
-}
-
 const UPLOADS_BAST_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'bast');
-if (!fs.existsSync(UPLOADS_BAST_DIR)) {
-  fs.mkdirSync(UPLOADS_BAST_DIR, { recursive: true });
-}
+
+try {
+  if (!fs.existsSync(UPLOADS_PO_DIR)) fs.mkdirSync(UPLOADS_PO_DIR, { recursive: true });
+} catch (e) {}
+
+try {
+  if (!fs.existsSync(UPLOADS_QUO_DIR)) fs.mkdirSync(UPLOADS_QUO_DIR, { recursive: true });
+} catch (e) {}
+
+try {
+  if (!fs.existsSync(UPLOADS_BAST_DIR)) fs.mkdirSync(UPLOADS_BAST_DIR, { recursive: true });
+} catch (e) {}
 
 function processPOFileStorage(item, id) {
   if (!item) return item;
@@ -46,7 +47,11 @@ function processPOFileStorage(item, id) {
       }
       console.log(`📄 [PO Storage] File PDF tersimpan di disk: ${fileUrl}`);
     } catch (e) {
-      console.error('Error saving PO file to disk:', e);
+      // In read-only serverless environment, retain inline data URL
+      processed.poFileUrl = rawUrl;
+      if (processed.poDocument) {
+        processed.poDocument.url = rawUrl;
+      }
     }
   }
   return processed;
@@ -105,10 +110,14 @@ module.exports = function(broadcastReload) {
     try {
       const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
       const safeFilename = filename || `Quotation_${id.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;
-      const filePath = path.join(UPLOADS_QUO_DIR, safeFilename);
-      fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
-
-      const fileUrl = `/uploads/quotations/${safeFilename}`;
+      let fileUrl = pdfBase64;
+      try {
+        const filePath = path.join(UPLOADS_QUO_DIR, safeFilename);
+        fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
+        fileUrl = `/uploads/quotations/${safeFilename}`;
+      } catch (writeErr) {
+        // Retain inline data URL in serverless / read-only filesystem
+      }
 
       // Update quotation record with pdfUrl
       const db = readDB();
@@ -120,7 +129,7 @@ module.exports = function(broadcastReload) {
         writeDB(db);
       }
 
-      console.log(`📄 [Quotation Storage] File PDF berhasil disimpan di: ${fileUrl}`);
+      console.log(`📄 [Quotation Storage] File PDF berhasil diproses untuk: ${id}`);
       res.json({ success: true, fileUrl, filename: safeFilename });
     } catch (err) {
       console.error('Error saving quotation PDF:', err);
@@ -139,10 +148,15 @@ module.exports = function(broadcastReload) {
     try {
       const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
       const safeFilename = filename || `BAST_${id.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;
-      const filePath = path.join(UPLOADS_BAST_DIR, safeFilename);
-      fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
+      let fileUrl = pdfBase64;
+      try {
+        const filePath = path.join(UPLOADS_BAST_DIR, safeFilename);
+        fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
+        fileUrl = `/uploads/bast/${safeFilename}`;
+      } catch (writeErr) {
+        // Retain inline data URL in serverless / read-only filesystem
+      }
 
-      const fileUrl = `/uploads/bast/${safeFilename}`;
       const db = readDB();
       const bastList = db.bast || [];
       const idx = bastList.findIndex(b => b.id === id);
@@ -152,7 +166,7 @@ module.exports = function(broadcastReload) {
         writeDB(db);
       }
 
-      console.log(`📄 [BAST Storage] File PDF berhasil disimpan di: ${fileUrl}`);
+      console.log(`📄 [BAST Storage] File PDF berhasil diproses untuk: ${id}`);
       res.json({ success: true, fileUrl, filename: safeFilename });
     } catch (err) {
       console.error('Error saving BAST PDF:', err);
@@ -185,11 +199,17 @@ module.exports = function(broadcastReload) {
         
         const cleanBase64 = documentBase64.replace(/^data:[^;]+;base64,/, '');
         const filename = documentFilename ? `DOC_${sanitizedId}_${Date.now()}_${documentFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}` : `DOC_BAST_${sanitizedId}_${Date.now()}${ext}`;
-        const filePath = path.join(UPLOADS_BAST_DIR, filename);
-        fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
+        let docUrl = documentBase64;
+        try {
+          const filePath = path.join(UPLOADS_BAST_DIR, filename);
+          fs.writeFileSync(filePath, Buffer.from(cleanBase64, 'base64'));
+          docUrl = `/uploads/bast/${filename}`;
+        } catch (writeErr) {
+          // Retain inline data URL
+        }
         
         bastItem.uploadedDocument = {
-          url: `/uploads/bast/${filename}`,
+          url: docUrl,
           filename: documentFilename || filename,
           uploadedAt: new Date().toISOString()
         };
@@ -206,11 +226,17 @@ module.exports = function(broadcastReload) {
 
             const cleanPhoto = photo.base64.replace(/^data:[^;]+;base64,/, '');
             const pFilename = `PHOTO_${sanitizedId}_${Date.now()}_${pIdx + 1}${pExt}`;
-            const pPath = path.join(UPLOADS_BAST_DIR, pFilename);
-            fs.writeFileSync(pPath, Buffer.from(cleanPhoto, 'base64'));
+            let photoUrl = photo.base64;
+            try {
+              const pPath = path.join(UPLOADS_BAST_DIR, pFilename);
+              fs.writeFileSync(pPath, Buffer.from(cleanPhoto, 'base64'));
+              photoUrl = `/uploads/bast/${pFilename}`;
+            } catch (writeErr) {
+              // Retain inline data URL
+            }
 
             bastItem.documentationPhotos.push({
-              url: `/uploads/bast/${pFilename}`,
+              url: photoUrl,
               name: photo.name || `Foto Dokumentasi ${pIdx + 1}`,
               uploadedAt: new Date().toISOString()
             });

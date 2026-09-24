@@ -1,18 +1,14 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const morgan = require('morgan');
 const fs = require('fs');
 const path = require('path');
+const app = require('./src/app');
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// Local development logger & static file server
 app.use(morgan('dev'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------- LIVE RELOAD & HOT MODULE RELOAD (SSE) ----------------
@@ -44,7 +40,7 @@ function broadcastReload(eventData) {
   });
 }
 
-// Watch public and src folders for live reload
+// Watch public and src folders for local live reload
 const publicDir = path.join(__dirname, 'public');
 let debounceTimer = null;
 
@@ -64,10 +60,6 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
-// ---------------- MOUNT MODULAR API ROUTES ----------------
-const createApiRouter = require('./src/routes/api');
-app.use('/api', createApiRouter(broadcastReload));
-
 // Fallback to index.html for client SPA router
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -79,7 +71,7 @@ function startServer(portToUse) {
     console.log(`=============================================`);
     console.log(`🚀 UBM Web Application is running!`);
     console.log(`📍 URL: http://localhost:${portToUse}`);
-    console.log(`⚡ Architecture: Modular MVC Structured`);
+    console.log(`⚡ Architecture: Modular MVC + Serverless Ready`);
     console.log(`📋 Modules: Orders, Projects, BOM, Purchasing, PO, Delivery, Invoices`);
     console.log(`=============================================`);
   });

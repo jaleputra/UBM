@@ -1,28 +1,64 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const DB_FILE = path.join(__dirname, '..', '..', 'data', 'db.json');
+const LOCAL_DB_FILE = path.join(__dirname, '..', '..', 'data', 'db.json');
+const TMP_DB_FILE = path.join(os.tmpdir(), 'ubm_db.json');
+
+let inMemoryDB = null;
+
+function getDbFilePath() {
+  if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    if (fs.existsSync(TMP_DB_FILE)) return TMP_DB_FILE;
+    if (fs.existsSync(LOCAL_DB_FILE)) {
+      try {
+        fs.copyFileSync(LOCAL_DB_FILE, TMP_DB_FILE);
+        return TMP_DB_FILE;
+      } catch (e) {
+        return LOCAL_DB_FILE;
+      }
+    }
+    return TMP_DB_FILE;
+  }
+  return LOCAL_DB_FILE;
+}
 
 function readDB() {
+  if (inMemoryDB && (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME)) {
+    return inMemoryDB;
+  }
   try {
-    if (!fs.existsSync(DB_FILE)) {
+    const fileToRead = getDbFilePath();
+    if (!fs.existsSync(fileToRead)) {
+      if (fs.existsSync(LOCAL_DB_FILE)) {
+        const raw = fs.readFileSync(LOCAL_DB_FILE, 'utf8');
+        inMemoryDB = JSON.parse(raw);
+        return inMemoryDB;
+      }
       const initial = { orders: [], po: [], invoices: [], purchasing: [], bom: [], delivery: [], projects: [], quotations: [], bast: [] };
-      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2));
       return initial;
     }
-    const data = fs.readFileSync(DB_FILE, 'utf8');
-    return JSON.parse(data);
+    const data = fs.readFileSync(fileToRead, 'utf8');
+    inMemoryDB = JSON.parse(data);
+    return inMemoryDB;
   } catch (err) {
-    console.error('Error reading DB:', err);
+    console.error('Error reading DB:', err.message);
+    if (inMemoryDB) return inMemoryDB;
     return { orders: [], po: [], invoices: [], purchasing: [], bom: [], delivery: [], projects: [], quotations: [], bast: [] };
   }
 }
 
 function writeDB(data) {
+  inMemoryDB = data;
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+    const targetFile = getDbFilePath();
+    fs.writeFileSync(targetFile, JSON.stringify(data, null, 2));
   } catch (err) {
-    console.error('Error writing DB:', err);
+    try {
+      fs.writeFileSync(TMP_DB_FILE, JSON.stringify(data, null, 2));
+    } catch (e2) {
+      // Kept in memory
+    }
   }
 }
 
@@ -64,5 +100,5 @@ module.exports = {
   mapToCamelCase,
   camelToSnake,
   snakeToCamel,
-  DB_FILE
+  DB_FILE: LOCAL_DB_FILE
 };
