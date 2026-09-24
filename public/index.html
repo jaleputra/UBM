@@ -37,6 +37,11 @@
           <i data-lucide="layout-dashboard"></i>
           <span>Dashboard</span>
         </button>
+        <button class="nav-item" data-view="logs" id="nav-btn-logs">
+          <i data-lucide="clipboard-list"></i>
+          <span>Log Kegiatan</span>
+          <span class="badge badge-count" id="badge-logs-count">0</span>
+        </button>
 
         <div class="nav-section-label">Sales & Produksi</div>
         <button class="nav-item" data-view="quotations">
@@ -296,6 +301,189 @@
                 <!-- Populated dynamically via JS -->
               </tbody>
             </table>
+          </div>
+        </section>
+ 
+        <!-- ==================== UBM ACTIVITY LOGS & CALENDAR VIEW ==================== -->
+        <section class="view-section" id="view-logs">
+          <div class="logs-layout">
+            <!-- 1. Stats Row -->
+            <div class="log-stats-row">
+              <div class="log-stat-card">
+                <div class="log-stat-icon primary">
+                  <i data-lucide="clipboard-list"></i>
+                </div>
+                <div class="log-stat-info">
+                  <span class="log-stat-label">Total Kegiatan</span>
+                  <span class="log-stat-value" id="stat-total-logs">0</span>
+                  <span class="log-stat-sub">Semua log terdata</span>
+                </div>
+              </div>
+
+              <div class="log-stat-card">
+                <div class="log-stat-icon warning">
+                  <i data-lucide="activity"></i>
+                </div>
+                <div class="log-stat-info">
+                  <span class="log-stat-label">Sedang Berjalan</span>
+                  <span class="log-stat-value" id="stat-active-logs">0</span>
+                  <span class="log-stat-sub">Task dalam pengerjaan</span>
+                </div>
+              </div>
+
+              <div class="log-stat-card">
+                <div class="log-stat-icon success">
+                  <i data-lucide="check-circle-2"></i>
+                </div>
+                <div class="log-stat-info">
+                  <span class="log-stat-label">Kegiatan Selesai</span>
+                  <span class="log-stat-value" id="stat-done-logs">0</span>
+                  <span class="log-stat-sub">Pekerjaan tuntas</span>
+                </div>
+              </div>
+
+              <div class="log-stat-card">
+                <div class="log-stat-icon purple">
+                  <i data-lucide="calendar"></i>
+                </div>
+                <div class="log-stat-info">
+                  <span class="log-stat-label">Total Hari Kerja</span>
+                  <span class="log-stat-value" id="stat-total-hours">0 Hari</span>
+                  <span class="log-stat-sub">Akumulasi durasi</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Kalender UBM Interaktif (Full Width) -->
+            <div class="ubm-calendar-card">
+              <div class="calendar-header">
+                <div class="calendar-title-box">
+                  <div class="calendar-nav-buttons">
+                    <button class="btn-cal-nav" id="cal-btn-prev" title="Bulan Sebelumnya">
+                      <i data-lucide="chevron-left" style="width: 15px; height: 15px;"></i>
+                    </button>
+                    <button class="btn-cal-nav" id="cal-btn-today">
+                      Hari Ini
+                    </button>
+                    <button class="btn-cal-nav" id="cal-btn-next" title="Bulan Berikutnya">
+                      <i data-lucide="chevron-right" style="width: 15px; height: 15px;"></i>
+                    </button>
+                  </div>
+                  <div class="calendar-month-title" id="calendar-month-title">
+                    September 2026
+                  </div>
+                </div>
+
+                <div class="calendar-filter-box">
+                  <select id="cal-filter-pic" class="form-control-sm" style="height: 32px; font-size: 12px; min-width: 150px;">
+                    <option value="ALL">Semua PIC</option>
+                  </select>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openLogFormModal()" style="font-weight: 600;">
+                    <i data-lucide="plus"></i>
+                    <span>Catat Kegiatan</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Calendar Days Header -->
+              <div class="calendar-days-names">
+                <div class="calendar-day-col">SEN</div>
+                <div class="calendar-day-col">SEL</div>
+                <div class="calendar-day-col">RAB</div>
+                <div class="calendar-day-col">KAM</div>
+                <div class="calendar-day-col">JUM</div>
+                <div class="calendar-day-col weekend">SAB</div>
+                <div class="calendar-day-col weekend">MIN</div>
+              </div>
+
+              <!-- Calendar Days Grid (Populated dynamically) -->
+              <div class="calendar-grid" id="ubm-calendar-grid">
+                <!-- Populated by logs.js -->
+              </div>
+
+              <!-- Calendar Footer Legend -->
+              <div class="calendar-footer-legend">
+                <div class="calendar-legend-items">
+                  <div class="calendar-legend-item">
+                    <span class="legend-dot selesai"></span>
+                    <span>Selesai</span>
+                  </div>
+                  <div class="calendar-legend-item">
+                    <span class="legend-dot sedang-berjalan"></span>
+                    <span>Sedang Berjalan</span>
+                  </div>
+                  <div class="calendar-legend-item">
+                    <span class="legend-dot terjadwal"></span>
+                    <span>Terjadwal</span>
+                  </div>
+                </div>
+                <span style="color: var(--text-muted); font-size: 11px;">
+                  <i data-lucide="calendar-plus" style="width: 13px; height: 13px; vertical-align: middle; margin-right: 3px; color: var(--primary-accent);"></i>
+                  Klik tanggal pada kalender untuk membuka formulir kegiatan UBM
+                </span>
+              </div>
+            </div>
+
+            <!-- 3. Tabel Riwayat Log Kegiatan UBM -->
+            <div class="log-table-card">
+              <div class="log-table-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i data-lucide="history" style="width: 18px; height: 18px; color: var(--primary-accent);"></i>
+                  <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main); font-family: var(--font-heading);">
+                    Riwayat Log Kegiatan UBM
+                  </h3>
+                </div>
+
+                <div class="log-table-filters">
+                  <div style="position: relative; width: 220px;">
+                    <input type="text" class="form-control-sm" placeholder="Cari task / PIC / catatan..." oninput="onLogTableSearch(this.value)" style="width: 100%; padding-left: 28px;">
+                    <i data-lucide="search" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-muted);"></i>
+                  </div>
+
+                  <select class="form-control-sm" onchange="onLogTableStatusChange(this.value)">
+                    <option value="ALL">Semua Status</option>
+                    <option value="Selesai">Selesai</option>
+                    <option value="Sedang Berjalan">Sedang Berjalan</option>
+                    <option value="Terjadwal">Terjadwal</option>
+                  </select>
+
+                  <select class="form-control-sm" onchange="onLogTableCategoryChange(this.value)">
+                    <option value="ALL">Semua Kategori</option>
+                    <option value="Produksi">Produksi</option>
+                    <option value="QC & Testing">QC & Testing</option>
+                    <option value="R&D & Engineering">R&D & Engineering</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Pengadaan">Pengadaan</option>
+                    <option value="Koordinasi & Sales">Koordinasi & Sales</option>
+                    <option value="Operasional">Operasional</option>
+                  </select>
+
+                  <button type="button" class="btn btn-outline btn-sm" onclick="exportToCSV('activity_logs')" title="Ekspor Data ke CSV">
+                    <i data-lucide="download"></i>
+                    <span>Ekspor CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px; text-align: center;">NO</th>
+                      <th style="width: 260px;">TASK & KATEGORI</th>
+                      <th style="width: 150px;">PIC</th>
+                      <th style="width: 200px;">WAKTU PENGERJAAN</th>
+                      <th style="width: 140px; text-align: center;">STATUS</th>
+                      <th>KETERANGAN</th>
+                      <th style="width: 85px; text-align: right;">AKSI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="logs-table-body">
+                    <!-- Populated dynamically via logs.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -2057,6 +2245,159 @@
     </div>
   </div>
 
+  <!-- 13. ACTIVITY LOG FORM POPUP MODAL -->
+  <div class="modal-overlay" id="modal-activity-log-form">
+    <div class="modal-container" style="max-width: 620px; width: 92vw;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="calendar-plus" style="color: var(--primary-accent); width: 18px; height: 18px;"></i>
+          <h3 class="modal-title" id="log-form-title-text">Form Input Kegiatan UBM</h3>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="badge badge-primary" id="log-form-mode-badge">Pencatatan Baru</span>
+          <button class="btn-close" onclick="closeModal('modal-activity-log-form')"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+
+      <form id="form-activity-log">
+        <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 130px); overflow-y: auto;">
+          <!-- Task / Nama Kegiatan -->
+          <div class="form-group">
+            <label class="form-label" for="log-task">
+              Task / Nama Kegiatan <span class="required">*</span>
+            </label>
+            <input type="text" id="log-task" class="form-control" placeholder="Contoh: Perakitan Modul Smart Door Takumi..." required>
+          </div>
+
+          <!-- PIC & Kategori -->
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="log-pic">
+                Penanggung Jawab (PIC) <span class="required">*</span>
+              </label>
+              <input type="text" id="log-pic" class="form-control" list="datalist-pic-suggestions" placeholder="Pilih / ketik nama PIC..." required autocomplete="off">
+              <datalist id="datalist-pic-suggestions">
+                <!-- Populated via JS -->
+              </datalist>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="log-category">
+                Kategori Kegiatan
+              </label>
+              <select id="log-category" class="form-control">
+                <option value="Produksi">Produksi</option>
+                <option value="QC & Testing">QC & Testing</option>
+                <option value="R&D & Engineering">R&D & Engineering</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Pengadaan">Pengadaan</option>
+                <option value="Koordinasi & Sales">Koordinasi & Sales</option>
+                <option value="Operasional">Operasional</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Tanggal Mulai & Tanggal Selesai (Hanya Tanggal Saja) -->
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="log-start-date">
+                Tanggal Mulai (Dari) <span class="required">*</span>
+              </label>
+              <input type="date" id="log-start-date" class="form-control" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="log-end-date">
+                Tanggal Selesai (Sampai) <span class="required">*</span>
+              </label>
+              <input type="date" id="log-end-date" class="form-control" required>
+            </div>
+          </div>
+
+          <!-- Duration Realtime Indicator -->
+          <div class="duration-tag-container">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="calendar" style="width: 14px; height: 14px; color: #0284c7;"></i>
+              <span>Estimasi Durasi Pengerjaan:</span>
+            </span>
+            <span class="duration-tag-badge" id="log-duration-badge">-</span>
+          </div>
+
+          <!-- Status Kegiatan -->
+          <div class="form-group">
+            <label class="form-label" for="log-status">
+              Status Pengerjaan
+            </label>
+            <select id="log-status" class="form-control">
+              <option value="Sedang Berjalan">Sedang Berjalan (In Progress)</option>
+              <option value="Selesai">Selesai (Completed)</option>
+              <option value="Terjadwal">Terjadwal (Scheduled)</option>
+            </select>
+          </div>
+
+          <!-- Keterangan & Rincian Kegiatan -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" for="log-notes" style="margin-bottom: 0;">
+                Keterangan & Rincian Kegiatan
+              </label>
+              <div style="display: flex; gap: 4px;">
+                <button type="button" class="btn btn-xs btn-outline" onclick="insertNoteBullet('num')" title="Format Poin Angka (1, 2, 3...)" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="list-ordered" style="width: 12px; height: 12px;"></i>
+                  <span>1. Poin Angka</span>
+                </button>
+                <button type="button" class="btn btn-xs btn-outline" onclick="insertNoteBullet('bullet')" title="Format Poin Strip (-)" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <i data-lucide="list" style="width: 12px; height: 12px;"></i>
+                  <span>• Poin Strip</span>
+                </button>
+              </div>
+            </div>
+            <textarea id="log-notes" class="form-control" rows="4" placeholder="Tuliskan rincian hasil pekerjaan...&#10;1. Pengecekan kelayakan komponen&#10;2. Penggantian filter dan pelumas&#10;3. Pengujian mesin" style="line-height: 1.5; font-size: 13px;"></textarea>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+              <i data-lucide="info" style="width: 12px; height: 12px; color: var(--primary-accent); flex-shrink: 0;"></i>
+              <span>Tekan Enter untuk lanjut ke nomor/poin berikutnya. Rincian tampil rapi otomatis pada detail log.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Action Buttons in Footer -->
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-activity-log-form')">
+            Batal
+          </button>
+          <button type="submit" id="btn-submit-log" class="btn btn-primary" style="padding: 8px 24px; font-weight: 600;">
+            <i data-lucide="save"></i>
+            <span>Simpan Kegiatan UBM</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 12. ACTIVITY LOG DETAIL MODAL -->
+  <div class="modal-overlay" id="modal-log-detail">
+    <div class="modal-container" style="max-width: 580px; width: 90vw;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="clipboard-check" style="color: var(--primary-accent); width: 18px; height: 18px;"></i>
+          <h3 class="modal-title">Detail Log Kegiatan UBM</h3>
+        </div>
+        <button class="btn-close" onclick="closeModal('modal-log-detail')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="log-detail-modal-body" style="padding: 20px;">
+        <!-- Populated dynamically via JS -->
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-outline" id="btn-modal-edit-log">
+          <i data-lucide="edit-3"></i> Edit Kegiatan
+        </button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('modal-log-detail')">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 6. TOAST CONTAINER -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -2066,6 +2407,7 @@
   <!-- Application Logic Modular Scripts -->
   <script src="js/modules/utils.js"></script>
   <script src="js/modules/dashboard.js"></script>
+  <script src="js/modules/logs.js"></script>
   <script src="js/modules/quotations.js"></script>
   <script src="js/modules/orders.js"></script>
   <script src="js/modules/projects.js"></script>

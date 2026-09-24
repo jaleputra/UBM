@@ -175,9 +175,28 @@ CREATE TABLE IF NOT EXISTS public.delivery (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- ---------------------------------------------------------
+-- 7. TABLE: activity_logs (Log Kegiatan & Agenda Kalender UBM)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.activity_logs (
+    id VARCHAR(50) PRIMARY KEY,
+    task VARCHAR(255) NOT NULL,
+    pic VARCHAR(150) NOT NULL,
+    category VARCHAR(100) DEFAULT 'Produksi',
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    end_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Sedang Berjalan',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- =========================================================
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 -- =========================================================
+CREATE INDEX IF NOT EXISTS idx_activity_logs_status ON public.activity_logs(status);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_start_date ON public.activity_logs(start_date);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_end_date ON public.activity_logs(end_date);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_date ON public.orders(order_date);
 CREATE INDEX IF NOT EXISTS idx_po_status ON public.po(status);
@@ -221,6 +240,9 @@ CREATE TRIGGER trigger_bom_updated_at BEFORE UPDATE ON public.bom FOR EACH ROW E
 DROP TRIGGER IF EXISTS trigger_delivery_updated_at ON public.delivery;
 CREATE TRIGGER trigger_delivery_updated_at BEFORE UPDATE ON public.delivery FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_activity_logs_updated_at ON public.activity_logs;
+CREATE TRIGGER trigger_activity_logs_updated_at BEFORE UPDATE ON public.activity_logs FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 -- =========================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================
@@ -231,6 +253,7 @@ ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchasing ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bom ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.delivery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- Allow Public / Authenticated Access for Enterprise App Operations
 CREATE POLICY "Allow all access to quotations" ON public.quotations FOR ALL USING (true) WITH CHECK (true);
@@ -240,6 +263,7 @@ CREATE POLICY "Allow all access to invoices" ON public.invoices FOR ALL USING (t
 CREATE POLICY "Allow all access to purchasing" ON public.purchasing FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to bom" ON public.bom FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to delivery" ON public.delivery FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
 
 -- =========================================================
 -- INITIAL SAMPLE DATA SEEDING (UBM ERP Records)

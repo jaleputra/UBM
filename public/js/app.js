@@ -19,6 +19,7 @@ const state = {
   service_tickets: [],
   warranty_claims: [],
   maintenance: [],
+  activity_logs: [],
   settings: null,
   stats: null,
   searchQuery: ''
@@ -156,6 +157,7 @@ function navigateTo(viewName) {
   // Update Page Title
   const titles = {
     dashboard: { title: 'Dashboard Overview', sub: 'Ringkasan performa dan operasional terpadu UBM', btn: 'Tambah Data' },
+    logs: { title: 'Log Kegiatan & Kalender UBM', sub: 'Pencatatan kegiatan operasional UBM, waktu pengerjaan dari-sampai, PIC penanggung jawab, dan kalender kegiatan', btn: '+ Catat Kegiatan' },
     quotations: { title: 'Quotation', sub: 'Penawaran harga produk & jasa ke calon pelanggan, kuantiti, kalkulasi PPN & garansi', btn: 'Quotation Baru' },
     orders: { title: 'Manajemen Order Penjualan', sub: 'Daftar pesanan penjualan pelanggan & status pengerjaan', btn: 'Order Baru' },
     projects: { title: 'Project Management', sub: 'Daftar project terdaftar, Project Lead, tim pelaksana & progress pengerjaan', btn: '+ Alokasi Tim & Project' },
@@ -199,6 +201,7 @@ function navigateTo(viewName) {
 
 function handleQuickCreate() {
   switch (state.currentView) {
+    case 'logs': if (typeof focusLogForm === 'function') focusLogForm(); break;
     case 'quotations': openQuotationModal(); break;
     case 'orders': openOrderModal(); break;
     case 'projects': openProjectAssignmentWorkspace(); break;
@@ -230,6 +233,7 @@ async function loadAllData() {
       fetchResource('service_tickets'),
       fetchResource('warranty_claims'),
       fetchResource('maintenance'),
+      fetchResource('activity_logs'),
       fetchResource('settings')
     ]);
     if (typeof updateAppFooterCopyright === 'function') {
@@ -262,6 +266,9 @@ async function fetchResource(resource) {
 }
 
 function updateSidebarBadges() {
+  const badgeLogs = document.getElementById('badge-logs-count');
+  if (badgeLogs) badgeLogs.textContent = state.activity_logs?.length || 0;
+
   const badgeQuotation = document.getElementById('badge-quotation-count');
   if (badgeQuotation) badgeQuotation.textContent = state.quotations?.length || 0;
 
@@ -339,6 +346,11 @@ function updateSidebarBadges() {
 function renderCurrentView() {
   switch (state.currentView) {
     case 'dashboard': loadDashboardData(); break;
+    case 'logs':
+      if (typeof renderLogsView === 'function') {
+        renderLogsView();
+      }
+      break;
     case 'quotations': renderQuotationsTable(); break;
     case 'orders': renderOrdersTable(); break;
     case 'projects':

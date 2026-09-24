@@ -706,6 +706,7 @@ module.exports = function(broadcastReload) {
   registerCrudRoutes('maintenance', 'MNT');
   registerCrudRoutes('service_tickets', 'SRV');
   registerCrudRoutes('warranty_claims', 'CLM');
+  registerCrudRoutes('activity_logs', 'LOG');
 
   return router;
 };

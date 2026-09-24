@@ -635,7 +635,8 @@
         }
       ],
       "isLeadLocked": true,
-      "createdAt": "2026-09-17T07:44:37.445Z"
+      "createdAt": "2026-09-17T07:44:37.445Z",
+      "updatedAt": "2026-09-23T09:58:02.024Z"
     },
     {
       "id": "PRJ-2026-2171-325",
@@ -1263,6 +1264,36 @@
   "maintenance": [],
   "service_tickets": [],
   "warranty_claims": [],
+  "activity_logs": [
+    {
+      "id": "LOG-2026-9161-536",
+      "task": "Checking Smart Laundry",
+      "pic": "Lambok Rommy Sulaeman",
+      "category": "Maintenance",
+      "startDate": "2026-09-23",
+      "endDate": "2026-09-23",
+      "startTime": "2026-09-23",
+      "endTime": "2026-09-23",
+      "status": "Selesai",
+      "notes": "1. Sensor infrared kadang mematikan mesin terkena bayangan, harus direset ulang\n2. program ulang sepereti versi sebelumnya tanpa sensor infrared\n3. kecepatan air masih perlu ditingkatkan\n4. memperbaiki sistem di Nagomi agar sama dan 1 dashboard dengan Minori",
+      "updatedAt": "2026-09-24T04:38:08.921Z",
+      "createdAt": "2026-09-24T04:35:19.161Z"
+    },
+    {
+      "id": "LOG-2026-7731-465",
+      "task": "Interview pak Anca untuk proses MCU Minori",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Koordinasi & Sales",
+      "startDate": "2026-09-23",
+      "endDate": "2026-09-23",
+      "startTime": "2026-09-23",
+      "endTime": "2026-09-23",
+      "status": "Selesai",
+      "notes": "Diskusi dengan pak Anca\n1. Minori bekerjasama dengan klinik samaria\n2. target Minori 2026 2500 pemagang. relisasi saat ini 1700\n3. P3MI untuk MCU lebih khusus untuk pemilihan Rumah Sakit/Klinik harus ada izin Kemnaker\n4. Untuk pemagang lebih mudah tidaK PERLU IZIN KEMNAKER\n5. Waktu yang dibutuhkan untuk mengeluarkan hasil MCU kurang dari 3 hari\n6. Jika tidak sesuai waktu akan dievaluasi untuk mencari Vendor yang bisa memenuhi kebutuhan\n7. masalahnya sistem terintegrasi untuk hasil MCU belum ada\n8. untuk mempercepat waktu MCU bisa menggunakan Sistem dan alat dari Takumi\n9. Takumi akan mencoba menawarkan kerjasama ke Vendor Minori untuk mempercepat pelaksanaan MCU mendapatkan hasil dan terintegrasi dengan sistem Minori.",
+      "updatedAt": "2026-09-24T04:33:57.644Z",
+      "createdAt": "2026-09-24T04:33:57.732Z"
+    }
+  ],
   "settings": {
     "companyName": "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
     "companyShortName": "UBM Takumi",
