@@ -1,6 +1,102 @@
 {
-  "quotations": [],
-  "orders": [],
+  "quotations": [
+    {
+      "id": "QUO-2026-1308-217",
+      "quotationType": "produk",
+      "customerName": "Minori",
+      "projectName": "Smart Door",
+      "picName": "Reza",
+      "customerPhone": "84357097",
+      "customerEmail": "a@gmail",
+      "customerAddress": "Cikarang",
+      "quotationDate": "2026-09-25",
+      "validUntil": "2026-10-09",
+      "status": "Accepted",
+      "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
+      "warrantyFee": 1050000,
+      "mainItemsTotal": 20000000,
+      "servicesTotal": 1000000,
+      "itemsTotal": 21000000,
+      "leadTime": "14 hari kerja setelah PO resmi diterima",
+      "paymentTerms": "DP 50% saat PO, Pelunasan setelah serah terima / BAST",
+      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "items": [
+        {
+          "itemName": "Smart door",
+          "sku": "001",
+          "warranty": "12 Bulan",
+          "qty": 10,
+          "unit": "Unit",
+          "unitPrice": 2000000,
+          "total": 20000000
+        }
+      ],
+      "additionalServices": [
+        {
+          "serviceName": "Installasi",
+          "qty": 10,
+          "unit": "Lot",
+          "unitPrice": 100000,
+          "total": 1000000
+        }
+      ],
+      "subtotal": 22050000,
+      "discount": 0,
+      "taxRate": 11,
+      "taxAmount": 2425500,
+      "grandTotal": 24475500,
+      "createdAt": "2026-09-25T03:27:41.310Z",
+      "updatedAt": "2026-09-25T03:28:47.417Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ORD-2026-9125-446",
+      "quotationId": "QUO-2026-1308-217",
+      "orderType": "produk",
+      "quotationType": "produk",
+      "customerName": "Minori",
+      "projectName": "Smart Door",
+      "customerPhone": "84357097",
+      "customerAddress": "Cikarang",
+      "orderDate": "2026-09-25",
+      "dueDate": "2026-10-09",
+      "status": "Pengajuan",
+      "notes": "Dikonversi dari Surat Penawaran Harga (PRODUK) #QUO-2026-1308-217.\nKetentuan Garansi: Garansi resmi 12 bulan untuk suku cadang dan servis.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\n[KETERANGAN JASA & INSTALASI (NON-BOM)]:\n1. Installasi (10 Lot @ Rp 100.000) = Rp 1.000.000\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "poDocument": null,
+      "poFileUrl": "",
+      "poFileName": "",
+      "items": [
+        {
+          "itemName": "Smart door",
+          "sku": "001",
+          "qty": 10,
+          "unit": "Unit",
+          "unitPrice": 2000000,
+          "total": 20000000
+        }
+      ],
+      "additionalServices": [
+        {
+          "serviceName": "Installasi",
+          "qty": 10,
+          "unit": "Lot",
+          "unitPrice": 100000,
+          "total": 1000000
+        }
+      ],
+      "mainItemsTotal": 20000000,
+      "servicesTotal": 1000000,
+      "itemsTotal": 21000000,
+      "warrantyFee": 1050000,
+      "subtotal": 22050000,
+      "discount": 0,
+      "taxRate": 11,
+      "taxAmount": 2425500,
+      "grandTotal": 24475500,
+      "createdAt": "2026-09-25T03:27:49.126Z"
+    }
+  ],
   "po": [
     {
       "id": "PO-2026-001",

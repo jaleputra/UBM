@@ -1214,6 +1214,11 @@ async function submitOrder(e, editId = '') {
     if (res.ok) {
       closeModal('form-modal');
 
+      await fetchResource('orders');
+      if (typeof renderOrdersTable === 'function') {
+        renderOrdersTable();
+      }
+
       // Sinkronisasi status Quotation terkait sesuai status Order
       const linkedQuoId = quotationId || (payload.notes && (payload.notes.match(/QUO-[\w-]+/i) || [])[0]);
       if (linkedQuoId) {
@@ -1245,6 +1250,8 @@ async function submitOrder(e, editId = '') {
         }
       }
 
+      showToast(editId ? 'Order penjualan berhasil diperbarui!' : 'Order penjualan baru berhasil disimpan!', 'success');
+    } else {
       const errData = await res.json().catch(() => ({}));
       showToast(errData.error || errData.message || 'Gagal menyimpan order', 'error');
     }

@@ -360,6 +360,9 @@ function getEffectiveLogStatus(log) {
   if (rawStatus.toLowerCase() === 'selesai' || rawStatus.toLowerCase() === 'complete') {
     return 'Selesai';
   }
+  if (rawStatus.toLowerCase() === 'overdue') {
+    return 'Overdue';
+  }
 
   // Check end date against current date (YYYY-MM-DD)
   const endYMD = (log.endDate || log.endTime || log.startDate || log.startTime || '').slice(0, 10);
@@ -374,6 +377,29 @@ function getEffectiveLogStatus(log) {
   }
 
   return 'Terjadwal';
+}
+
+// Generate interactive status select dropdown for table rows
+function renderLogStatusSelectHtml(log) {
+  const effStatus = getEffectiveLogStatus(log);
+  let statusClass = 'terjadwal';
+  if (effStatus === 'Overdue') statusClass = 'overdue';
+  else if (effStatus === 'Selesai') statusClass = 'selesai';
+  else if (effStatus === 'Sedang Berjalan') statusClass = 'sedang-berjalan';
+
+  return `
+    <div class="log-status-select-wrapper" onclick="event.stopPropagation()">
+      <select class="log-status-select ${statusClass}"
+              title="Ubah status kegiatan secara langsung"
+              onclick="event.stopPropagation()"
+              onchange="event.stopPropagation(); updateLogStatusDirect('${log.id}', this.value, this)">
+        <option value="Sedang Berjalan" ${effStatus === 'Sedang Berjalan' ? 'selected' : ''}>🔵 Sedang Berjalan</option>
+        <option value="Selesai" ${effStatus === 'Selesai' ? 'selected' : ''}>🟢 Selesai</option>
+        <option value="Terjadwal" ${effStatus === 'Terjadwal' ? 'selected' : ''}>🟡 Terjadwal</option>
+        <option value="Overdue" ${effStatus === 'Overdue' ? 'selected' : ''}>🔴 Overdue</option>
+      </select>
+    </div>
+  `;
 }
 
 // Get logs filtered by PIC for a specific date
@@ -953,22 +979,11 @@ function renderLogsTable() {
       }
     }
 
-    // Status Badge
-    const effStatus = getEffectiveLogStatus(log);
-    let statusBadge = '<span class="log-status-badge terjadwal"><i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Terjadwal</span>';
-    if (effStatus === 'Overdue') {
-      statusBadge = '<span class="log-status-badge overdue"><i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i> Overdue</span>';
-    } else if (effStatus === 'Selesai') {
-      statusBadge = '<span class="log-status-badge selesai"><i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Selesai</span>';
-    } else if (effStatus === 'Sedang Berjalan') {
-      statusBadge = '<span class="log-status-badge sedang-berjalan"><i data-lucide="play-circle" style="width: 12px; height: 12px;"></i> Sedang Berjalan</span>';
-    }
-
     // Category Badge
     const categoryBadge = log.category ? `<span class="badge badge-info" style="font-size: 10px; margin-left: 6px;">${escapeHtml(log.category)}</span>` : '';
 
     return `
-      <tr class="clickable-log-row" onclick="openLogDetailModal('${log.id}')" title="Klik baris untuk melihat detail kegiatan">
+      <tr class="clickable-log-row" onclick="if (!event.target.closest('.table-actions, select, button, a, input')) openLogDetailModal('${log.id}')" title="Klik baris untuk melihat detail kegiatan">
         <td style="font-weight: 600; color: var(--text-muted); font-size: 11px; width: 40px; text-align: center;">${index + 1}</td>
         <td style="width: 170px;">
           ${log.projectName ? `
@@ -997,8 +1012,8 @@ function renderLogsTable() {
           ${dateRangeFormatted}
           ${durationFormatted}
         </td>
-        <td style="width: 130px; text-align: center;">
-          ${statusBadge}
+        <td style="width: 145px; text-align: center;" onclick="event.stopPropagation()">
+          ${renderLogStatusSelectHtml(log)}
         </td>
         <td style="max-width: 240px; color: var(--text-body); font-size: 12px;">
           <div style="max-height: 48px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${escapeAttr(log.notes || '-')}">
@@ -1041,6 +1056,101 @@ function onLogTableCategoryChange(val) {
 function focusLogForm() {
   openLogFormModal();
 }
+
+// ==================== DIRECT STATUS UPDATE FROM TABLE ====================
+async function updateLogStatusDirect(logId, newStatus, selectEl) {
+  const log = (state.activity_logs || []).find(l => l.id === logId);
+  if (!log) {
+    showToast('Data kegiatan tidak ditemukan', 'error');
+    return;
+  }
+
+  const currentEffStatus = getEffectiveLogStatus(log);
+  if (newStatus === currentEffStatus && log.status === newStatus) {
+    return;
+  }
+
+  const oldStatus = log.status;
+  const oldStartDate = log.startDate || log.startTime;
+  const oldEndDate = log.endDate || log.endTime;
+  const todayYMD = formatYMD(new Date());
+
+  let newStartDate = oldStartDate || todayYMD;
+  let newEndDate = oldEndDate || todayYMD;
+  let dateAutoExtended = false;
+
+  // Jika diubah dari Overdue / jadwal lampau ke Sedang Berjalan atau Terjadwal:
+  // Otomatis perpanjang tanggal selesai ke hari ini agar status tidak langsung kembali Overdue secara otomatis
+  const endYMD = (newEndDate || '').slice(0, 10);
+  if ((newStatus === 'Sedang Berjalan' || newStatus === 'Terjadwal') && endYMD < todayYMD) {
+    newEndDate = todayYMD;
+    if ((newStartDate || '').slice(0, 10) > todayYMD) {
+      newStartDate = todayYMD;
+    }
+    dateAutoExtended = true;
+  }
+
+  // Update data objek lokal
+  log.status = newStatus;
+  log.startDate = newStartDate;
+  log.endDate = newEndDate;
+  log.startTime = newStartDate;
+  log.endTime = newEndDate;
+  log.updatedAt = new Date().toISOString();
+
+  // Optimistic UI state pada select
+  if (selectEl) {
+    selectEl.disabled = true;
+    let newClass = 'terjadwal';
+    if (newStatus === 'Overdue') newClass = 'overdue';
+    else if (newStatus === 'Selesai') newClass = 'selesai';
+    else if (newStatus === 'Sedang Berjalan') newClass = 'sedang-berjalan';
+    selectEl.className = `log-status-select ${newClass}`;
+  }
+
+  try {
+    const res = await fetch(`/api/activity_logs/${logId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log)
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const updated = await res.json();
+
+    // Sinkronkan state lokal
+    const idx = (state.activity_logs || []).findIndex(l => l.id === logId);
+    if (idx !== -1) {
+      state.activity_logs[idx] = { ...log, ...updated };
+    }
+
+    const toastMsg = dateAutoExtended
+      ? `Status kegiatan #${logId} diubah ke "${newStatus}" (jadwal diperpanjang ke hari ini)`
+      : `Status kegiatan #${logId} berhasil diubah ke "${newStatus}"`;
+    showToast(toastMsg, 'success');
+
+    // Re-render tampilan log & kalender
+    renderLogsView();
+    updateSidebarBadges();
+
+    // Jika modal summary sedang terbuka, refresh list di dalamnya
+    const summaryModal = document.getElementById('modal-log-summary-list');
+    if (summaryModal && summaryModal.classList.contains('active')) {
+      openLogSummaryModal(currentSummaryModalType);
+    }
+  } catch (err) {
+    console.error('Error updating log status directly:', err);
+    // Rollback nilai sebelumnya
+    log.status = oldStatus;
+    log.startDate = oldStartDate;
+    log.endDate = oldEndDate;
+    log.startTime = oldStartDate;
+    log.endTime = oldEndDate;
+    renderLogsView();
+    showToast('Gagal mengubah status: ' + err.message, 'error');
+  }
+}
+window.updateLogStatusDirect = updateLogStatusDirect;
 
 // ==================== SUMMARY CARDS CLICKABLE POPUP MODAL ====================
 let currentSummaryModalLogs = [];
@@ -1174,24 +1284,8 @@ function renderLogSummaryModalContent(logsList) {
     const eRaw = (log.endDate || log.endTime || sRaw).slice(0, 10);
     const days = calculateDaysBetween(sRaw, eRaw);
 
-    const effStatus = getEffectiveLogStatus(log);
-    let statusBadge = '<span class="log-status-badge terjadwal"><i data-lucide="calendar" style="width: 11px; height: 11px;"></i> Terjadwal</span>';
-    if (effStatus === 'Overdue') {
-      statusBadge = '<span class="log-status-badge overdue"><i data-lucide="alert-triangle" style="width: 11px; height: 11px;"></i> Overdue</span>';
-    } else if (effStatus === 'Selesai') {
-      statusBadge = '<span class="log-status-badge selesai"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> Selesai</span>';
-    } else if (effStatus === 'Sedang Berjalan') {
-      statusBadge = '<span class="log-status-badge sedang-berjalan"><i data-lucide="play-circle" style="width: 11px; height: 11px;"></i> Berjalan</span>';
-    }
-
-    const sDate = new Date(sRaw + 'T00:00:00');
-    const eDate = new Date(eRaw + 'T00:00:00');
-    const sStr = !isNaN(sDate.getTime()) ? sDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : sRaw;
-    const eStr = !isNaN(eDate.getTime()) ? eDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : sStr;
-    const dateText = sRaw === eRaw ? sStr : `${sStr} - ${eStr}`;
-
     html += `
-      <tr class="clickable-log-row" onclick="closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}')" title="Klik untuk membuka detail lengkap kegiatan">
+      <tr class="clickable-log-row" onclick="if (!event.target.closest('.table-actions, select, button, a, input')) { closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}'); }" title="Klik untuk membuka detail lengkap kegiatan">
         <td style="text-align: center; color: var(--text-muted); font-size: 11px; font-weight: 600;">${idx + 1}</td>
         <td>
           ${log.projectName ? `
@@ -1220,8 +1314,8 @@ function renderLogSummaryModalContent(logsList) {
           <div style="font-weight: 600; font-size: 11.5px; color: var(--text-main);">${dateText}</div>
           <div style="font-size: 10.5px; color: #0284c7; font-weight: 600;">⏱ ${days} Hari</div>
         </td>
-        <td style="text-align: center;">
-          ${statusBadge}
+        <td style="width: 145px; text-align: center;" onclick="event.stopPropagation()">
+          ${renderLogStatusSelectHtml(log)}
         </td>
         <td style="text-align: center;" onclick="event.stopPropagation()">
           <button class="btn btn-xs btn-outline" style="font-size: 11px; padding: 2px 8px;" onclick="closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}')" title="Buka Detail">

@@ -532,11 +532,12 @@ module.exports = function(broadcastReload) {
             const quotations = db.quotations || [];
             const qIdx = quotations.findIndex(q => q.id === quoId);
             if (qIdx !== -1) {
-              quotations[qIdx].status = 'Accepted';
+              const quoStatus = newItem.status === 'Accepted' ? 'Accepted' : 'Pengajuan';
+              quotations[qIdx].status = quoStatus;
               quotations[qIdx].updatedAt = new Date().toISOString();
               db.quotations = quotations;
               if (supabase) {
-                supabase.from('quotations').update({ status: 'Accepted' }).eq('id', quoId).then(() => {}).catch(() => {});
+                supabase.from('quotations').update({ status: quoStatus }).eq('id', quoId).then(() => {}).catch(() => {});
               }
               broadcastReload({ type: 'reload', resource: 'quotations' });
             }
@@ -605,14 +606,18 @@ module.exports = function(broadcastReload) {
         return res.status(400).json({ error: 'ID tidak valid' });
       }
 
-      // Reject direct edits on quotations that are already converted to sales orders
+      // Reject direct edits on quotations that are already converted to sales orders (unless it's just status update)
       if (resourceName === 'quotations') {
         const db = readDB();
         const orders = db.orders || [];
         const linkedOrder = orders.find(o => o.quotationId === req.params.id || (o.notes && o.notes.includes(req.params.id)));
         if (linkedOrder) {
-          const keys = Object.keys(req.body);
-          const isContentEdit = keys.some(k => ['items', 'customerName', 'projectName', 'customerPhone', 'customerEmail', 'customerAddress', 'subtotal', 'grandTotal', 'discount', 'warranty', 'leadTime'].includes(k));
+          const currentQuo = (db.quotations || []).find(q => q.id === req.params.id);
+          const contentKeys = ['items', 'customerName', 'projectName', 'customerPhone', 'customerEmail', 'customerAddress', 'subtotal', 'grandTotal', 'discount', 'warranty', 'leadTime'];
+          const isContentEdit = currentQuo && contentKeys.some(k => {
+            if (req.body[k] === undefined) return false;
+            return JSON.stringify(req.body[k]) !== JSON.stringify(currentQuo[k]);
+          });
           if (isContentEdit) {
             return res.status(403).json({
               error: `Surat Penawaran #${req.params.id} sudah dikonversikan ke Order Penjualan #${linkedOrder.id} dan datanya tidak dapat diedit lagi.`
