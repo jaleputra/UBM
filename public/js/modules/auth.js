@@ -33,12 +33,12 @@ function isAuthenticated() {
 
 /**
  * =========================================================
- * 5 CANONICAL ROLES SYSTEM:
+ * 4 CANONICAL ACCOUNT ROLES SYSTEM:
  * 1. Administrator: Akses penuh seluruh sistem
  * 2. Ketua UBM: Akses semua, persetujuan project pada order penjualan, assign lead project
- * 3. Lead Project: Mendaftarkan anggota, membuat timeline, membuat BOM, mengajukan pengadaan barang
- * 4. Keuangan: Akses persetujuan pembelian barang, invoice, keuangan project, BAST & after-sales menu
- * 5. Member: Akses timeline, laporan hasil pekerjaan/task, dan project yang telah di-assign oleh lead project
+ * 3. Keuangan: Akses persetujuan pembelian barang, invoice, keuangan project, BAST & after-sales menu
+ * 4. Member: Operasional (Engineering, Teknisi, R&D, Assembly) - akses orders, BOM, purchasing PR, timeline, reports, servis & logs
+ * Catatan: Lead Project adalah penugasan per-project, bukan role akun pengguna global.
  * =========================================================
  */
 
@@ -48,8 +48,8 @@ function getNormalizedRole(user) {
   const r = (u.role || '').toLowerCase().trim();
   if (r.includes('admin')) return 'Administrator';
   if (r.includes('ketua') || r.includes('wadir')) return 'Ketua UBM';
-  if (r.includes('lead')) return 'Lead Project';
   if (r.includes('keuangan') || r.includes('finance')) return 'Keuangan';
+  if (r.includes('lead')) return 'Member';
   return 'Member';
 }
 
@@ -86,22 +86,6 @@ const ROLE_PERMISSIONS = {
     canManageAfterSales: true,
     canManageSettings: false
   },
-  'Lead Project': {
-    name: 'Lead Project',
-    allowedViews: ['dashboard', 'project-reports', 'timeline', 'bom', 'bom-form', 'purchasing', 'logs'],
-    canApproveOrder: false,
-    canAssignLead: false,
-    canRegisterMembers: true,
-    canManageTimeline: true,
-    canManageBOM: true,
-    canSubmitPR: true,
-    canApprovePurchasing: false,
-    canManageInvoices: false,
-    canManageFinance: false,
-    canManageBAST: false,
-    canManageAfterSales: false,
-    canManageSettings: false
-  },
   'Keuangan': {
     name: 'Keuangan',
     allowedViews: ['dashboard', 'purchasing', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'logs'],
@@ -120,13 +104,29 @@ const ROLE_PERMISSIONS = {
   },
   'Member': {
     name: 'Member',
-    allowedViews: ['dashboard', 'project-reports', 'timeline', 'logs'],
+    allowedViews: ['dashboard', 'orders', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'logs'],
     canApproveOrder: false,
     canAssignLead: false,
-    canRegisterMembers: false,
-    canManageTimeline: false,
-    canManageBOM: false,
-    canSubmitPR: false,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canSubmitPR: true,
+    canApprovePurchasing: false,
+    canManageInvoices: false,
+    canManageFinance: false,
+    canManageBAST: false,
+    canManageAfterSales: false,
+    canManageSettings: false
+  },
+  'Lead Project': {
+    name: 'Member',
+    allowedViews: ['dashboard', 'orders', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'logs'],
+    canApproveOrder: false,
+    canAssignLead: false,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canSubmitPR: true,
     canApprovePurchasing: false,
     canManageInvoices: false,
     canManageFinance: false,
@@ -142,6 +142,56 @@ function hasRolePermission(permKey) {
   const perms = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['Member'];
   return !!perms[permKey];
 }
+
+/**
+ * Memeriksa apakah user saat ini bertindak sebagai Lead Project pada project tertentu
+ * atau apakah user memiliki wewenang Lead Project di setidaknya satu project aktif.
+ * Administrator dan Ketua UBM selalu memiliki wewenang penuh (true).
+ */
+function isUserProjectLead(projectIdOrOrderId = null, user = null) {
+  const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
+  if (!u) return false;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : 'Member';
+  if (roleName === 'Administrator' || roleName === 'Ketua UBM') return true;
+
+  const uName = (u.name || '').trim().toLowerCase();
+  const uEmail = (u.email || '').trim().toLowerCase();
+  const projects = (typeof state !== 'undefined' && Array.isArray(state.projects)) ? state.projects : [];
+
+  if (!projectIdOrOrderId) {
+    return projects.some(p => {
+      const lead = (p.projectLead || '').trim().toLowerCase();
+      return Boolean(lead && (lead === uName || lead === uEmail));
+    });
+  }
+
+  const p = projects.find(item => item.id === projectIdOrOrderId || item.orderId === projectIdOrOrderId);
+  if (!p || !p.projectLead) return false;
+  const lead = p.projectLead.trim().toLowerCase();
+  return Boolean(lead && (lead === uName || lead === uEmail));
+}
+window.isUserProjectLead = isUserProjectLead;
+
+function isUserAssignedToProject(projectIdOrOrderId, user = null) {
+  const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
+  if (!u) return false;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : 'Member';
+  if (roleName === 'Administrator' || roleName === 'Ketua UBM') return true;
+
+  const uName = (u.name || '').trim().toLowerCase();
+  const uEmail = (u.email || '').trim().toLowerCase();
+  const projects = (typeof state !== 'undefined' && Array.isArray(state.projects)) ? state.projects : [];
+
+  const p = projects.find(item => item.id === projectIdOrOrderId || item.orderId === projectIdOrOrderId);
+  if (!p) return false;
+  const isLead = p.projectLead && (p.projectLead.trim().toLowerCase() === uName || p.projectLead.trim().toLowerCase() === uEmail);
+  const inTeam = Array.isArray(p.team) && p.team.some(m => {
+    const mName = typeof m === 'string' ? m.trim().toLowerCase() : (m?.name ? m.name.trim().toLowerCase() : '');
+    return Boolean(mName && (mName === uName || mName === uEmail));
+  });
+  return Boolean(isLead || inTeam);
+}
+window.isUserAssignedToProject = isUserAssignedToProject;
 
 function isViewAllowedForUser(viewName) {
   if (!viewName || viewName === 'dashboard') return true; // Semua role bisa melihat dashboard
@@ -207,24 +257,22 @@ function populateUsersAssignmentDatalist() {
   }
 
   const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
-  datalist.innerHTML = users.map(u => `
-    <option value="${escapeAttr(u.name)}">${escapeHtml(u.name)} &bull; ${escapeHtml(u.role)} (${escapeHtml(u.email)})</option>
-  `).join('');
+  datalist.innerHTML = users.map(u => {
+    return `<option value="${escapeAttr(u.name)}">${escapeHtml(u.name)}</option>`;
+  }).join('');
 
-  // Attach to lead, member, and PIC inputs
-  const leadInput = document.getElementById('pm-lead-name');
-  if (leadInput && !leadInput.getAttribute('list')) {
-    leadInput.setAttribute('list', 'users-assignment-datalist');
+  // Update registered users dropdown for log-pic if present
+  if (typeof populateLogPicDropdown === 'function') {
+    populateLogPicDropdown();
   }
 
-  const picInput = document.getElementById('modal-log-pic');
-  if (picInput && !picInput.getAttribute('list')) {
-    picInput.setAttribute('list', 'users-assignment-datalist');
+  // Update lead select dropdown options if present and not locked
+  const leadSelect = document.getElementById('pm-lead-name');
+  if (leadSelect && leadSelect.tagName === 'SELECT' && !leadSelect.disabled && typeof getUserDropdownOptions === 'function') {
+    const curVal = leadSelect.value;
+    leadSelect.innerHTML = getUserDropdownOptions(curVal, '-- Pilih Akun Lead Project --');
+    if (curVal) leadSelect.value = curVal;
   }
-
-  document.querySelectorAll('.pm-member-name').forEach(inp => {
-    if (!inp.getAttribute('list')) inp.setAttribute('list', 'users-assignment-datalist');
-  });
 }
 
 /**

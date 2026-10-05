@@ -642,6 +642,7 @@ function openLogFormModalWithRange(startDateStr, endDateStr) {
     updateDurationDisplay();
   }
 
+  populateLogPicDropdown('');
   openModal('modal-activity-log-form');
   setTimeout(() => {
     document.getElementById('log-task')?.focus();
@@ -654,6 +655,7 @@ function openLogFormModal(targetDateStr) {
     openLogFormModalWithRange(targetDateStr, targetDateStr);
   } else {
     resetLogForm();
+    populateLogPicDropdown('');
     setDefaultLogDates();
     openModal('modal-activity-log-form');
     setTimeout(() => {
@@ -662,18 +664,32 @@ function openLogFormModal(targetDateStr) {
   }
 }
 
+function populateLogPicDropdown(selectedPic = '') {
+  const select = document.getElementById('log-pic');
+  if (!select) return;
+  const authUser = (typeof getAuthUser === 'function') ? getAuthUser() : null;
+  const initialValue = selectedPic || (authUser?.name ? authUser.name : '');
+  if (typeof getUserDropdownOptions === 'function') {
+    select.innerHTML = getUserDropdownOptions(initialValue, '-- Pilih Akun PIC Kegiatan --');
+  }
+}
+window.populateLogPicDropdown = populateLogPicDropdown;
+
 // Populate PIC filters in calendar and table
 function populatePicFilterDropdowns() {
   const logs = state.activity_logs || [];
   const pics = new Set();
+
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  users.forEach(u => {
+    if (u && u.name && u.name.trim()) pics.add(u.name.trim());
+  });
 
   logs.forEach(l => {
     if (l.pic && l.pic.trim()) pics.add(l.pic.trim());
   });
 
   const calPicSelect = document.getElementById('cal-filter-pic');
-  const datalistPic = document.getElementById('datalist-pic-suggestions');
-
   if (calPicSelect) {
     const currentVal = calPicSelect.value || 'ALL';
     let options = '<option value="ALL">Semua PIC</option>';
@@ -681,18 +697,6 @@ function populatePicFilterDropdowns() {
       options += `<option value="${escapeAttr(p)}" ${p === currentVal ? 'selected' : ''}>${escapeHtml(p)}</option>`;
     });
     calPicSelect.innerHTML = options;
-  }
-
-  if (datalistPic) {
-    let dlHtml = '';
-    const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
-    users.forEach(u => {
-      dlHtml += `<option value="${escapeAttr(u.name)} (${escapeAttr(u.role)})">${escapeHtml(u.name)} &bull; ${escapeHtml(u.role)} (${escapeHtml(u.email)})</option>`;
-    });
-    pics.forEach(p => {
-      dlHtml += `<option value="${escapeAttr(p)}"></option>`;
-    });
-    datalistPic.innerHTML = dlHtml;
   }
 }
 
@@ -867,6 +871,7 @@ function resetLogForm() {
   }
 
   populateProjectSuggestions();
+  populateLogPicDropdown('');
   setDefaultLogDates();
   if (window.lucide) lucide.createIcons();
 }
@@ -878,6 +883,7 @@ function editLog(id) {
   currentEditingLogId = id;
 
   populateProjectSuggestions();
+  populateLogPicDropdown(log.pic || '');
   const projectEl = document.getElementById('log-project-name');
   if (projectEl) projectEl.value = log.projectName || '';
 

@@ -524,7 +524,11 @@ function openWarrantyClaimModal(projectId, editClaimId = null) {
         <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-group" style="margin: 0;">
             <label class="form-label" style="font-weight: 600; font-size: 11.5px;">Teknisi PIC Penanggung Jawab (UBM) *</label>
-            <input type="text" name="technicianName" class="form-control" required placeholder="Nama Teknisi UBM" value="${escapeAttr(existingClaim?.technicianName || p.projectLead || 'Teknisi UBM')}">
+            <select name="technicianName" class="form-control" required>
+              ${(typeof getUserDropdownOptions === 'function')
+                  ? getUserDropdownOptions(existingClaim?.technicianName || p.projectLead || 'Teknisi UBM', '-- Pilih Teknisi / PIC --')
+                  : `<option value="${escapeAttr(existingClaim?.technicianName || p.projectLead || 'Teknisi UBM')}">${escapeHtml(existingClaim?.technicianName || p.projectLead || 'Teknisi UBM')}</option>`}
+            </select>
           </div>
           <div class="form-group" style="margin: 0;">
             <label class="form-label" style="font-weight: 600; font-size: 11.5px;">Status Klaim Garansi *</label>
@@ -1124,7 +1128,11 @@ function openServiceTicketFormModal(existingTicket = null) {
         </div>
         <div class="form-group">
           <label class="form-label" style="font-weight: 600; font-size: 12px;">Teknisi / PIC Penanggung Jawab *</label>
-          <input type="text" name="technicianName" class="form-control" required value="${escapeAttr(existingTicket?.technicianName || 'Teknisi UBM')}" placeholder="Nama Teknisi Pelaksana">
+          <select name="technicianName" class="form-control" required>
+            ${(typeof getUserDropdownOptions === 'function')
+                ? getUserDropdownOptions(existingTicket?.technicianName || 'Teknisi UBM', '-- Pilih Teknisi / PIC --')
+                : `<option value="${escapeAttr(existingTicket?.technicianName || 'Teknisi UBM')}">${escapeHtml(existingTicket?.technicianName || 'Teknisi UBM')}</option>`}
+          </select>
         </div>
       </div>
 

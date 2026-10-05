@@ -280,7 +280,11 @@ function openQuotationModal(quotationData = null) {
           </div>
           <div class="form-group">
             <label class="form-label">Nama PIC / Kontak Person</label>
-            <input type="text" name="picName" class="form-control" placeholder="Contoh: Bpk. Hendra Gunawan" value="${escapeAttr(quotationData?.picName || '')}">
+            <select name="picName" class="form-control">
+              ${(typeof getUserDropdownOptions === 'function')
+                  ? getUserDropdownOptions(quotationData?.picName || '', '-- Pilih Akun PIC / Kontak Person --')
+                  : `<option value="${escapeAttr(quotationData?.picName || '')}">${escapeHtml(quotationData?.picName || '-- Pilih PIC --')}</option>`}
+            </select>
           </div>
         </div>
 

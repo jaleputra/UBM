@@ -1,5 +1,57 @@
 {
-  "orders": [],
+  "orders": [
+    {
+      "id": "ORD-2026-2992-511",
+      "quotationId": "QUO-2026-6480-172",
+      "orderType": "produk",
+      "quotationType": "produk",
+      "customerName": "PT Minori",
+      "projectName": "Smart Door",
+      "customerPhone": "09809809809",
+      "customerAddress": "cikarang",
+      "orderDate": "2026-10-05",
+      "dueDate": "2026-10-19",
+      "status": "Accepted",
+      "notes": "Dikonversi dari Surat Penawaran Harga (PRODUK) #QUO-2026-6480-172.\nKetentuan Garansi: Garansi resmi 12 bulan untuk suku cadang dan servis.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\n[KETERANGAN JASA & INSTALASI (NON-BOM)]:\n1. Installasi (50 Lot @ Rp 150.000) = Rp 7.500.000\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "poDocument": {
+        "name": "BPM LEFA .pdf",
+        "url": "/uploads/po/PO_ORD-2026-2992-511_1791176661280.pdf",
+        "uploadedAt": "2026-10-05T05:04:21.254Z"
+      },
+      "poFileUrl": "/uploads/po/PO_ORD-2026-2992-511_1791176661280.pdf",
+      "poFileName": "BPM LEFA .pdf",
+      "items": [
+        {
+          "itemName": "Smart Door",
+          "sku": "001",
+          "qty": 50,
+          "unit": "Unit",
+          "unitPrice": 4000000,
+          "total": 200000000
+        }
+      ],
+      "additionalServices": [
+        {
+          "serviceName": "Installasi",
+          "qty": 50,
+          "unit": "Lot",
+          "unitPrice": 150000,
+          "total": 7500000
+        }
+      ],
+      "mainItemsTotal": 200000000,
+      "servicesTotal": 7500000,
+      "itemsTotal": 207500000,
+      "warrantyFee": 10375000,
+      "subtotal": 217875000,
+      "discount": 0,
+      "taxRate": 11,
+      "taxAmount": 23966250,
+      "grandTotal": 241841250,
+      "createdAt": "2026-10-05T05:04:02.993Z",
+      "updatedAt": "2026-10-05T05:04:29.891Z"
+    }
+  ],
   "po": [
     {
       "id": "PO-2026-001",
@@ -104,12 +156,128 @@
       "updatedAt": "2026-09-07T04:35:35.650Z"
     }
   ],
-  "invoices": [],
+  "invoices": [
+    {
+      "id": "INV-2026-2992-511",
+      "orderId": "ORD-2026-2992-511",
+      "customerName": "PT Minori",
+      "customerPhone": "09809809809",
+      "customerAddress": "cikarang",
+      "invoiceDate": "2026-10-05",
+      "dueDate": "2026-10-19",
+      "status": "Unpaid",
+      "paymentMethod": "Bank Transfer (Mandiri)",
+      "items": [
+        {
+          "itemName": "Smart Door",
+          "sku": "001",
+          "qty": 50,
+          "unit": "Unit",
+          "unitPrice": 4000000,
+          "total": 200000000
+        }
+      ],
+      "additionalServices": [
+        {
+          "serviceName": "Installasi",
+          "qty": 50,
+          "unit": "Lot",
+          "unitPrice": 150000,
+          "total": 7500000
+        }
+      ],
+      "mainItemsTotal": 200000000,
+      "servicesTotal": 7500000,
+      "itemsTotal": 207500000,
+      "warrantyFee": 10375000,
+      "discount": 0,
+      "subtotal": 217875000,
+      "taxRate": 11,
+      "taxAmount": 23966250,
+      "grandTotal": 241841250,
+      "paidAmount": 0,
+      "balanceDue": 241841250,
+      "notes": "Faktur Tagihan Resmi untuk Sales Order / Project ORD-2026-2992-511",
+      "createdAt": "2026-10-05T05:04:29.904Z"
+    }
+  ],
   "purchasing": [],
   "bom": [],
   "delivery": [],
-  "projects": [],
-  "quotations": [],
+  "projects": [
+    {
+      "id": "PRJ-2026-1406-464",
+      "orderId": "ORD-2026-2992-511",
+      "projectName": "Smart Door",
+      "customerName": "PT Minori",
+      "projectLead": "Ir. Hendra Wijaya, M.T.",
+      "department": "Engineering",
+      "team": [
+        {
+          "name": "Deddy Sibarani, S.E.",
+          "role": "Keuangan",
+          "phone": ""
+        },
+        {
+          "name": "Bambang Prakoso, S.T.",
+          "role": "Member",
+          "phone": ""
+        }
+      ],
+      "isLeadLocked": true,
+      "createdAt": "2026-10-05T05:04:51.406Z"
+    }
+  ],
+  "quotations": [
+    {
+      "id": "QUO-2026-6480-172",
+      "quotationType": "produk",
+      "customerName": "PT Minori",
+      "projectName": "Smart Door",
+      "picName": "Rizaldi Putra, M.Kom.",
+      "customerPhone": "09809809809",
+      "customerEmail": "kasdjfb@gmail.com",
+      "customerAddress": "cikarang",
+      "quotationDate": "2026-10-05",
+      "validUntil": "2026-10-19",
+      "status": "Accepted",
+      "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
+      "warrantyFee": 10375000,
+      "mainItemsTotal": 200000000,
+      "servicesTotal": 7500000,
+      "itemsTotal": 207500000,
+      "leadTime": "14 hari kerja setelah PO resmi diterima",
+      "paymentTerms": "DP 50% saat PO, Pelunasan setelah serah terima / BAST",
+      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "items": [
+        {
+          "itemName": "Smart Door",
+          "sku": "001",
+          "warranty": "12 Bulan",
+          "qty": 50,
+          "unit": "Unit",
+          "unitPrice": 4000000,
+          "total": 200000000
+        }
+      ],
+      "additionalServices": [
+        {
+          "serviceName": "Installasi",
+          "qty": 50,
+          "unit": "Lot",
+          "unitPrice": 150000,
+          "total": 7500000
+        }
+      ],
+      "subtotal": 217875000,
+      "discount": 0,
+      "taxRate": 11,
+      "taxAmount": 23966250,
+      "grandTotal": 241841250,
+      "createdAt": "2026-10-05T05:03:56.481Z",
+      "updatedAt": "2026-10-05T05:04:21.284Z"
+    }
+  ],
   "bast": [],
   "project_reports": [],
   "maintenance": [],
@@ -389,12 +557,13 @@
       "id": "USR-2026-003",
       "name": "Ir. Hendra Wijaya, M.T.",
       "email": "lead@ubm.co.id",
-      "password": "leadubm2026",
-      "role": "Lead Project",
-      "department": "Engineering & R&D",
+      "password": "12345678",
+      "role": "Member",
+      "department": "",
       "status": "Aktif",
       "avatar": "HW",
-      "createdAt": "2026-09-03T00:00:00.000Z"
+      "createdAt": "2026-09-03T00:00:00.000Z",
+      "updatedAt": "2026-10-05T05:05:20.304Z"
     },
     {
       "id": "USR-2026-004",
@@ -411,12 +580,13 @@
       "id": "USR-2026-005",
       "name": "Bambang Prakoso, S.T.",
       "email": "member@ubm.co.id",
-      "password": "memberubm2026",
+      "password": "12345678",
       "role": "Member",
-      "department": "Produksi & Perakitan",
+      "department": "",
       "status": "Aktif",
       "avatar": "BP",
-      "createdAt": "2026-09-05T00:00:00.000Z"
+      "createdAt": "2026-09-05T00:00:00.000Z",
+      "updatedAt": "2026-10-05T05:06:31.716Z"
     }
   ],
   "settings": {

@@ -76,7 +76,9 @@ function renderProjectReportsTable() {
     return;
   }
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   tbody.innerHTML = completedProjects.map(p => {
+    const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(p.id, activeUser) : true;
     const bom = getLinkedProjectBOM(p);
     const report = getLinkedProjectReport(p);
     const isReported = Boolean(report);
@@ -153,14 +155,18 @@ function renderProjectReportsTable() {
               <button class="btn btn-sm btn-outline" style="color: #0f766e; border-color: #99f6e4; background: #f0fdfa; font-size: 11px; padding: 4px 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="viewProjectReportDetail('${p.id}')" title="Lihat Dokumen Laporan">
                 <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> Lihat Laporan
               </button>
-              <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Penggunaan Barang" onclick="openProjectReportModal('${p.id}')">
-                <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
-              </button>
-            ` : `
+              ${isLead ? `
+                <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Penggunaan Barang" onclick="openProjectReportModal('${p.id}')">
+                  <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
+                </button>
+              ` : ''}
+            ` : (isLead ? `
               <button class="btn btn-sm btn-primary" style="background: #16a34a; border-color: #16a34a; font-size: 11px; padding: 4px 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="openProjectReportModal('${p.id}')" title="Input Penggunaan Barang & Pengembalian Sisa">
                 <i data-lucide="clipboard-check" style="width: 13px; height: 13px;"></i> Input Barang
               </button>
-            `}
+            ` : `
+              <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10.5px; border: 1px solid #cbd5e1;">Menunggu Lead</span>
+            `)}
           </div>
         </td>
       </tr>
@@ -181,6 +187,13 @@ function openProjectReportModal(projectId) {
   const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan!', 'error');
+    return;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(p.id, activeUser) : true;
+  if (!isLead) {
+    showToast(`⚠️ Hanya akun yang ditugaskan sebagai Lead Project (${escapeHtml(p.projectLead || 'Lead')}) atau Administrator yang berwenang mengisi Laporan Penggunaan Barang.`, 'warning');
     return;
   }
 
@@ -259,7 +272,11 @@ function openProjectReportModal(projectId) {
         <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
           <div class="form-group">
             <label class="form-label font-bold" style="font-size: 11.5px;">PIC Pengisi Laporan *</label>
-            <input type="text" name="reporterName" class="form-control" required value="${escapeAttr(defaultReporter)}" placeholder="Nama PIC Penanggung Jawab">
+            <select name="reporterName" class="form-control" required>
+              ${(typeof getUserDropdownOptions === 'function')
+                  ? getUserDropdownOptions(defaultReporter, '-- Pilih PIC Pengisi Laporan --')
+                  : `<option value="${escapeAttr(defaultReporter)}">${escapeHtml(defaultReporter)}</option>`}
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label font-bold" style="font-size: 11.5px;">Tanggal Pelaporan *</label>
@@ -506,6 +523,13 @@ async function submitProjectReport(event, projectId) {
   const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Project tidak ditemukan!', 'error');
+    return;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(projectId, activeUser) : true;
+  if (!isLead) {
+    showToast(`⚠️ Hanya Lead Project (${escapeHtml(p.projectLead || 'Lead Project')}) atau Administrator yang berwenang menyimpan Laporan Project.`, 'warning');
     return;
   }
 

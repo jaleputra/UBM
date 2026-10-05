@@ -407,9 +407,8 @@ function renderSettingsView() {
               <select id="user-form-role" class="form-control" required>
                 <option value="Administrator">1. Administrator (Akses Penuh Seluruh Sistem)</option>
                 <option value="Ketua UBM">2. Ketua UBM (Akses Penuh & Persetujuan Project / Assign Lead)</option>
-                <option value="Lead Project">3. Lead Project (Daftarkan Anggota, Timeline, BOM, Ajukan Pengadaan)</option>
-                <option value="Keuangan">4. Keuangan (Persetujuan Pembelian, Invoice, Keuangan Project, BAST & After Sales)</option>
-                <option value="Member">5. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
+                <option value="Keuangan">3. Keuangan (Persetujuan Pembelian, Invoice, Keuangan Project, BAST & After Sales)</option>
+                <option value="Member">4. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
               </select>
             </div>
             <div class="form-group" style="margin: 0;">
@@ -686,8 +685,6 @@ function renderAccountsTabTable() {
       roleBadge = `<span class="badge" style="background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Administrator</span>`;
     } else if (rLower.includes('ketua') || rLower.includes('wadir')) {
       roleBadge = `<span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="award" style="width: 12px; height: 12px;"></i> Ketua UBM</span>`;
-    } else if (rLower.includes('lead')) {
-      roleBadge = `<span class="badge" style="background: #fffbeb; color: #92400e; border: 1px solid #fde68a; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="folder-kanban" style="width: 12px; height: 12px;"></i> Lead Project</span>`;
     } else if (rLower.includes('finance') || rLower.includes('keuangan')) {
       roleBadge = `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="banknote" style="width: 12px; height: 12px;"></i> Keuangan</span>`;
     } else {
@@ -858,6 +855,9 @@ async function saveUserAccount(event) {
 
     resetUserForm();
     renderAccountsTabTable();
+    if (typeof populateUsersAssignmentDatalist === 'function') {
+      populateUsersAssignmentDatalist();
+    }
   } catch (err) {
     console.error('Error saving user account:', err);
     showToast('Gagal menyimpan akun: ' + err.message, 'error');
@@ -889,9 +889,13 @@ function editUserAccount(id) {
   if (idInput) idInput.value = user.id;
   if (nameInput) nameInput.value = user.name || '';
   if (emailInput) emailInput.value = user.email || '';
-  if (passwordInput) passwordInput.value = user.password || '';
-  if (roleInput) roleInput.value = user.role || 'Super Administrator';
-  if (deptInput) deptInput.value = user.department || '';
+  if (roleInput) {
+    let r = user.role || 'Administrator';
+    if (r === 'Super Administrator') r = 'Administrator';
+    if (r === 'Lead Project') r = 'Member';
+    roleInput.value = r;
+    if (!roleInput.value) roleInput.value = 'Member';
+  }
   if (statusInput) statusInput.value = user.status || 'Aktif';
 
   if (titleEl) {
@@ -922,7 +926,7 @@ function resetUserForm() {
   if (nameInput) nameInput.value = '';
   if (emailInput) emailInput.value = '';
   if (passwordInput) passwordInput.value = '';
-  if (roleInput) roleInput.value = 'Operasional & Staff';
+  if (roleInput) roleInput.value = 'Member';
   if (deptInput) deptInput.value = '';
   if (statusInput) statusInput.value = 'Aktif';
 
@@ -955,6 +959,9 @@ async function deleteUserAccount(id) {
     state.users = (state.users || []).filter(u => u.id !== id);
     showToast(`Akun ${user.name} berhasil dihapus.`, 'info');
     renderAccountsTabTable();
+    if (typeof populateUsersAssignmentDatalist === 'function') {
+      populateUsersAssignmentDatalist();
+    }
   } catch (err) {
     console.error('Error deleting user account:', err);
     showToast('Gagal menghapus akun: ' + err.message, 'error');

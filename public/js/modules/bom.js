@@ -450,8 +450,15 @@ function renderBOMPendingOrders() {
           }
         } else {
           statusBadgeHtml = '<span class="badge badge-purple" style="font-size: 10px;"><i data-lucide="boxes" style="width: 11px; height: 11px;"></i> Siap Input BOM</span>';
-          actionBtnHtml = `<button class="btn btn-sm btn-primary" style="font-size: 11.5px; padding: 4px 12px; background: #2563eb;" onclick="event.stopPropagation(); createBOMFromOrder('${item.orderId}')"><i data-lucide="boxes"></i> Input BOM Order</button>`;
-          rowOnClick = `createBOMFromOrder('${item.orderId}')`;
+          const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+          const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(item.orderId, activeUser) : true;
+          if (isLead) {
+            actionBtnHtml = `<button class="btn btn-sm btn-primary" style="font-size: 11.5px; padding: 4px 12px; background: #2563eb;" onclick="event.stopPropagation(); createBOMFromOrder('${item.orderId}')"><i data-lucide="boxes"></i> Input BOM Order</button>`;
+            rowOnClick = `createBOMFromOrder('${item.orderId}')`;
+          } else {
+            actionBtnHtml = `<span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10.5px; border: 1px solid #cbd5e1;">Wewenang Lead</span>`;
+            rowOnClick = `showToast('⚠️ Hanya akun yang ditugaskan sebagai Lead Project atau Administrator yang dapat mengisi BOM.', 'warning')`;
+          }
         }
 
         const bomIdSnippet = item.relatedBOM ? `<span class="mono-id font-xs text-muted" style="font-size: 10px; display: block; margin-top: 2px;">BOM ID: ${escapeHtml(item.relatedBOM.id)}</span>` : '';
@@ -525,8 +532,15 @@ function renderBOMPendingOrders() {
             cardOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
           }
         } else {
-          actionBtnHtml = `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); createBOMFromOrder('${item.orderId}')"><i data-lucide="boxes"></i> Input BOM Order</button>`;
-          cardOnClick = `createBOMFromOrder('${item.orderId}')`;
+          const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+          const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(item.orderId, activeUser) : true;
+          if (isLead) {
+            actionBtnHtml = `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); createBOMFromOrder('${item.orderId}')"><i data-lucide="boxes"></i> Input BOM Order</button>`;
+            cardOnClick = `createBOMFromOrder('${item.orderId}')`;
+          } else {
+            actionBtnHtml = `<span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10.5px; border: 1px solid #cbd5e1;">Wewenang Lead</span>`;
+            cardOnClick = `showToast('⚠️ Hanya akun yang ditugaskan sebagai Lead Project atau Administrator yang dapat mengisi BOM.', 'warning')`;
+          }
         }
 
         return `
@@ -613,6 +627,22 @@ function createBOMFromOrder(orderId) {
   const acceptedBOM = existingBOMs.find(b => b.status === 'Accepted');
   const pendingBOM = existingBOMs.find(b => b.status === 'Pengajuan');
   const rejectedBOM = existingBOMs.find(b => b.status === 'Ditolak');
+
+  // Validasi Wewenang: Hanya Lead Project atau Administrator yang dapat mengisi/mengubah BOM
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
+
+  if (!isLead) {
+    const existingBOM = acceptedBOM || pendingBOM || existingBOMs[0];
+    if (existingBOM) {
+      showToast('Mode Lihat: Hanya Lead Project yang dapat mengisi/mengubah formula BOM. Anda membuka dalam mode pratinjau.', 'info');
+      openBOMPage(existingBOM, order.id, itemName, sku, true);
+      return;
+    } else {
+      showToast(`⚠️ Hanya akun yang ditugaskan sebagai Lead Project (${escapeHtml(project?.projectLead || 'Lead')}) atau Administrator yang dapat mengisi BOM baru.`, 'warning');
+      return;
+    }
+  }
 
   if (acceptedBOM) {
     // BOM sudah Accepted: Buka BOM dalam mode TERKUNCI (Read-Only)
@@ -1074,6 +1104,13 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
     state.bomReturnView = 'orders';
   } else {
     state.bomReturnView = 'bom';
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const boundOrder = bomData?.orderId || defaultOrderId;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(boundOrder, activeUser) : true;
+  if (!isLead) {
+    isReadOnly = true;
   }
   if (defaultOrderId && !bomData) {
     const order = (state.orders || []).find(o => o.id === defaultOrderId);
@@ -1662,8 +1699,14 @@ function autoFillBOMPageFromOrder(selectVal) {
 }
 
 async function handleBOMPageSubmit(e) {
-  e.preventDefault();
   const editId = document.getElementById('page-bom-edit-id')?.value;
+  const selectedOrder = document.getElementById('page-bom-order-select')?.value?.split('::')?.[0];
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(selectedOrder, activeUser) : true;
+  if (!isLead) {
+    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mengisi dan menyimpan BOM.', 'warning');
+    return;
+  }
 
   const components = [];
   const blocks = document.querySelectorAll('#page-bom-components-list .bom-item-block');

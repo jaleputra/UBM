@@ -350,9 +350,11 @@ function renderTeamAssignmentWorkspace(orderId) {
   const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
 
   if (leadInput) {
-    leadInput.value = project.projectLead || '';
+    if (typeof getUserDropdownOptions === 'function') {
+      leadInput.innerHTML = getUserDropdownOptions(project.projectLead || '', '-- Pilih Akun Lead Project --');
+    }
     if (!canAssignLead) {
-      leadInput.readOnly = true;
+      leadInput.disabled = true;
       leadInput.style.backgroundColor = '#f1f5f9';
       leadInput.style.cursor = 'not-allowed';
       leadInput.style.borderColor = '#cbd5e1';
@@ -365,7 +367,7 @@ function renderTeamAssignmentWorkspace(orderId) {
         hintText.innerHTML = '<span style="color: #64748b; display: inline-flex; align-items: center; gap: 4px; font-weight: 500;"><i data-lucide="info" style="width: 12px; height: 12px;"></i> Penugasan Lead Project adalah wewenang Ketua UBM / Administrator. Anda dapat mendaftarkan anggota tim di bawah.</span>';
       }
     } else if (isLeadLocked) {
-      leadInput.readOnly = true;
+      leadInput.disabled = true;
       leadInput.style.backgroundColor = '#f1f5f9';
       leadInput.style.cursor = 'not-allowed';
       leadInput.style.borderColor = '#cbd5e1';
@@ -378,9 +380,9 @@ function renderTeamAssignmentWorkspace(orderId) {
         hintText.innerHTML = '<span style="color: #059669; display: inline-flex; align-items: center; gap: 4px; font-weight: 500;"><i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Project Lead telah disimpan & terkunci permanen. Hanya anggota tim yang dapat diedit.</span>';
       }
     } else {
-      leadInput.readOnly = false;
+      leadInput.disabled = false;
       leadInput.style.backgroundColor = '#ffffff';
-      leadInput.style.cursor = 'text';
+      leadInput.style.cursor = 'pointer';
       leadInput.style.borderColor = '';
       leadInput.style.color = '';
       leadInput.style.fontWeight = 'normal';
@@ -388,7 +390,7 @@ function renderTeamAssignmentWorkspace(orderId) {
         lockBadge.innerHTML = '<span class="badge badge-amber" style="font-size: 10px; padding: 2px 6px;">Perlu Disimpan</span>';
       }
       if (hintText) {
-        hintText.innerHTML = 'Pilih akun terdaftar atau masukkan nama Project Lead / Penanggung Jawab. Setelah disimpan, Lead Project akan terkunci secara permanen.';
+        hintText.innerHTML = 'Pilih akun terdaftar sebagai Lead Project. Setelah disimpan, Lead Project akan terkunci secara permanen.';
       }
     }
   }
@@ -406,6 +408,16 @@ function renderTeamAssignmentWorkspace(orderId) {
       addProjectTeamMemberRow();
     }
   }
+
+  // Wewenang: Hanya Lead Project atau Administrator yang dapat mendaftarkan/mengubah anggota tim
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
+  if (deptInput) deptInput.disabled = !isLead;
+
+  const addMemberBtn = document.querySelector('#team-assignment-modal button[onclick*="addProjectTeamMemberRow"]');
+  const saveTeamBtn = document.querySelector('#team-assignment-modal button[onclick*="saveTeamAssignmentData"]');
+  if (addMemberBtn) addMemberBtn.style.display = isLead ? 'inline-flex' : 'none';
+  if (saveTeamBtn) saveTeamBtn.style.display = isLead ? 'inline-flex' : 'none';
 
   // Render Dynamic Next-Step Quick Action Button
   const quickContainer = document.getElementById('pm-quick-action-container');
@@ -445,20 +457,21 @@ function renderTeamAssignmentWorkspace(orderId) {
   if (window.lucide) lucide.createIcons();
 }
 
-function autoFillTeamMemberFromAccount(inputEl) {
-  if (!inputEl) return;
-  const val = (inputEl.value || '').trim();
+function autoFillTeamMemberFromAccount(selectEl) {
+  if (!selectEl) return;
+  const val = (selectEl.value || '').trim();
+  const opt = selectEl.options ? selectEl.options[selectEl.selectedIndex] : null;
   const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
-  const user = users.find(u => u.name === val || `${u.name} • ${u.role}`.includes(val) || val.includes(u.name));
-  if (user) {
-    inputEl.value = user.name;
-    const row = inputEl.closest('.pm-team-row');
-    if (row) {
-      const roleInp = row.querySelector('.pm-member-role');
-      if (roleInp && !roleInp.value) {
-        roleInp.value = user.role || 'Member';
-      }
-    }
+  const user = users.find(u => u && u.name && u.name.toLowerCase() === val.toLowerCase());
+  
+  const row = selectEl.closest('.pm-team-row');
+  if (row) {
+    const roleInp = row.querySelector('.pm-member-role');
+    const phoneInp = row.querySelector('.pm-member-phone');
+    const autoRole = opt?.getAttribute('data-role') || user?.role || (val ? 'Member' : '');
+    const autoPhone = opt?.getAttribute('data-phone') || user?.phone || '';
+    if (roleInp && autoRole) roleInp.value = autoRole;
+    if (phoneInp && autoPhone && !phoneInp.value) phoneInp.value = autoPhone;
   }
 }
 window.autoFillTeamMemberFromAccount = autoFillTeamMemberFromAccount;
@@ -467,22 +480,32 @@ function addProjectTeamMemberRow(member = null) {
   const container = document.getElementById('pm-team-list');
   if (!container) return;
 
+  const currentMemberName = typeof member === 'string' ? member : (member?.name || '');
   const row = document.createElement('div');
   row.className = 'pm-team-row';
   row.style.cssText = 'display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px;';
   
+  const selectHtml = (typeof getUserDropdownOptions === 'function')
+    ? getUserDropdownOptions(currentMemberName, '-- Pilih Akun Member --')
+    : `<option value="${escapeAttr(currentMemberName)}">${escapeHtml(currentMemberName || '-- Pilih Akun --')}</option>`;
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true;
+
   row.innerHTML = `
     <div>
-      <input type="text" class="form-control form-control-sm pm-member-name" list="users-assignment-datalist" placeholder="Pilih akun atau ketik nama..." required value="${escapeAttr(member?.name || '')}" onchange="autoFillTeamMemberFromAccount(this)">
+      <select class="form-control form-control-sm pm-member-name" required onchange="autoFillTeamMemberFromAccount(this)" ${isLead ? '' : 'disabled style="background: #f1f5f9; cursor: not-allowed;"'}>
+        ${selectHtml}
+      </select>
     </div>
     <div>
-      <input type="text" class="form-control form-control-sm pm-member-role" placeholder="Role / Keahlian (e.g. Wiring)" value="${escapeAttr(member?.role || '')}">
+      <input type="text" class="form-control form-control-sm pm-member-role" placeholder="Role / Keahlian (e.g. Wiring)" value="${escapeAttr(member?.role || '')}" ${isLead ? '' : 'disabled style="background: #f1f5f9; cursor: not-allowed;"'}>
     </div>
     <div>
-      <input type="text" class="form-control form-control-sm pm-member-phone" placeholder="No. HP / Kontak" value="${escapeAttr(member?.phone || '')}">
+      <input type="text" class="form-control form-control-sm pm-member-phone" placeholder="No. HP / Kontak" value="${escapeAttr(member?.phone || '')}" ${isLead ? '' : 'disabled style="background: #f1f5f9; cursor: not-allowed;"'}>
     </div>
     <div>
-      <button type="button" class="btn-icon btn-danger-ghost" title="Hapus Anggota" onclick="this.closest('.pm-team-row').remove();"><i data-lucide="trash-2"></i></button>
+      ${isLead ? `<button type="button" class="btn-icon btn-danger-ghost" title="Hapus Anggota" onclick="this.closest('.pm-team-row').remove();"><i data-lucide="trash-2"></i></button>` : ''}
     </div>
   `;
 
@@ -493,6 +516,13 @@ function addProjectTeamMemberRow(member = null) {
 async function saveTeamAssignmentData() {
   if (!currentActiveProjectOrderId) {
     showToast('Pilih order penjualan terlebih dahulu', 'warning');
+    return;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true;
+  if (!isLead) {
+    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mendaftarkan dan mengubah tim pelaksana project.', 'warning');
     return;
   }
 
@@ -704,6 +734,24 @@ function renderTimelineWorkspace(orderId) {
 
   currentActiveProjectData = project;
 
+  // Wewenang: Hanya Lead Project atau Administrator yang dapat mengubah timeline & menambah milestone
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
+
+  const saveBtn = document.querySelector('#view-timeline button[onclick*="saveProjectTimelineData"]');
+  const addMsBtn = document.querySelector('#view-timeline button[onclick*="addNewMilestoneInteractive"]');
+  if (saveBtn) {
+    saveBtn.style.display = isLead ? 'inline-flex' : 'none';
+  }
+  if (addMsBtn) {
+    addMsBtn.style.display = isLead ? 'inline-flex' : 'none';
+  }
+
+  if (statusSelect) statusSelect.disabled = !isLead;
+  if (startInput) startInput.disabled = !isLead;
+  if (dueInput) dueInput.disabled = !isLead;
+  if (notesInput) notesInput.disabled = !isLead;
+
   // Render Visual Calendar Blocks with different color themes & Month Calendar
   renderMilestoneCalendarBlocks(project);
   renderTimelineMonthCalendar(project);
@@ -785,15 +833,43 @@ function renderMilestoneCalendarBlocks(project) {
   const container = document.getElementById('timeline-calendar-blocks');
   if (!container) return;
 
-  const milestones = project?.milestones || [];
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(project?.id || project?.orderId, activeUser) : true;
+
+  let milestones = project?.milestones || [];
+
+  // Member hanya melihat task yang diberikan oleh lead project padanya
+  if (!isLead && activeUser?.name) {
+    const uName = activeUser.name.toLowerCase().trim();
+    const uEmail = (activeUser.email || '').toLowerCase().trim();
+    milestones = milestones.filter(ms => {
+      const isPic = (ms.pic || '').toLowerCase().trim() === uName || (ms.pic || '').toLowerCase().trim() === uEmail;
+      const isSubtaskPic = Array.isArray(ms.subtasks) && ms.subtasks.some(st => {
+        const stPic = (st.pic || st.assignedTo || '').toLowerCase().trim();
+        return stPic === uName || stPic === uEmail;
+      });
+      return isPic || isSubtaskPic;
+    });
+  }
+
   if (milestones.length === 0) {
-    container.innerHTML = `
-      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 24px; text-align: center; color: #64748b;">
-        <i data-lucide="calendar" style="width: 28px; height: 28px; margin-bottom: 6px; color: #94a3b8;"></i>
-        <div style="font-weight: 600; font-size: 13px;">Belum ada tahapan kerja atau milestone terdaftar.</div>
-        <div style="font-size: 11.5px; margin-top: 4px;">Klik tombol <strong>"+ Tambah Milestone"</strong> di atas untuk membuat tahapan kerja baru.</div>
-      </div>
-    `;
+    if (!isLead) {
+      container.innerHTML = `
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 28px; text-align: center; color: #64748b;">
+          <i data-lucide="check-circle-2" style="width: 28px; height: 28px; margin-bottom: 6px; color: #94a3b8;"></i>
+          <div style="font-weight: 700; font-size: 13.5px; color: #334155;">Belum Ada Task yang Ditugaskan Kepada Anda</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #64748b;">Anda hanya dapat melihat task/tahapan kerja yang ditugaskan secara resmi oleh Project Lead (${escapeHtml(project?.projectLead || 'Lead Project')}).</div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 24px; text-align: center; color: #64748b;">
+          <i data-lucide="calendar" style="width: 28px; height: 28px; margin-bottom: 6px; color: #94a3b8;"></i>
+          <div style="font-weight: 600; font-size: 13px;">Belum ada tahapan kerja atau milestone terdaftar.</div>
+          <div style="font-size: 11.5px; margin-top: 4px;">Klik tombol <strong>"+ Tambah Milestone"</strong> di atas untuk membuat tahapan kerja baru.</div>
+        </div>
+      `;
+    }
     if (window.lucide) lucide.createIcons();
     return;
   }
@@ -1112,7 +1188,7 @@ function getProjectPICOfficialOptions(project, selectedPic = '') {
     options.push({
       name: leadName,
       role: 'Project Lead',
-      label: `👑 ${leadName} (Project Lead)`
+      label: leadName
     });
     addedNames.add(leadName.toLowerCase());
   }
@@ -1126,19 +1202,32 @@ function getProjectPICOfficialOptions(project, selectedPic = '') {
         options.push({
           name: memberName,
           role: memberRole,
-          label: `👤 ${memberName} (${memberRole})`
+          label: memberName
         });
         addedNames.add(memberName.toLowerCase());
       }
     });
   }
 
-  // 3. Fallback jika ada PIC tersimpan yang belum ada di daftar
+  // 3. Akun Terdaftar di Sistem (state.users)
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  users.forEach(u => {
+    if (u && u.name && !addedNames.has(u.name.trim().toLowerCase())) {
+      options.push({
+        name: u.name.trim(),
+        role: u.role || 'Member',
+        label: u.name.trim()
+      });
+      addedNames.add(u.name.trim().toLowerCase());
+    }
+  });
+
+  // 4. Fallback jika ada PIC tersimpan yang belum ada di daftar
   if (selectedPic && selectedPic.trim() !== '' && !addedNames.has(selectedPic.toLowerCase())) {
     options.push({
       name: selectedPic.trim(),
       role: 'PIC Khusus',
-      label: `👤 ${selectedPic.trim()} (PIC)`
+      label: selectedPic.trim()
     });
   }
 
@@ -1185,6 +1274,9 @@ function openMilestoneDetailModal(msId) {
   const totalCount = subtasks.length;
   const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (ms.status === 'Completed' ? 100 : 0);
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
+
   const picList = getProjectPICOfficialOptions(currentActiveProjectData, ms.pic);
   let picOptionsHtml = '<option value="">-- Pilih Penanggung Jawab (Leader / Anggota) --</option>';
   picList.forEach(opt => {
@@ -1199,15 +1291,15 @@ function openMilestoneDetailModal(msId) {
         <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr 1.2fr; gap: 12px; margin-bottom: 10px;">
           <div class="form-group" style="margin: 0;">
             <label class="form-label font-bold" style="font-size: 11px;">Nama Tahapan Milestone *</label>
-            <input type="text" id="modal-ms-title" class="form-control form-control-sm" required value="${escapeAttr(ms.title || '')}" style="font-weight: 700;">
+            <input type="text" id="modal-ms-title" class="form-control form-control-sm" required value="${escapeAttr(ms.title || '')}" style="font-weight: 700; ${isLead ? '' : 'background: #f1f5f9; cursor: not-allowed;'}" ${isLead ? '' : 'disabled'}>
           </div>
           <div class="form-group" style="margin: 0;">
             <label class="form-label font-bold" style="font-size: 11px;">Tanggal Mulai</label>
-            <input type="date" id="modal-ms-start" class="form-control form-control-sm" value="${ms.startDate || ''}">
+            <input type="date" id="modal-ms-start" class="form-control form-control-sm" value="${ms.startDate || ''}" style="${isLead ? '' : 'background: #f1f5f9; cursor: not-allowed;'}" ${isLead ? '' : 'disabled'}>
           </div>
           <div class="form-group" style="margin: 0;">
             <label class="form-label font-bold" style="font-size: 11px;">Deadline Selesai</label>
-            <input type="date" id="modal-ms-due" class="form-control form-control-sm" value="${ms.dueDate || ''}">
+            <input type="date" id="modal-ms-due" class="form-control form-control-sm" value="${ms.dueDate || ''}" style="${isLead ? '' : 'background: #f1f5f9; cursor: not-allowed;'}" ${isLead ? '' : 'disabled'}>
           </div>
           <div class="form-group" style="margin: 0;">
             <label class="form-label font-bold" style="font-size: 11px;">Status Tahapan</label>
@@ -1222,7 +1314,7 @@ function openMilestoneDetailModal(msId) {
           <label class="form-label font-bold" style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
             <i data-lucide="user-check" style="width: 13px; height: 13px; color: #4f46e5;"></i> Penanggung Jawab (PIC Tahap)
           </label>
-          <select id="modal-ms-pic" class="form-control form-control-sm" style="font-weight: 600; background: #ffffff;">
+          <select id="modal-ms-pic" class="form-control form-control-sm" style="font-weight: 600; background: ${isLead ? '#ffffff' : '#f1f5f9'}; cursor: ${isLead ? 'pointer' : 'not-allowed'};" ${isLead ? '' : 'disabled'}>
             ${picOptionsHtml}
           </select>
         </div>
@@ -1317,13 +1409,15 @@ function openMilestoneDetailModal(msId) {
 
       <!-- 4. FOOTER ACTIONS -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color);">
-        <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteCurrentMilestoneModal('${msId}')" style="color: #ef4444;">
-          <i data-lucide="trash-2"></i> Hapus Tahapan Ini
-        </button>
+        ${isLead ? `
+          <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteCurrentMilestoneModal('${msId}')" style="color: #ef4444;">
+            <i data-lucide="trash-2"></i> Hapus Tahapan Ini
+          </button>
+        ` : '<div></div>'}
         <div style="display: flex; gap: 8px;">
           <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('milestone-detail-modal')">Tutup</button>
           <button type="submit" class="btn btn-primary btn-sm" style="background: ${theme.primary}; border-color: ${theme.primary}; font-weight: 700; padding: 6px 20px;">
-            <i data-lucide="save"></i> Simpan Perubahan Milestone
+            <i data-lucide="save"></i> ${isLead ? 'Simpan Perubahan Milestone' : 'Simpan Progres Task'}
           </button>
         </div>
       </div>
@@ -1497,6 +1591,12 @@ function addModalCommentAction() {
 }
 
 function deleteCurrentMilestoneModal(msId) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
+  if (!isLead) {
+    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang menghapus tahapan kerja.', 'warning');
+    return;
+  }
   if (!confirm('Apakah Anda yakin ingin menghapus tahapan milestone ini?')) return;
   if (!currentActiveProjectData) return;
 
@@ -1514,11 +1614,16 @@ function saveMilestoneDetailModal(msId) {
   const ms = (currentActiveProjectData.milestones || []).find(m => m.id === msId);
   if (!ms) return;
 
-  ms.title = document.getElementById('modal-ms-title')?.value?.trim() || ms.title;
-  ms.startDate = document.getElementById('modal-ms-start')?.value || '';
-  ms.dueDate = document.getElementById('modal-ms-due')?.value || '';
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
+
+  if (isLead) {
+    ms.title = document.getElementById('modal-ms-title')?.value?.trim() || ms.title;
+    ms.startDate = document.getElementById('modal-ms-start')?.value || '';
+    ms.dueDate = document.getElementById('modal-ms-due')?.value || '';
+    ms.pic = document.getElementById('modal-ms-pic')?.value?.trim() || '';
+  }
   ms.status = document.getElementById('modal-ms-status')?.value || 'Pending';
-  ms.pic = document.getElementById('modal-ms-pic')?.value?.trim() || '';
 
   // Collect subtasks
   const subtasks = [];
@@ -1554,6 +1659,12 @@ function saveMilestoneDetailModal(msId) {
 }
 
 function addNewMilestoneInteractive() {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
+  if (!isLead) {
+    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang menambahkan tahapan milestone baru.', 'warning');
+    return;
+  }
   if (!currentActiveProjectData) {
     showToast('Pilih project terlebih dahulu', 'warning');
     return;
@@ -1747,8 +1858,12 @@ function addTimelineMilestoneRow(ms = null) {
         </div>
 
         <!-- Add Comment Input Box -->
-        <div style="display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px;">
-          <input type="text" id="ms-comment-author-${msId}" class="form-control form-control-sm" placeholder="Nama / PIC Anda" value="${escapeAttr(ms?.pic || '')}" style="font-size: 11.5px; font-weight: 600;">
+        <div style="display: grid; grid-template-columns: 200px 1fr auto; gap: 8px; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px;">
+          <select id="ms-comment-author-${msId}" class="form-control form-control-sm" style="font-size: 11.5px; font-weight: 600;">
+            ${(typeof getUserDropdownOptions === 'function') 
+                ? getUserDropdownOptions(ms?.pic || (typeof getAuthUser === 'function' ? getAuthUser()?.name : ''), '-- Pilih Akun Penulis --') 
+                : `<option value="${escapeAttr(ms?.pic || '')}">${escapeHtml(ms?.pic || 'Pengguna')}</option>`}
+          </select>
           <input type="text" id="ms-comment-text-${msId}" class="form-control form-control-sm" placeholder="Tulis komentar, pertanyaan, atau catatan kemajuan..." style="font-size: 11.5px;" onkeydown="if(event.key==='Enter') addMilestoneComment('${msId}')">
           <button type="button" class="btn btn-sm btn-primary" onclick="addMilestoneComment('${msId}')" style="background: #4f46e5; border-color: #4f46e5; font-size: 11.5px; padding: 5px 14px;">
             <i data-lucide="send"></i> Kirim
@@ -2117,6 +2232,13 @@ function updateTimelineHeaderBadge() {
 async function saveProjectTimelineData(redirect = true) {
   if (!currentActiveProjectOrderId) {
     showToast('Pilih order penjualan terlebih dahulu', 'warning');
+    return;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true;
+  if (!isLead && redirect) {
+    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mengubah timeline & milestone project.', 'warning');
     return;
   }
 

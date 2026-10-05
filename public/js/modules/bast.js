@@ -675,7 +675,11 @@ function openCreateBastModal(preselectedProjectId = null) {
         </div>
         <div class="form-group">
           <label class="form-label">Penanggung Jawab UBM (Pihak Pertama) *</label>
-          <input type="text" id="bast-ubm-pic" name="ubmPic" class="form-control" required value="Ir. Budi Santoso">
+          <select id="bast-ubm-pic" name="ubmPic" class="form-control" required>
+            ${(typeof getUserDropdownOptions === 'function')
+                ? getUserDropdownOptions('Ir. Budi Santoso', '-- Pilih PIC UBM --')
+                : `<option value="Ir. Budi Santoso">Ir. Budi Santoso</option>`}
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Masa Garansi Resmi</label>
@@ -733,7 +737,12 @@ function autofillBastFromProject(projectId) {
   if (custInput) custInput.value = p.customerName || '';
 
   const leadInput = document.getElementById('bast-ubm-pic');
-  if (leadInput && p.projectLead) leadInput.value = p.projectLead;
+  if (leadInput && p.projectLead) {
+    if (typeof getUserDropdownOptions === 'function') {
+      leadInput.innerHTML = getUserDropdownOptions(p.projectLead, '-- Pilih PIC UBM --');
+    }
+    leadInput.value = p.projectLead;
+  }
 
   // If order exists, try getting address and items
   if (p.orderId) {

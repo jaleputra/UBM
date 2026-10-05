@@ -1387,6 +1387,16 @@ function openPurchasingModal(prData = null, isClone = false) {
   const statusValue = isEdit ? (prData?.status || 'Pengajuan') : 'Pengajuan';
   const isApproved = !isClone && (statusValue === 'Disetujui' || statusValue === 'Stock' || statusValue === 'Approved');
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  if (roleName === 'Member') {
+    const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(prData?.orderId || null, activeUser) : false;
+    if (!isLead) {
+      showToast('⚠️ Pengajuan Pengadaan Barang (PR) hanya dapat diisi oleh Lead Project yang telah ditugaskan atau Administrator.', 'warning');
+      return;
+    }
+  }
+
   if (isEdit && isApproved) {
     showToast(`⚠️ Request Pengadaan ${prData.id} sudah berstatus Disetujui (Terkunci) sehingga tidak dapat diedit lagi!`, 'warning');
     return;
@@ -1435,7 +1445,11 @@ function openPurchasingModal(prData = null, isClone = false) {
         <div style="display: grid; grid-template-columns: 1.5fr 1.2fr 1fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
             <label class="form-label">Nama Pemohon (Requestor) *</label>
-            <input type="text" name="requestor" class="form-control" placeholder="Nama pemohon / penanggung jawab" required value="${escapeAttr(formRequestor)}">
+            <select name="requestor" class="form-control" required>
+              ${(typeof getUserDropdownOptions === 'function')
+                  ? getUserDropdownOptions(formRequestor, '-- Pilih Pemohon (Akun Terdaftar) --')
+                  : `<option value="${escapeAttr(formRequestor)}">${escapeHtml(formRequestor)}</option>`}
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Departemen / Divisi *</label>
@@ -1710,6 +1724,16 @@ function calculatePurchasingTotals() {
 
 async function submitPurchasing(e, editId = '') {
   e.preventDefault();
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  if (roleName === 'Member') {
+    const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(null, activeUser) : false;
+    if (!isLead) {
+      showToast('⚠️ Pengajuan Pengadaan Barang (PR) hanya dapat disimpan oleh Lead Project yang telah ditugaskan atau Administrator.', 'warning');
+      return;
+    }
+  }
+
   const form = e.target;
   const formData = new FormData(form);
   

@@ -171,3 +171,39 @@ window.addEventListener('keydown', (e) => {
     closeModal('gantt-detail-modal');
   }
 });
+
+/**
+ * Generates <option> HTML list for registered users dropdown
+ * @param {string} selectedValue Current selected value (name, email, or id)
+ * @param {string} placeholder Default empty option label
+ * @param {string} roleFilter Optional role filter
+ * @returns {string} HTML string of <option> tags
+ */
+function getUserDropdownOptions(selectedValue = '', placeholder = '-- Pilih Akun Terdaftar --', roleFilter = null) {
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  let html = `<option value="">${escapeHtml(placeholder)}</option>`;
+  const addedNames = new Set();
+  const selectedStr = typeof selectedValue === 'string' ? selectedValue : (selectedValue?.name || '');
+  const selectedNorm = selectedStr.trim().toLowerCase();
+
+  users.forEach(u => {
+    if (!u || !u.name) return;
+    if (roleFilter && u.role !== roleFilter) return;
+    const isSelected = Boolean(selectedNorm && (
+      u.name.trim().toLowerCase() === selectedNorm || 
+      (u.email && u.email.trim().toLowerCase() === selectedNorm)
+    ));
+    const displayRole = (u.role === 'Lead Project') ? 'Member' : (u.role || 'Member');
+    html += `<option value="${escapeAttr(u.name)}" data-role="${escapeAttr(displayRole)}" data-email="${escapeAttr(u.email || '')}" data-phone="${escapeAttr(u.phone || '')}" ${isSelected ? 'selected' : ''}>${escapeHtml(u.name)}</option>`;
+    addedNames.add(u.name.trim().toLowerCase());
+  });
+
+  // Preserve legacy or custom value if not found in registered users
+  if (selectedStr && selectedStr.trim() !== '' && !addedNames.has(selectedNorm)) {
+    html += `<option value="${escapeAttr(selectedStr.trim())}" selected>${escapeHtml(selectedStr.trim())}</option>`;
+  }
+
+  return html;
+}
+window.getUserDropdownOptions = getUserDropdownOptions;
+

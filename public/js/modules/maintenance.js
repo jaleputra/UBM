@@ -240,7 +240,11 @@ function openMaintenanceModal(projectId) {
       <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px;">
         <div class="form-group">
           <label class="form-label" style="font-weight: 600; font-size: 12px;">Teknisi / PIC Maintenance *</label>
-          <input type="text" name="technicianName" class="form-control" required value="${escapeHtml(p.projectLead || 'Teknisi UBM')}" placeholder="Nama Teknisi Pelaksana">
+          <select name="technicianName" class="form-control" required>
+            ${(typeof getUserDropdownOptions === 'function')
+                ? getUserDropdownOptions(p.projectLead || 'Teknisi UBM', '-- Pilih Teknisi / PIC --')
+                : `<option value="${escapeHtml(p.projectLead || 'Teknisi UBM')}">${escapeHtml(p.projectLead || 'Teknisi UBM')}</option>`}
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label" style="font-weight: 600; font-size: 12px;">Jadwal Perawatan Berikutnya *</label>
