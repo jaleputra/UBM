@@ -142,6 +142,15 @@ function navigateTo(viewName) {
     return;
   }
 
+  // Guard: role permission check
+  if (typeof isViewAllowedForUser === 'function' && !isViewAllowedForUser(viewName)) {
+    if (typeof showToast === 'function') {
+      showToast('Akses dibatasi sesuai wewenang role Anda.', 'warning');
+    }
+    navigateTo('dashboard');
+    return;
+  }
+
   if (state.currentView && state.currentView !== viewName && !['bom-form', 'timeline'].includes(state.currentView)) {
     state.previousMainView = state.currentView;
   }
@@ -250,10 +259,17 @@ async function loadAllData() {
       fetchResource('warranty_claims'),
       fetchResource('maintenance'),
       fetchResource('activity_logs'),
+      fetchResource('users'),
       fetchResource('settings')
     ]);
     if (typeof updateAppFooterCopyright === 'function') {
       updateAppFooterCopyright();
+    }
+    if (typeof populateUsersAssignmentDatalist === 'function') {
+      populateUsersAssignmentDatalist();
+    }
+    if (typeof applyRoleNavigation === 'function') {
+      applyRoleNavigation(typeof getAuthUser === 'function' ? getAuthUser() : null);
     }
     renderCurrentView();
     updateSidebarBadges();
@@ -270,12 +286,46 @@ async function fetchResource(resource) {
     const data = await res.json();
     if (resource === 'settings') {
       state.settings = data;
+    } else if (resource === 'activity_logs') {
+      if (Array.isArray(data) && data.length > 0) {
+        state.activity_logs = data;
+        try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
+      } else {
+        // If server returned empty, verify against local backup
+        try {
+          const backup = JSON.parse(localStorage.getItem('ubm_activity_logs_backup') || '[]');
+          if (Array.isArray(backup) && backup.length > 0) {
+            state.activity_logs = backup;
+            // Background restore to server
+            backup.forEach(b => {
+              fetch('/api/activity_logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(b)
+              }).catch(() => {});
+            });
+          } else {
+            state.activity_logs = [];
+          }
+        } catch (e) {
+          state.activity_logs = [];
+        }
+      }
     } else {
       state[resource] = Array.isArray(data) ? data : [];
     }
     return data;
   } catch (err) {
     console.warn(`[Data Fetch] Gagal mengambil resource ${resource}:`, err.message);
+    if (resource === 'activity_logs') {
+      try {
+        const backup = JSON.parse(localStorage.getItem('ubm_activity_logs_backup') || '[]');
+        if (Array.isArray(backup) && backup.length > 0) {
+          state.activity_logs = backup;
+          return state.activity_logs;
+        }
+      } catch (e) {}
+    }
     if (!state[resource]) state[resource] = [];
     return state[resource];
   }

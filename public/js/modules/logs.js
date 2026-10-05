@@ -15,8 +15,38 @@ let isCalendarDragging = false;
 let dragStartDateStr = null;
 let dragCurrentDateStr = null;
 
+// Storage backup helpers to guarantee data persistence
+function syncLogsToLocalStorage() {
+  try {
+    if (state.activity_logs && Array.isArray(state.activity_logs)) {
+      localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(state.activity_logs));
+    }
+  } catch (e) {}
+}
+
+function restoreLogsFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem('ubm_activity_logs_backup');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 // Initialize Logs Module
 document.addEventListener('DOMContentLoaded', () => {
+  // If state.activity_logs is not yet loaded, try restoring from backup
+  if (!state.activity_logs || state.activity_logs.length === 0) {
+    const backup = restoreLogsFromLocalStorage();
+    if (backup && backup.length > 0) {
+      state.activity_logs = backup;
+      renderLogsView();
+    }
+  }
   initLogFormEvents();
   initCalendarEvents();
 });
@@ -357,14 +387,19 @@ function renderLogStats() {
 function getEffectiveLogStatus(log) {
   if (!log) return 'Terjadwal';
   const rawStatus = (log.status || '').trim();
-  if (rawStatus.toLowerCase() === 'selesai' || rawStatus.toLowerCase() === 'complete') {
+  const lower = rawStatus.toLowerCase();
+
+  // 1. Selesai always takes highest priority
+  if (lower.includes('selesai') || lower.includes('complete') || lower.includes('done') || lower.includes('tuntas')) {
     return 'Selesai';
   }
-  if (rawStatus.toLowerCase() === 'overdue') {
+
+  // 2. Explicit Overdue
+  if (lower === 'overdue') {
     return 'Overdue';
   }
 
-  // Check end date against current date (YYYY-MM-DD)
+  // 3. Check end date against current date (YYYY-MM-DD)
   const endYMD = (log.endDate || log.endTime || log.startDate || log.startTime || '').slice(0, 10);
   const todayYMD = formatYMD(new Date());
 
@@ -372,7 +407,7 @@ function getEffectiveLogStatus(log) {
     return 'Overdue';
   }
 
-  if (rawStatus.toLowerCase().includes('berjalan') || rawStatus.toLowerCase().includes('progress')) {
+  if (lower.includes('berjalan') || lower.includes('progress')) {
     return 'Sedang Berjalan';
   }
 
@@ -649,15 +684,11 @@ function populatePicFilterDropdowns() {
   }
 
   if (datalistPic) {
-    let dlHtml = `
-      <option value="Reza (Tim Produksi)"></option>
-      <option value="Ahmad (Tim QC)"></option>
-      <option value="Bambang S., S.T. (Maintenance)"></option>
-      <option value="Rizaldi Putra, M.Kom. (Ketua UBM)"></option>
-      <option value="Siti Rahma, S.E. (Keuangan)"></option>
-      <option value="Tim Mekanikal"></option>
-      <option value="Tim Elektrikal & IoT"></option>
-    `;
+    let dlHtml = '';
+    const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+    users.forEach(u => {
+      dlHtml += `<option value="${escapeAttr(u.name)} (${escapeAttr(u.role)})">${escapeHtml(u.name)} &bull; ${escapeHtml(u.role)} (${escapeHtml(u.email)})</option>`;
+    });
     pics.forEach(p => {
       dlHtml += `<option value="${escapeAttr(p)}"></option>`;
     });
@@ -727,17 +758,30 @@ async function handleLogFormSubmit(e) {
     return;
   }
 
+  const todayYMD = formatYMD(new Date());
+  let finalStartDate = startDate;
+  let finalEndDate = endDate;
+
+  // Jika status diset ke Sedang Berjalan atau Terjadwal dan tanggal selesai telah lampau:
+  // Otomatis perpanjang tanggal selesai ke hari ini agar tidak otomatis kembali Overdue saat refresh
+  if ((status === 'Sedang Berjalan' || status === 'Terjadwal') && endDate < todayYMD) {
+    finalEndDate = todayYMD;
+    if (finalStartDate > todayYMD) {
+      finalStartDate = todayYMD;
+    }
+  }
+
   // Exact Supabase & REST API schema compatible payload
   const logPayload = {
     projectName,
     task,
     pic,
     category,
-    startDate,
-    endDate,
+    startDate: finalStartDate,
+    endDate: finalEndDate,
     // Backward compatibility for any existing readers
-    startTime: startDate,
-    endTime: endDate,
+    startTime: finalStartDate,
+    endTime: finalEndDate,
     status,
     notes,
     updatedAt: new Date().toISOString()
@@ -765,6 +809,7 @@ async function handleLogFormSubmit(e) {
       if (idx !== -1) {
         state.activity_logs[idx] = updated;
       }
+      syncLogsToLocalStorage();
       showToast('Kegiatan UBM berhasil diperbarui!', 'success');
     } else {
       // CREATE
@@ -779,6 +824,7 @@ async function handleLogFormSubmit(e) {
 
       if (!state.activity_logs) state.activity_logs = [];
       state.activity_logs.unshift(created);
+      syncLogsToLocalStorage();
       showToast('Kegiatan baru UBM berhasil dicatat!', 'success');
     }
 
@@ -880,6 +926,7 @@ async function deleteLog(id) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     state.activity_logs = (state.activity_logs || []).filter(l => l.id !== id);
+    syncLogsToLocalStorage();
     showToast(`Kegiatan #${id} berhasil dihapus`, 'success');
 
     if (currentEditingLogId === id) {
@@ -938,7 +985,7 @@ function renderLogsTable() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+        <td colspan="9" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
           <i data-lucide="clipboard-x" style="width: 40px; height: 40px; stroke-width: 1.5; margin-bottom: 8px; color: #cbd5e1;"></i>
           <p style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">Tidak ada catatan kegiatan UBM</p>
           <p style="font-size: 12px; color: var(--text-dim);">Silakan klik tanggal pada kalender untuk mencatat kegiatan baru.</p>
@@ -982,10 +1029,48 @@ function renderLogsTable() {
     // Category Badge
     const categoryBadge = log.category ? `<span class="badge badge-info" style="font-size: 10px; margin-left: 6px;">${escapeHtml(log.category)}</span>` : '';
 
+    // Laporan Column Formatting
+    let reportCellHtml = '';
+    const hasReport = log.report && (log.report.description || log.report.link);
+    if (hasReport) {
+      const reportDesc = (log.report.description || '').trim();
+      const reportLink = (log.report.link || '').trim();
+      const cleanLink = reportLink.startsWith('http') ? reportLink : `https://${reportLink}`;
+
+      reportCellHtml = `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          ${reportDesc ? `
+            <div style="font-size: 12px; color: #1e293b; max-height: 44px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${escapeAttr(reportDesc)}">
+              ${escapeHtml(reportDesc)}
+            </div>
+          ` : ''}
+          ${reportLink ? `
+            <div onclick="event.stopPropagation()">
+              <a href="${escapeAttr(cleanLink)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size: 10.5px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; color: #2563eb; border-color: #93c5fd; background: #eff6ff; max-width: 100%; border-radius: 4px;" title="${escapeAttr(reportLink)}">
+                <i data-lucide="external-link" style="width: 11px; height: 11px; flex-shrink: 0;"></i>
+                <span class="truncate" style="max-width: 130px;">Buka Link Laporan</span>
+              </a>
+            </div>
+          ` : ''}
+          <div style="font-size: 10px; color: #16a34a; font-weight: 600; display: flex; align-items: center; gap: 3px;">
+            <i data-lucide="check-circle-2" style="width: 10px; height: 10px;"></i>
+            <span>Laporan Tersedia</span>
+          </div>
+        </div>
+      `;
+    } else {
+      reportCellHtml = `
+        <span style="color: var(--text-dim); font-style: italic; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;">
+          <i data-lucide="minus-circle" style="width: 12px; height: 12px; color: #cbd5e1;"></i>
+          belum ada laporan
+        </span>
+      `;
+    }
+
     return `
-      <tr class="clickable-log-row" onclick="if (!event.target.closest('.table-actions, select, button, a, input')) openLogDetailModal('${log.id}')" title="Klik baris untuk melihat detail kegiatan">
+      <tr class="clickable-log-row" onclick="if (!event.target.closest('.table-actions, select, button, a, input')) openLogDetailModal('${log.id}')" title="Klik baris untuk melihat detail kegiatan dan laporan">
         <td style="font-weight: 600; color: var(--text-muted); font-size: 11px; width: 40px; text-align: center;">${index + 1}</td>
-        <td style="width: 170px;">
+        <td style="width: 160px;">
           ${log.projectName ? `
             <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #3730a3; font-size: 12.5px;">
               <i data-lucide="folder" style="width: 13px; height: 13px; color: #4f46e5; flex-shrink: 0;"></i>
@@ -995,30 +1080,33 @@ function renderLogsTable() {
             <span style="color: var(--text-dim); font-size: 11.5px; font-style: italic;">- Umum -</span>
           `}
         </td>
-        <td style="width: 240px;">
+        <td style="width: 220px;">
           <div style="font-weight: 600; color: var(--text-main); font-size: 13px;">${escapeHtml(log.task)}</div>
           <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
             <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);">${escapeHtml(log.id)}</span>
             ${categoryBadge}
           </div>
         </td>
-        <td style="width: 140px;">
+        <td style="width: 130px;">
           <div style="display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-body); font-size: 12.5px;">
             <i data-lucide="user" style="width: 13px; height: 13px; color: var(--primary-accent); flex-shrink: 0;"></i>
             <span>${escapeHtml(log.pic || '-')}</span>
           </div>
         </td>
-        <td style="width: 180px;">
+        <td style="width: 160px;">
           ${dateRangeFormatted}
           ${durationFormatted}
         </td>
-        <td style="width: 145px; text-align: center;" onclick="event.stopPropagation()">
+        <td style="width: 135px; text-align: center;" onclick="event.stopPropagation()">
           ${renderLogStatusSelectHtml(log)}
         </td>
-        <td style="max-width: 240px; color: var(--text-body); font-size: 12px;">
+        <td style="min-width: 160px; max-width: 200px; color: var(--text-body); font-size: 12px;">
           <div style="max-height: 48px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;" title="${escapeAttr(log.notes || '-')}">
             ${escapeHtml(log.notes || '-')}
           </div>
+        </td>
+        <td style="min-width: 180px; max-width: 240px;">
+          ${reportCellHtml}
         </td>
         <td style="width: 80px; text-align: right;" onclick="event.stopPropagation()">
           <div class="table-actions" style="justify-content: flex-end;">
@@ -1123,6 +1211,7 @@ async function updateLogStatusDirect(logId, newStatus, selectEl) {
     if (idx !== -1) {
       state.activity_logs[idx] = { ...log, ...updated };
     }
+    syncLogsToLocalStorage();
 
     const toastMsg = dateAutoExtended
       ? `Status kegiatan #${logId} diubah ke "${newStatus}" (jadwal diperpanjang ke hari ini)`
@@ -1284,6 +1373,16 @@ function renderLogSummaryModalContent(logsList) {
     const eRaw = (log.endDate || log.endTime || sRaw).slice(0, 10);
     const days = calculateDaysBetween(sRaw, eRaw);
 
+    let dateText = '-';
+    if (sRaw) {
+      const dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
+      const sDate = new Date(sRaw + 'T00:00:00');
+      const eDate = new Date(eRaw + 'T00:00:00');
+      const sStr = !isNaN(sDate.getTime()) ? sDate.toLocaleDateString('id-ID', dateOpts) : sRaw;
+      const eStr = !isNaN(eDate.getTime()) ? eDate.toLocaleDateString('id-ID', dateOpts) : eRaw;
+      dateText = (sRaw === eRaw || !eRaw) ? sStr : `${sStr} s/d ${eStr}`;
+    }
+
     html += `
       <tr class="clickable-log-row" onclick="if (!event.target.closest('.table-actions, select, button, a, input')) { closeModal('modal-log-summary-list'); openLogDetailModal('${log.id}'); }" title="Klik untuk membuka detail lengkap kegiatan">
         <td style="text-align: center; color: var(--text-muted); font-size: 11px; font-weight: 600;">${idx + 1}</td>
@@ -1440,6 +1539,61 @@ function openLogDetailModal(id) {
         </div>
         ${formatLogNotesHtml(log.notes)}
       </div>
+
+      <!-- SECTION: LAPORAN HASIL TASK / KEGIATAN -->
+      <div style="border: 1px solid #bfdbfe; border-radius: var(--radius-sm); background: #f0fdf4; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div style="font-size: 12px; font-weight: 700; color: #166534; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="file-check-2" style="width: 16px; height: 16px; color: #16a34a;"></i>
+            <span>Laporan Hasil Task / Kegiatan</span>
+          </div>
+          <span id="log-detail-report-badge">
+            ${log.report && (log.report.description || log.report.link) ? '<span class="badge badge-success" style="font-size: 10.5px; padding: 3px 8px;">✓ Laporan Tersedia</span>' : '<span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10.5px; padding: 3px 8px;">Belum Ada Laporan</span>'}
+          </span>
+        </div>
+
+        <div style="font-size: 11.5px; color: #4b5563; margin-bottom: 10px;">
+          Input hasil capaian dari task ini beserta tautan link dokumentasi atau file pendukung:
+        </div>
+
+        <form id="form-log-task-report-${log.id}" onsubmit="event.preventDefault(); saveLogTaskReport('${log.id}');" style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- Deskripsi Hasil Task -->
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" style="font-size: 11.5px; font-weight: 700; color: #1f2937; margin-bottom: 4px;">
+              Deskripsi / Catatan Hasil Pengerjaan:
+            </label>
+            <textarea id="log-report-desc-${log.id}" class="form-control" rows="3" placeholder="Tuliskan hasil capaian pengerjaan task, kendala, atau kesimpulan kegiatan..." style="font-size: 12px; resize: vertical; background: #ffffff;">${escapeHtml(log.report?.description || '')}</textarea>
+          </div>
+
+          <!-- Link Hasil / Dokumentasi -->
+          <div class="form-group" style="margin: 0;">
+            <label class="form-label" style="font-size: 11.5px; font-weight: 700; color: #1f2937; margin-bottom: 4px;">
+              Link Hasil / Bukti Dukung (Google Drive, GitHub, Figma, PDF, URL, dll.):
+            </label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div style="position: relative; flex: 1;">
+                <input type="text" id="log-report-link-${log.id}" class="form-control" placeholder="https://drive.google.com/... atau https://github.com/..." value="${escapeAttr(log.report?.link || '')}" style="font-size: 12px; padding-left: 28px; background: #ffffff;">
+                <i data-lucide="link" style="position: absolute; left: 8px; top: 9px; width: 14px; height: 14px; color: #94a3b8;"></i>
+              </div>
+              ${log.report?.link ? `
+                <a href="${escapeAttr(log.report.link.startsWith('http') ? log.report.link : 'https://' + log.report.link)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size: 11px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; white-space: nowrap; color: #2563eb; border-color: #93c5fd; background: #ffffff;" title="Buka Link di Tab Baru">
+                  <i data-lucide="external-link" style="width: 12px; height: 12px;"></i> Buka Link
+                </a>
+              ` : ''}
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px;">
+            <div style="font-size: 11px; color: #64748b;">
+              ${log.report?.updatedAt ? `<i data-lucide="clock" style="width: 11px; height: 11px; vertical-align: middle;"></i> Disimpan: ${new Date(log.report.updatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'Belum pernah disimpan'}
+            </div>
+            <button type="submit" id="btn-save-log-report-${log.id}" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 6px 14px; font-weight: 700; background: #16a34a; border-color: #16a34a; display: inline-flex; align-items: center; gap: 6px;">
+              <i data-lucide="save" style="width: 13px; height: 13px;"></i>
+              <span>Simpan Laporan</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   `;
 
@@ -1454,6 +1608,70 @@ function openLogDetailModal(id) {
   openModal('modal-log-detail');
   if (window.lucide) lucide.createIcons();
 }
+
+// Handler to save task report directly from Detail modal
+async function saveLogTaskReport(id) {
+  const log = (state.activity_logs || []).find(l => l.id === id);
+  if (!log) {
+    showToast('Data kegiatan tidak ditemukan', 'error');
+    return;
+  }
+
+  const descEl = document.getElementById(`log-report-desc-${id}`);
+  const linkEl = document.getElementById(`log-report-link-${id}`);
+  const btnEl = document.getElementById(`btn-save-log-report-${id}`);
+
+  const description = descEl ? descEl.value.trim() : '';
+  let link = linkEl ? linkEl.value.trim() : '';
+  if (link && !/^https?:\/\//i.test(link)) {
+    link = `https://${link}`;
+  }
+
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = `<i data-lucide="loader-2" class="spin" style="width: 13px; height: 13px;"></i> Menyimpan...`;
+  }
+
+  const reportData = {
+    description,
+    link,
+    updatedAt: new Date().toISOString()
+  };
+
+  log.report = reportData;
+  log.updatedAt = new Date().toISOString();
+
+  try {
+    const res = await fetch(`/api/activity_logs/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const updated = await res.json();
+
+    const idx = (state.activity_logs || []).findIndex(l => l.id === id);
+    if (idx !== -1) {
+      state.activity_logs[idx] = { ...log, ...updated };
+    }
+    syncLogsToLocalStorage();
+    showToast('Laporan hasil task berhasil disimpan!', 'success');
+
+    // Refresh modal and table
+    openLogDetailModal(id);
+    renderLogsTable();
+  } catch (err) {
+    console.error('Error saving log task report:', err);
+    showToast('Gagal menyimpan laporan: ' + err.message, 'error');
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = `<i data-lucide="save" style="width: 13px; height: 13px;"></i> <span>Simpan Laporan</span>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+window.saveLogTaskReport = saveLogTaskReport;
 
 // Format raw notes into neat pointer/numbered structured points
 function formatLogNotesHtml(rawNotes) {

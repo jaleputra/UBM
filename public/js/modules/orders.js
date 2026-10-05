@@ -188,18 +188,29 @@ function renderOrdersTable() {
         </div>
       `;
     } else {
-      // Masih berstatus Pengajuan: dapat dipilih untuk diubah menjadi Accepted
-      statusSelectHtml = `
-        <div style="display: flex; justify-content: center; width: 100%;" onclick="event.stopPropagation()">
-          <select class="order-status-select status-pengajuan"
-                  onclick="event.stopPropagation()"
-                  onchange="updateOrderStatusDirect('${order.id}', this.value)"
-                  title="Klik untuk menyetujui / mengubah status menjadi Accepted">
-            <option value="Pengajuan" selected>🟡 Pengajuan</option>
-            <option value="Accepted">🟢 Accepted</option>
-          </select>
-        </div>
-      `;
+      // Masih berstatus Pengajuan: hanya Ketua UBM dan Administrator yang dapat menyetujui order
+      const canApprove = (typeof hasRolePermission === 'function') ? hasRolePermission('canApproveOrder') : true;
+      if (!canApprove) {
+        statusSelectHtml = `
+          <div style="display: flex; justify-content: center; width: 100%;" onclick="event.stopPropagation()">
+            <span class="badge" style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; cursor: default;" title="Menunggu persetujuan Ketua UBM / Administrator">
+              🟡 Pengajuan
+            </span>
+          </div>
+        `;
+      } else {
+        statusSelectHtml = `
+          <div style="display: flex; justify-content: center; width: 100%;" onclick="event.stopPropagation()">
+            <select class="order-status-select status-pengajuan"
+                    onclick="event.stopPropagation()"
+                    onchange="updateOrderStatusDirect('${order.id}', this.value)"
+                    title="Persetujuan Project: Klik untuk menyetujui / mengubah status menjadi Accepted">
+              <option value="Pengajuan" selected>🟡 Pengajuan</option>
+              <option value="Accepted">🟢 Setujui (Accepted)</option>
+            </select>
+          </div>
+        `;
+      }
     }
 
     return `
@@ -239,6 +250,13 @@ function renderOrdersTable() {
 // 1 OPSI DARI PENGAJUAN MENJADI ACCEPTED PADA TABEL (DROPDOWN)
 // -------------------------------------------------------------
 async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
+  // Permission Guard: Only Administrator and Ketua UBM can approve project orders
+  if (typeof hasRolePermission === 'function' && !hasRolePermission('canApproveOrder')) {
+    showToast('⚠️ Hanya Ketua UBM dan Administrator yang memiliki wewenang memberikan persetujuan (Approval) order penjualan.', 'warning');
+    renderOrdersTable();
+    return;
+  }
+
   const order = (state.orders || []).find(o => o.id === orderId);
   if (!order) return;
 

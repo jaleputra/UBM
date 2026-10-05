@@ -1,102 +1,5 @@
 {
-  "quotations": [
-    {
-      "id": "QUO-2026-1308-217",
-      "quotationType": "produk",
-      "customerName": "Minori",
-      "projectName": "Smart Door",
-      "picName": "Reza",
-      "customerPhone": "84357097",
-      "customerEmail": "a@gmail",
-      "customerAddress": "Cikarang",
-      "quotationDate": "2026-09-25",
-      "validUntil": "2026-10-09",
-      "status": "Accepted",
-      "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
-      "warrantyFee": 1050000,
-      "mainItemsTotal": 20000000,
-      "servicesTotal": 1000000,
-      "itemsTotal": 21000000,
-      "leadTime": "14 hari kerja setelah PO resmi diterima",
-      "paymentTerms": "DP 50% saat PO, Pelunasan setelah serah terima / BAST",
-      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "items": [
-        {
-          "itemName": "Smart door",
-          "sku": "001",
-          "warranty": "12 Bulan",
-          "qty": 10,
-          "unit": "Unit",
-          "unitPrice": 2000000,
-          "total": 20000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 10,
-          "unit": "Lot",
-          "unitPrice": 100000,
-          "total": 1000000
-        }
-      ],
-      "subtotal": 22050000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 2425500,
-      "grandTotal": 24475500,
-      "createdAt": "2026-09-25T03:27:41.310Z",
-      "updatedAt": "2026-09-25T03:28:47.417Z"
-    }
-  ],
-  "orders": [
-    {
-      "id": "ORD-2026-9125-446",
-      "quotationId": "QUO-2026-1308-217",
-      "orderType": "produk",
-      "quotationType": "produk",
-      "customerName": "Minori",
-      "projectName": "Smart Door",
-      "customerPhone": "84357097",
-      "customerAddress": "Cikarang",
-      "orderDate": "2026-09-25",
-      "dueDate": "2026-10-09",
-      "status": "Pengajuan",
-      "notes": "Dikonversi dari Surat Penawaran Harga (PRODUK) #QUO-2026-1308-217.\nKetentuan Garansi: Garansi resmi 12 bulan untuk suku cadang dan servis.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\n[KETERANGAN JASA & INSTALASI (NON-BOM)]:\n1. Installasi (10 Lot @ Rp 100.000) = Rp 1.000.000\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "poDocument": null,
-      "poFileUrl": "",
-      "poFileName": "",
-      "items": [
-        {
-          "itemName": "Smart door",
-          "sku": "001",
-          "qty": 10,
-          "unit": "Unit",
-          "unitPrice": 2000000,
-          "total": 20000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 10,
-          "unit": "Lot",
-          "unitPrice": 100000,
-          "total": 1000000
-        }
-      ],
-      "mainItemsTotal": 20000000,
-      "servicesTotal": 1000000,
-      "itemsTotal": 21000000,
-      "warrantyFee": 1050000,
-      "subtotal": 22050000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 2425500,
-      "grandTotal": 24475500,
-      "createdAt": "2026-09-25T03:27:49.126Z"
-    }
-  ],
+  "orders": [],
   "po": [
     {
       "id": "PO-2026-001",
@@ -205,657 +108,124 @@
   "purchasing": [],
   "bom": [],
   "delivery": [],
-  "projects": [
-    {
-      "id": "PRJ-2026-7445-316",
-      "orderId": "ORD-2026-8286-667",
-      "projectName": "SEO",
-      "customerName": "PT Minori",
-      "projectLead": "Gading",
-      "department": "IT",
-      "team": [
-        {
-          "name": "Rizal",
-          "role": "SEO",
-          "phone": ""
-        },
-        {
-          "name": "Angga",
-          "role": "SEO",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-17T07:44:37.445Z",
-      "updatedAt": "2026-09-23T09:58:02.024Z"
-    },
-    {
-      "id": "PRJ-2026-2171-325",
-      "orderId": "ORD-2026-0332-932",
-      "projectName": "Smart Door",
-      "customerName": "PT Nagomi",
-      "projectLead": "TIO",
-      "department": "IT",
-      "team": [
-        {
-          "name": "Rangga",
-          "role": "Design",
-          "phone": ""
-        },
-        {
-          "name": "Gading",
-          "role": "Programmer",
-          "phone": ""
-        },
-        {
-          "name": "Satria",
-          "role": "Admin",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-16T08:11:02.172Z",
-      "milestones": [
-        {
-          "id": "ms-1789547611244",
-          "title": "Design",
-          "startDate": "2026-09-16",
-          "dueDate": "2026-09-18",
-          "pic": "Rangga",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1789547636488",
-          "title": "Analisis",
-          "startDate": "2026-09-16",
-          "dueDate": "2026-09-18",
-          "pic": "Satria",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1789547658606",
-          "title": "Programming",
-          "startDate": "2026-09-18",
-          "dueDate": "2026-09-30",
-          "pic": "Gading",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        }
-      ],
-      "status": "Planning",
-      "startDate": "2026-09-16",
-      "dueDate": "2026-09-30",
-      "notes": "",
-      "progressPercent": 100,
-      "updatedAt": "2026-09-16T08:53:05.838Z",
-      "actualUsageReport": {
-        "id": "REP-ORD-2026-0332-932-5433",
-        "projectId": "PRJ-2026-2171-325",
-        "orderId": "ORD-2026-0332-932",
-        "projectName": "Smart Door",
-        "customerName": "PT Nagomi",
-        "reporterName": "TIO",
-        "reportDate": "2026-09-16",
-        "notes": "Laporan aktual penggunaan bahan & material project Smart Door.",
-        "items": [
-          {
-            "itemName": "PCB",
-            "unit": "pcs",
-            "unitCost": 500000,
-            "planQty": 5,
-            "actualQty": 4,
-            "remainingQty": 1,
-            "notes": ""
-          },
-          {
-            "itemName": "Kabel",
-            "unit": "meter",
-            "unitCost": 12500,
-            "planQty": 5,
-            "actualQty": 5,
-            "remainingQty": 0,
-            "notes": ""
-          },
-          {
-            "itemName": "PLA",
-            "unit": "roll",
-            "unitCost": 150000,
-            "planQty": 3,
-            "actualQty": 3,
-            "remainingQty": 0,
-            "notes": ""
-          },
-          {
-            "itemName": "ESP32",
-            "unit": "pcs",
-            "unitCost": 35000,
-            "planQty": 2,
-            "actualQty": 2,
-            "remainingQty": 0,
-            "notes": ""
-          }
-        ],
-        "totalItems": 4,
-        "returnedItemsCount": 1,
-        "totalReturnedUnits": 1,
-        "status": "Completed",
-        "createdAt": "2026-09-16T08:53:05.433Z",
-        "updatedAt": "2026-09-16T08:53:05.433Z"
-      }
-    },
-    {
-      "id": "PRJ-2026-3744-928",
-      "orderId": "ORD-2026-1704-723",
-      "projectName": "Smart Door",
-      "customerName": "PT Nagomi",
-      "projectLead": "REZA",
-      "department": "IT",
-      "team": [
-        {
-          "name": "Gading",
-          "role": "Design",
-          "phone": ""
-        },
-        {
-          "name": "Anis",
-          "role": "Analisis",
-          "phone": ""
-        },
-        {
-          "name": "Usman",
-          "role": "Programming",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-16T06:33:23.744Z"
-    },
-    {
-      "id": "PRJ-2026-5555-526",
-      "orderId": "ORD-2026-0552-926",
-      "projectName": "Smart Door",
-      "customerName": "PT Nagomi",
-      "projectLead": "EKO",
-      "department": "Mekatronika",
-      "team": [
-        {
-          "name": "Venca",
-          "role": "Design",
-          "phone": ""
-        },
-        {
-          "name": "Asep",
-          "role": "Programming",
-          "phone": ""
-        },
-        {
-          "name": "Gading",
-          "role": "Programming",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-16T06:13:15.555Z"
-    },
-    {
-      "id": "PRJ-2026-6640-467",
-      "orderId": "ORD-2026-1993-650",
-      "projectName": "conveyor",
-      "customerName": "japindo",
-      "projectLead": "Eko",
-      "department": "Engineering",
-      "team": [
-        {
-          "name": "Venca",
-          "role": "design",
-          "phone": ""
-        },
-        {
-          "name": "asep",
-          "role": "las",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-08T13:00:56.641Z",
-      "milestones": [
-        {
-          "id": "ms-1788872599086",
-          "title": "tahap 1",
-          "startDate": "2026-09-09",
-          "dueDate": "2026-09-15",
-          "pic": "Eko",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788872618899",
-          "title": "tahap 2",
-          "startDate": "2026-09-08",
-          "dueDate": "2026-09-22",
-          "pic": "Venca",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788872631966",
-          "title": "tahap 3",
-          "startDate": "2026-09-23",
-          "dueDate": "2026-09-30",
-          "pic": "asep",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        }
-      ],
-      "status": "Planning",
-      "startDate": "2026-09-08",
-      "dueDate": "2026-09-22",
-      "notes": "",
-      "progressPercent": 100,
-      "updatedAt": "2026-09-08T13:07:18.682Z"
-    },
-    {
-      "id": "PRJ-2026-9160-135",
-      "orderId": "ORD-2026-0798-368",
-      "projectName": "conveyor",
-      "customerName": "japindo",
-      "projectLead": "eko",
-      "department": "mekatronika",
-      "team": [
-        {
-          "name": "venca",
-          "role": "wiring",
-          "phone": ""
-        },
-        {
-          "name": "asep",
-          "role": "las",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-08T12:48:59.160Z"
-    },
-    {
-      "id": "PRJ-2026-9086-695",
-      "orderId": "ORD-2026-6613-314",
-      "projectName": "Smart Water",
-      "customerName": "PT Nagomi",
-      "projectLead": "Lambok",
-      "department": "Bisnis Digital",
-      "team": [
-        {
-          "name": "Chowal",
-          "role": "Manajemen",
-          "phone": ""
-        },
-        {
-          "name": "Gery",
-          "role": "Manajemen",
-          "phone": ""
-        },
-        {
-          "name": "Lambok",
-          "role": "Bisnis",
-          "phone": ""
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-08T08:01:59.086Z",
-      "milestones": [
-        {
-          "id": "ms-1788858904836",
-          "title": "Perencanaan 1",
-          "startDate": "2026-09-08",
-          "dueDate": "2026-09-10",
-          "pic": "Chowal",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788858924034",
-          "title": "Perencanaan 2",
-          "startDate": "2026-09-11",
-          "dueDate": "2026-09-14",
-          "pic": "Gery",
-          "status": "Pending",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788858937502",
-          "title": "Perencanaan 3",
-          "startDate": "2026-09-15",
-          "dueDate": "2026-09-22",
-          "pic": "Lambok",
-          "status": "Pending",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        }
-      ],
-      "status": "Planning",
-      "startDate": "2026-09-08",
-      "dueDate": "2026-09-22",
-      "notes": "",
-      "progressPercent": 33,
-      "updatedAt": "2026-09-08T09:16:15.594Z"
-    },
-    {
-      "id": "PRJ-2026-2269-109",
-      "orderId": "ORD-2026-8214-528",
-      "projectName": "Smart Door",
-      "customerName": "PT Minori",
-      "projectLead": "sdfs",
-      "department": "Engineering",
-      "team": [],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-08T07:15:22.269Z",
-      "updatedAt": "2026-09-08T07:15:36.518Z"
-    },
-    {
-      "id": "PRJ-2026-2849-615",
-      "orderId": "ORD-2026-5521-286",
-      "projectName": "Smart Door",
-      "customerName": "PT Minori",
-      "projectLead": "Reza",
-      "department": "IT",
-      "team": [
-        {
-          "name": "Rangga",
-          "role": "Design",
-          "phone": "09846098054"
-        },
-        {
-          "name": "Anis",
-          "role": "Perancangan",
-          "phone": "0984509830"
-        },
-        {
-          "name": "Usman",
-          "role": "Programming",
-          "phone": "0984560948"
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-09-07T10:01:22.850Z",
-      "milestones": [
-        {
-          "id": "ms-1788781779788",
-          "title": "Perancangan",
-          "startDate": "2026-09-07",
-          "dueDate": "2026-09-08",
-          "pic": "Rangga",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788782214809",
-          "title": "Analisis",
-          "startDate": "2026-09-07",
-          "dueDate": "2026-09-21",
-          "pic": "Anis",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        },
-        {
-          "id": "ms-1788782229040",
-          "title": "Programming",
-          "startDate": "2026-09-07",
-          "dueDate": "2026-09-21",
-          "pic": "Usman",
-          "status": "Completed",
-          "subtasks": [],
-          "report": {
-            "description": "",
-            "reportUrl": "",
-            "images": []
-          },
-          "comments": []
-        }
-      ],
-      "status": "In Progress",
-      "startDate": "2026-09-07",
-      "dueDate": "2026-09-21",
-      "notes": "",
-      "progressPercent": 100,
-      "updatedAt": "2026-09-08T09:31:51.068Z",
-      "actualUsageReport": {
-        "id": "REP-ORD-2026-5521-286-1016",
-        "projectId": "PRJ-2026-2849-615",
-        "orderId": "ORD-2026-5521-286",
-        "projectName": "Smart Door",
-        "customerName": "PT Minori",
-        "reporterName": "Reza",
-        "reportDate": "2026-09-08",
-        "notes": "Laporan aktual penggunaan bahan & material project Smart Door.",
-        "items": [
-          {
-            "itemName": "PCB",
-            "unit": "Pcs",
-            "unitCost": 1000000,
-            "planQty": 1,
-            "actualQty": 1,
-            "remainingQty": 0,
-            "notes": ""
-          },
-          {
-            "itemName": "Kabel",
-            "unit": "Meter",
-            "unitCost": 12000,
-            "planQty": 1,
-            "actualQty": 1,
-            "remainingQty": 0,
-            "notes": ""
-          },
-          {
-            "itemName": "PLA",
-            "unit": "Roll",
-            "unitCost": 130000,
-            "planQty": 1,
-            "actualQty": 1,
-            "remainingQty": 0,
-            "notes": ""
-          },
-          {
-            "itemName": "PCB",
-            "unit": "Pcs",
-            "unitCost": 1000000,
-            "planQty": 2,
-            "actualQty": 1,
-            "remainingQty": 1,
-            "notes": ""
-          }
-        ],
-        "totalItems": 4,
-        "returnedItemsCount": 1,
-        "totalReturnedUnits": 1,
-        "status": "Completed",
-        "createdAt": "2026-09-08T09:31:51.016Z",
-        "updatedAt": "2026-09-08T09:31:51.016Z"
-      }
-    }
-  ],
+  "projects": [],
+  "quotations": [],
   "bast": [],
-  "project_reports": [
-    {
-      "id": "REP-ORD-2026-0332-932-5433",
-      "projectId": "PRJ-2026-2171-325",
-      "orderId": "ORD-2026-0332-932",
-      "projectName": "Smart Door",
-      "customerName": "PT Nagomi",
-      "reporterName": "TIO",
-      "reportDate": "2026-09-16",
-      "notes": "Laporan aktual penggunaan bahan & material project Smart Door.",
-      "items": [
-        {
-          "itemName": "PCB",
-          "unit": "pcs",
-          "unitCost": 500000,
-          "planQty": 5,
-          "actualQty": 4,
-          "remainingQty": 1,
-          "notes": ""
-        },
-        {
-          "itemName": "Kabel",
-          "unit": "meter",
-          "unitCost": 12500,
-          "planQty": 5,
-          "actualQty": 5,
-          "remainingQty": 0,
-          "notes": ""
-        },
-        {
-          "itemName": "PLA",
-          "unit": "roll",
-          "unitCost": 150000,
-          "planQty": 3,
-          "actualQty": 3,
-          "remainingQty": 0,
-          "notes": ""
-        },
-        {
-          "itemName": "ESP32",
-          "unit": "pcs",
-          "unitCost": 35000,
-          "planQty": 2,
-          "actualQty": 2,
-          "remainingQty": 0,
-          "notes": ""
-        }
-      ],
-      "totalItems": 4,
-      "returnedItemsCount": 1,
-      "totalReturnedUnits": 1,
-      "status": "Completed",
-      "createdAt": "2026-09-16T08:53:05.505Z",
-      "updatedAt": "2026-09-16T08:53:05.433Z"
-    },
-    {
-      "id": "REP-ORD-2026-5521-286-1016",
-      "projectId": "PRJ-2026-2849-615",
-      "orderId": "ORD-2026-5521-286",
-      "projectName": "Smart Door",
-      "customerName": "PT Minori",
-      "reporterName": "Reza",
-      "reportDate": "2026-09-08",
-      "notes": "Laporan aktual penggunaan bahan & material project Smart Door.",
-      "items": [
-        {
-          "itemName": "PCB",
-          "unit": "Pcs",
-          "unitCost": 1000000,
-          "planQty": 1,
-          "actualQty": 1,
-          "remainingQty": 0,
-          "notes": ""
-        },
-        {
-          "itemName": "Kabel",
-          "unit": "Meter",
-          "unitCost": 12000,
-          "planQty": 1,
-          "actualQty": 1,
-          "remainingQty": 0,
-          "notes": ""
-        },
-        {
-          "itemName": "PLA",
-          "unit": "Roll",
-          "unitCost": 130000,
-          "planQty": 1,
-          "actualQty": 1,
-          "remainingQty": 0,
-          "notes": ""
-        },
-        {
-          "itemName": "PCB",
-          "unit": "Pcs",
-          "unitCost": 1000000,
-          "planQty": 2,
-          "actualQty": 1,
-          "remainingQty": 1,
-          "notes": ""
-        }
-      ],
-      "totalItems": 4,
-      "returnedItemsCount": 1,
-      "totalReturnedUnits": 1,
-      "status": "Completed",
-      "createdAt": "2026-09-08T09:31:51.016Z",
-      "updatedAt": "2026-09-08T09:31:51.016Z"
-    }
-  ],
+  "project_reports": [],
   "maintenance": [],
   "service_tickets": [],
   "warranty_claims": [],
   "activity_logs": [
+    {
+      "id": "LOG-2026-2130-362",
+      "projectName": "UBM",
+      "task": "Buat template kerjasama Ayumi",
+      "pic": "Chowal",
+      "category": "Operasional",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-06",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-06",
+      "status": "Sedang Berjalan",
+      "notes": "Buat template bagi hasil Ayumi",
+      "updatedAt": "2026-10-05T02:54:22.119Z",
+      "createdAt": "2026-10-05T02:54:22.130Z"
+    },
+    {
+      "id": "LOG-2026-5703-151",
+      "projectName": "UBM",
+      "task": "Proposal Kerjasama",
+      "pic": "Chowal",
+      "category": "Operasional",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-05",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-05",
+      "status": "Sedang Berjalan",
+      "notes": "Buat proposal kerjasama UBM dengan eksternal untuk vending machine",
+      "updatedAt": "2026-10-05T02:53:45.695Z",
+      "createdAt": "2026-10-05T02:53:45.703Z"
+    },
+    {
+      "id": "LOG-2026-7309-457",
+      "projectName": "UBM",
+      "task": "Prioritas Project",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Produksi",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-05",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-05",
+      "status": "Sedang Berjalan",
+      "notes": "Buat prioritas project untuk diimplementasikan",
+      "updatedAt": "2026-10-05T02:53:17.295Z",
+      "createdAt": "2026-10-05T02:53:17.309Z"
+    },
+    {
+      "id": "LOG-2026-3318-131",
+      "projectName": "UBM",
+      "task": "Revisi Compro",
+      "pic": "Gading",
+      "category": "Operasional",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-05",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-05",
+      "status": "Sedang Berjalan",
+      "notes": "Revisi Compro, buat slide presentasi",
+      "updatedAt": "2026-10-05T02:52:33.308Z",
+      "createdAt": "2026-10-05T02:52:33.318Z"
+    },
+    {
+      "id": "LOG-2026-3241-713",
+      "projectName": "Smart Laundry",
+      "task": "Aplikasi Smart laundry",
+      "pic": "Lambok Rommy Sulaeman",
+      "category": "Produksi",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-09",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-09",
+      "status": "Sedang Berjalan",
+      "notes": "Keuangan Xendit disatukan, legalitas untuk membuat sub income di Xendit supaya mengetahui asal uang masuk",
+      "updatedAt": "2026-10-05T02:51:53.191Z",
+      "createdAt": "2026-10-05T02:51:53.241Z"
+    },
+    {
+      "id": "LOG-2026-1347-691",
+      "projectName": "Smart Laundry",
+      "task": "Perbaikan Smart Laundry di Nagomi",
+      "pic": "Bintang",
+      "category": "Maintenance",
+      "startDate": "2026-10-05",
+      "endDate": "2026-10-05",
+      "startTime": "2026-10-05",
+      "endTime": "2026-10-05",
+      "status": "Sedang Berjalan",
+      "notes": "Perbaikan Smart Laundry di Nagomi. menyatukan dashboard Nagomi dan Minori",
+      "updatedAt": "2026-10-05T02:50:21.338Z",
+      "createdAt": "2026-10-05T02:50:21.347Z"
+    },
+    {
+      "id": "LOG-2026-0079-623",
+      "projectName": "UBM",
+      "task": "Kunjungan kerjasama",
+      "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
+      "category": "Operasional",
+      "startDate": "2026-09-30",
+      "endDate": "2026-09-30",
+      "startTime": "2026-09-30",
+      "endTime": "2026-09-30",
+      "status": "Selesai",
+      "notes": "Kunjungan ke Duta Laserindo Metal dan Sinar Sakti Metalindo",
+      "updatedAt": "2026-10-05T03:17:33.511Z",
+      "createdAt": "2026-10-05T02:49:00.079Z",
+      "report": {
+        "description": "Kerjasama sudah dilakukan, selanjutnya akan mengirimkan proposal kerjasama dan company profile",
+        "link": "",
+        "updatedAt": "2026-10-05T03:17:33.292Z"
+      }
+    },
     {
       "id": "LOG-2026-0674-942",
       "projectName": "UBM",
@@ -866,9 +236,9 @@
       "endDate": "2026-09-30",
       "startTime": "2026-09-30",
       "endTime": "2026-09-30",
-      "status": "Terjadwal",
+      "status": "Selesai",
       "notes": "pembuatan alur smart laundry dan logo UBM",
-      "updatedAt": "2026-09-24T08:09:00.581Z",
+      "updatedAt": "2026-10-05T02:44:38.158Z",
       "createdAt": "2026-09-24T08:09:00.675Z"
     },
     {
@@ -881,9 +251,9 @@
       "endDate": "2026-09-25",
       "startTime": "2026-09-23",
       "endTime": "2026-09-25",
-      "status": "Sedang Berjalan",
+      "status": "Selesai",
       "notes": "Memastikan Data Pemagang Yuzuru",
-      "updatedAt": "2026-09-24T05:30:18.132Z",
+      "updatedAt": "2026-10-05T02:49:17.054Z",
       "createdAt": "2026-09-24T05:30:18.210Z"
     },
     {
@@ -896,9 +266,9 @@
       "endDate": "2026-09-24",
       "startTime": "2026-09-24",
       "endTime": "2026-09-24",
-      "status": "Sedang Berjalan",
+      "status": "Selesai",
       "notes": "Publish Aplikasi UBM Sementara",
-      "updatedAt": "2026-09-24T05:25:45.586Z",
+      "updatedAt": "2026-10-05T02:49:15.236Z",
       "createdAt": "2026-09-24T05:25:45.674Z"
     },
     {
@@ -911,9 +281,9 @@
       "endDate": "2026-09-24",
       "startTime": "2026-09-24",
       "endTime": "2026-09-24",
-      "status": "Sedang Berjalan",
+      "status": "Selesai",
       "notes": "Membuat Timeline Scrum E-Catalogue",
-      "updatedAt": "2026-09-24T05:23:32.260Z",
+      "updatedAt": "2026-10-05T02:49:13.496Z",
       "createdAt": "2026-09-24T05:23:32.360Z"
     },
     {
@@ -926,9 +296,9 @@
       "endDate": "2026-09-24",
       "startTime": "2026-09-24",
       "endTime": "2026-09-24",
-      "status": "Sedang Berjalan",
+      "status": "Selesai",
       "notes": "Membuat Timeline Scrum untuk \n- Landing Page UBM\n- Landing page Training Center\n- Aplikasi UBM\n- Aplikasi Training Center",
-      "updatedAt": "2026-09-24T05:23:50.530Z",
+      "updatedAt": "2026-10-05T02:49:12.086Z",
       "createdAt": "2026-09-24T05:12:44.546Z"
     },
     {
@@ -941,9 +311,9 @@
       "endDate": "2026-09-28",
       "startTime": "2026-09-28",
       "endTime": "2026-09-28",
-      "status": "Terjadwal",
+      "status": "Selesai",
       "notes": "- Observasi untuk selanjutnya menjadi rencana perbaikan\n- Menyamakan dengan Minori group dan menjadi 1 dashboard",
-      "updatedAt": "2026-09-24T05:08:34.904Z",
+      "updatedAt": "2026-10-05T02:49:10.630Z",
       "createdAt": "2026-09-24T05:08:34.999Z"
     },
     {
@@ -955,9 +325,9 @@
       "endDate": "2026-09-25",
       "startTime": "2026-09-25",
       "endTime": "2026-09-25",
-      "status": "Terjadwal",
+      "status": "Selesai",
       "notes": "Upload ulang program di Smart Laundry Minori 10 Mesin",
-      "updatedAt": "2026-09-24T05:21:22.211Z",
+      "updatedAt": "2026-10-05T02:49:09.014Z",
       "createdAt": "2026-09-24T04:49:57.958Z",
       "projectName": "Smart Laundry"
     },
@@ -990,6 +360,63 @@
       "notes": "Diskusi dengan pak Anca\n1. Minori bekerjasama dengan klinik samaria\n2. target Minori 2026 2500 pemagang. relisasi saat ini 1700\n3. P3MI untuk MCU lebih khusus untuk pemilihan Rumah Sakit/Klinik harus ada izin Kemnaker\n4. Untuk pemagang lebih mudah tidaK PERLU IZIN KEMNAKER\n5. Waktu yang dibutuhkan untuk mengeluarkan hasil MCU kurang dari 3 hari\n6. Jika tidak sesuai waktu akan dievaluasi untuk mencari Vendor yang bisa memenuhi kebutuhan\n7. masalahnya sistem terintegrasi untuk hasil MCU belum ada\n8. untuk mempercepat waktu MCU bisa menggunakan Sistem dan alat dari Takumi\n9. Takumi akan mencoba menawarkan kerjasama ke Vendor Minori untuk mempercepat pelaksanaan MCU mendapatkan hasil dan terintegrasi dengan sistem Minori.",
       "updatedAt": "2026-09-24T05:24:44.340Z",
       "createdAt": "2026-09-24T04:33:57.732Z"
+    }
+  ],
+  "users": [
+    {
+      "id": "USR-2026-001",
+      "name": "Administrator UBM",
+      "email": "admin@ubm.co.id",
+      "password": "bisnisdigital365",
+      "role": "Administrator",
+      "department": "Operations & Management",
+      "status": "Aktif",
+      "avatar": "AD",
+      "createdAt": "2026-09-01T00:00:00.000Z"
+    },
+    {
+      "id": "USR-2026-002",
+      "name": "Rizaldi Putra, M.Kom.",
+      "email": "rizaldi@ubm.co.id",
+      "password": "ubmpoltek2026",
+      "role": "Ketua UBM",
+      "department": "Manajemen & Kepemimpinan",
+      "status": "Aktif",
+      "avatar": "RP",
+      "createdAt": "2026-09-02T00:00:00.000Z"
+    },
+    {
+      "id": "USR-2026-003",
+      "name": "Ir. Hendra Wijaya, M.T.",
+      "email": "lead@ubm.co.id",
+      "password": "leadubm2026",
+      "role": "Lead Project",
+      "department": "Engineering & R&D",
+      "status": "Aktif",
+      "avatar": "HW",
+      "createdAt": "2026-09-03T00:00:00.000Z"
+    },
+    {
+      "id": "USR-2026-004",
+      "name": "Deddy Sibarani, S.E.",
+      "email": "finance@ubm.co.id",
+      "password": "keuanganubm2026",
+      "role": "Keuangan",
+      "department": "Keuangan & Penagihan",
+      "status": "Aktif",
+      "avatar": "DS",
+      "createdAt": "2026-09-04T00:00:00.000Z"
+    },
+    {
+      "id": "USR-2026-005",
+      "name": "Bambang Prakoso, S.T.",
+      "email": "member@ubm.co.id",
+      "password": "memberubm2026",
+      "role": "Member",
+      "department": "Produksi & Perakitan",
+      "status": "Aktif",
+      "avatar": "BP",
+      "createdAt": "2026-09-05T00:00:00.000Z"
     }
   ],
   "settings": {

@@ -580,12 +580,13 @@
                   <thead>
                     <tr>
                       <th style="width: 40px; text-align: center;">NO</th>
-                      <th style="width: 170px;">NAMA PROJECT</th>
-                      <th style="width: 240px;">TASK & KATEGORI</th>
-                      <th style="width: 140px;">PIC</th>
-                      <th style="width: 180px;">WAKTU PENGERJAAN</th>
-                      <th style="width: 145px; text-align: center;" title="Status kegiatan - dapat diubah langsung">STATUS</th>
-                      <th>KETERANGAN</th>
+                      <th style="width: 160px;">NAMA PROJECT</th>
+                      <th style="width: 220px;">TASK & KATEGORI</th>
+                      <th style="width: 130px;">PIC</th>
+                      <th style="width: 160px;">WAKTU PENGERJAAN</th>
+                      <th style="width: 135px; text-align: center;" title="Status kegiatan - dapat diubah langsung">STATUS</th>
+                      <th style="min-width: 160px;">KETERANGAN</th>
+                      <th style="min-width: 180px;">LAPORAN</th>
                       <th style="width: 80px; text-align: right;">AKSI</th>
                     </tr>
                   </thead>
@@ -1772,6 +1773,9 @@
               </select>
               <button class="btn btn-outline btn-sm" onclick="exportFinanceToCSV()" style="height: 36px;">
                 <i data-lucide="download"></i> Export CSV Keuangan
+              </button>
+              <button class="btn btn-outline-danger btn-sm" onclick="clearAllProjectFinanceData()" style="height: 36px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 600;" title="Hapus semua data keuangan project">
+                <i data-lucide="trash-2"></i> Hapus Semua Data Keuangan
               </button>
             </div>
           </div>

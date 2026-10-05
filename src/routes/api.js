@@ -67,20 +67,31 @@ module.exports = function(broadcastReload) {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanPassword = (password || '').trim();
 
-    if (cleanEmail === ADMIN_EMAIL && cleanPassword === ADMIN_PASSWORD) {
-      const user = {
+    const db = readDB();
+    const users = db.users || [];
+    const matchedUser = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail && u.password === cleanPassword && u.status !== 'Non-Aktif');
+
+    if (matchedUser || (cleanEmail === ADMIN_EMAIL && cleanPassword === ADMIN_PASSWORD)) {
+      const u = matchedUser || {
         id: 'usr-admin-ubm',
         email: ADMIN_EMAIL,
         name: 'Administrator UBM',
-        role: 'Super Administrator',
+        role: 'Administrator',
         department: 'Operations & Management',
         avatar: 'AD'
       };
-      console.log(`🔐 [Auth] Login berhasil untuk akun: ${ADMIN_EMAIL}`);
+      console.log(`🔐 [Auth] Login berhasil untuk akun: ${u.email}`);
       return res.json({
         success: true,
         message: 'Login berhasil',
-        user,
+        user: {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          department: u.department,
+          avatar: u.avatar || u.name?.slice(0, 2).toUpperCase() || 'AD'
+        },
         token: `ubm_token_${Date.now()}`
       });
     }
@@ -433,6 +444,8 @@ module.exports = function(broadcastReload) {
     }
   });
 
+  const missingSupabaseTables = new Set(['activity_logs', 'users', 'projects', 'project_reports']);
+
   // ---------------- GENERIC CRUD HELPER FUNCTION ----------------
   function registerCrudRoutes(resourceName, idPrefix) {
     // GET ALL
@@ -441,7 +454,7 @@ module.exports = function(broadcastReload) {
       const localItems = db[resourceName] || [];
 
       try {
-        if (supabase) {
+        if (supabase && !missingSupabaseTables.has(resourceName)) {
           const { data, error } = await supabase
             .from(resourceName)
             .select('*')
@@ -466,6 +479,9 @@ module.exports = function(broadcastReload) {
             const extraLocal = localItems.filter(l => l.id && l.id !== 'undefined' && !remoteIds.has(l.id));
             return res.json([...merged, ...extraLocal]);
           } else if (error) {
+            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+              missingSupabaseTables.add(resourceName);
+            }
             console.warn(`[Supabase] GET /api/${resourceName} notice:`, error.message);
           }
         }
@@ -482,7 +498,7 @@ module.exports = function(broadcastReload) {
       const localItem = (db[resourceName] || []).find(i => i.id === req.params.id);
 
       try {
-        if (supabase) {
+        if (supabase && !missingSupabaseTables.has(resourceName)) {
           const { data, error } = await supabase
             .from(resourceName)
             .select('*')
@@ -536,7 +552,7 @@ module.exports = function(broadcastReload) {
               quotations[qIdx].status = quoStatus;
               quotations[qIdx].updatedAt = new Date().toISOString();
               db.quotations = quotations;
-              if (supabase) {
+              if (supabase && !missingSupabaseTables.has('quotations')) {
                 supabase.from('quotations').update({ status: quoStatus }).eq('id', quoId).then(() => {}).catch(() => {});
               }
               broadcastReload({ type: 'reload', resource: 'quotations' });
@@ -548,7 +564,7 @@ module.exports = function(broadcastReload) {
       }
 
       try {
-        if (supabase) {
+        if (supabase && !missingSupabaseTables.has(resourceName)) {
           let snakeItem = mapToSnakeCase(newItem);
           if (resourceName === 'orders') {
             delete snakeItem.quotation_id;
@@ -561,12 +577,17 @@ module.exports = function(broadcastReload) {
           let error = null;
           let cleanSnake = { ...snakeItem };
 
-          for (let attempt = 0; attempt < 10; attempt++) {
+          for (let attempt = 0; attempt < 5; attempt++) {
             const res = await supabase.from(resourceName).insert([cleanSnake]).select();
             data = res.data;
             error = res.error;
 
             if (!error) break;
+
+            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+              missingSupabaseTables.add(resourceName);
+              break;
+            }
 
             if (error && (error.code === 'PGRST204' || error.message.includes('column') || error.message.includes('schema'))) {
               const missingCol = (error.message.match(/'([^']+)' column/) || error.message.match(/column "([^"]+)"/) || error.message.match(/column '([^']+)'/))?.[1];
@@ -647,7 +668,7 @@ module.exports = function(broadcastReload) {
               quotations[qIdx].updatedAt = new Date().toISOString();
               db.quotations = quotations;
               writeDB(db);
-              if (supabase) {
+              if (supabase && !missingSupabaseTables.has('quotations')) {
                 supabase.from('quotations').update({ status: 'Accepted' }).eq('id', quoId).then(() => {}).catch(() => {});
               }
               broadcastReload({ type: 'reload', resource: 'quotations' });
@@ -659,7 +680,7 @@ module.exports = function(broadcastReload) {
       }
 
       try {
-        if (supabase) {
+        if (supabase && !missingSupabaseTables.has(resourceName)) {
           let snakeItem = mapToSnakeCase(updateData);
           if (resourceName === 'orders') {
             delete snakeItem.quotation_id;
@@ -672,7 +693,7 @@ module.exports = function(broadcastReload) {
           let error = null;
           let cleanSnake = { ...snakeItem };
 
-          for (let attempt = 0; attempt < 10; attempt++) {
+          for (let attempt = 0; attempt < 5; attempt++) {
             const res = await supabase
               .from(resourceName)
               .update(cleanSnake)
@@ -682,6 +703,11 @@ module.exports = function(broadcastReload) {
             error = res.error;
 
             if (!error) break;
+
+            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+              missingSupabaseTables.add(resourceName);
+              break;
+            }
 
             if (error && (error.code === 'PGRST204' || error.message.includes('column') || error.message.includes('schema'))) {
               const missingCol = (error.message.match(/'([^']+)' column/) || error.message.match(/column "([^"]+)"/) || error.message.match(/column '([^']+)'/))?.[1];
@@ -733,7 +759,7 @@ module.exports = function(broadcastReload) {
     // DELETE
     router.delete(`/${resourceName}/:id`, async (req, res) => {
       try {
-        if (supabase) {
+        if (supabase && !missingSupabaseTables.has(resourceName)) {
           const { error } = await supabase
             .from(resourceName)
             .delete()
@@ -747,6 +773,9 @@ module.exports = function(broadcastReload) {
             broadcastReload({ type: 'reload', resource: resourceName });
             return res.json({ message: 'Deleted successfully from Supabase', id: req.params.id });
           } else {
+            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+              missingSupabaseTables.add(resourceName);
+            }
             console.error(`[Supabase] Delete error in ${resourceName}:`, error.message);
           }
         }
@@ -779,6 +808,26 @@ module.exports = function(broadcastReload) {
   registerCrudRoutes('service_tickets', 'SRV');
   registerCrudRoutes('warranty_claims', 'CLM');
   registerCrudRoutes('activity_logs', 'LOG');
+  registerCrudRoutes('users', 'USR');
+
+  // Clear all projects and finance data
+  router.delete('/finance/clear-all', async (req, res) => {
+    const db = readDB();
+    db.projects = [];
+    db.project_reports = [];
+    writeDB(db);
+    try {
+      if (supabase && !missingSupabaseTables.has('projects')) {
+        await supabase.from('projects').delete().neq('id', '___non_existent___');
+      }
+      if (supabase && !missingSupabaseTables.has('project_reports')) {
+        await supabase.from('project_reports').delete().neq('id', '___non_existent___');
+      }
+    } catch (e) {}
+    broadcastReload({ type: 'reload', resource: 'projects' });
+    broadcastReload({ type: 'reload', resource: 'project_reports' });
+    res.json({ success: true, message: 'Semua data keuangan project dan project berhasil dihapus' });
+  });
 
   return router;
 };

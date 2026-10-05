@@ -23,6 +23,25 @@ function getDbFilePath() {
   return LOCAL_DB_FILE;
 }
 
+const DEFAULT_SCHEMA = {
+  orders: [],
+  po: [],
+  invoices: [],
+  purchasing: [],
+  bom: [],
+  delivery: [],
+  projects: [],
+  quotations: [],
+  bast: [],
+  project_reports: [],
+  maintenance: [],
+  service_tickets: [],
+  warranty_claims: [],
+  activity_logs: [],
+  users: [],
+  settings: {}
+};
+
 function readDB() {
   if (inMemoryDB && (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME)) {
     return inMemoryDB;
@@ -32,30 +51,38 @@ function readDB() {
     if (!fs.existsSync(fileToRead)) {
       if (fs.existsSync(LOCAL_DB_FILE)) {
         const raw = fs.readFileSync(LOCAL_DB_FILE, 'utf8');
-        inMemoryDB = JSON.parse(raw);
+        inMemoryDB = { ...DEFAULT_SCHEMA, ...JSON.parse(raw) };
         return inMemoryDB;
       }
-      const initial = { orders: [], po: [], invoices: [], purchasing: [], bom: [], delivery: [], projects: [], quotations: [], bast: [] };
-      return initial;
+      return { ...DEFAULT_SCHEMA };
     }
     const data = fs.readFileSync(fileToRead, 'utf8');
-    inMemoryDB = JSON.parse(data);
+    const parsed = JSON.parse(data);
+    inMemoryDB = { ...DEFAULT_SCHEMA, ...parsed };
     return inMemoryDB;
   } catch (err) {
     console.error('Error reading DB:', err.message);
     if (inMemoryDB) return inMemoryDB;
-    return { orders: [], po: [], invoices: [], purchasing: [], bom: [], delivery: [], projects: [], quotations: [], bast: [] };
+    return { ...DEFAULT_SCHEMA };
   }
 }
 
 function writeDB(data) {
-  inMemoryDB = data;
+  inMemoryDB = { ...DEFAULT_SCHEMA, ...data };
+  const jsonContent = JSON.stringify(inMemoryDB, null, 2);
   try {
     const targetFile = getDbFilePath();
-    fs.writeFileSync(targetFile, JSON.stringify(data, null, 2));
+    const tempFile = `${targetFile}.tmp.${Date.now()}`;
+    fs.writeFileSync(tempFile, jsonContent);
+    try {
+      fs.renameSync(tempFile, targetFile);
+    } catch (renameErr) {
+      fs.writeFileSync(targetFile, jsonContent);
+      try { fs.unlinkSync(tempFile); } catch (e) {}
+    }
   } catch (err) {
     try {
-      fs.writeFileSync(TMP_DB_FILE, JSON.stringify(data, null, 2));
+      fs.writeFileSync(TMP_DB_FILE, jsonContent);
     } catch (e2) {
       // Kept in memory
     }

@@ -30,6 +30,19 @@ function renderProjectsTableView() {
   let list = state.projects || [];
   const statusFilter = document.getElementById('filter-project-status')?.value || 'ALL';
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  // Role Member: hanya melihat project yang ditugaskan (assigned) padanya oleh Lead Project
+  if (roleName === 'Member' && activeUser?.name) {
+    const uName = activeUser.name.toLowerCase().trim();
+    list = list.filter(p => {
+      const inTeam = Array.isArray(p.team) && p.team.some(m => (m.name || '').toLowerCase().includes(uName));
+      const isLead = (p.projectLead || '').toLowerCase().includes(uName);
+      return inTeam || isLead;
+    });
+  }
+
   if (statusFilter !== 'ALL') {
     list = list.filter(p => p.status === statusFilter);
   }
@@ -47,7 +60,11 @@ function renderProjectsTableView() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 32px;">Tidak ada data project ditemukan.</td></tr>';
+    if (roleName === 'Member') {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 36px;"><p style="font-size: 13.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">Belum Ada Project yang Ditugaskan</p><p style="font-size: 12px; color: #94a3b8; margin: 0;">Anda belum terdaftar dalam tim pelaksana project aktif manapun oleh Lead Project.</p></td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 32px;">Tidak ada data project ditemukan.</td></tr>';
+    }
     return;
   }
 
@@ -328,12 +345,26 @@ function renderTeamAssignmentWorkspace(orderId) {
   const lockBadge = document.getElementById('pm-lead-lock-badge');
   const hintText = document.getElementById('pm-lead-hint');
 
-  // Check if project lead has already been saved/assigned
+  // Check if project lead has already been saved/assigned or user lacks permission to assign lead
   const isLeadLocked = Boolean(project.isLeadLocked || (project.id && project.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign'));
+  const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
 
   if (leadInput) {
     leadInput.value = project.projectLead || '';
-    if (isLeadLocked) {
+    if (!canAssignLead) {
+      leadInput.readOnly = true;
+      leadInput.style.backgroundColor = '#f1f5f9';
+      leadInput.style.cursor = 'not-allowed';
+      leadInput.style.borderColor = '#cbd5e1';
+      leadInput.style.color = '#1e293b';
+      leadInput.style.fontWeight = '600';
+      if (lockBadge) {
+        lockBadge.innerHTML = '<span class="badge badge-info" style="font-size: 10px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield" style="width: 11px; height: 11px;"></i> Wewenang Ketua UBM</span>';
+      }
+      if (hintText) {
+        hintText.innerHTML = '<span style="color: #64748b; display: inline-flex; align-items: center; gap: 4px; font-weight: 500;"><i data-lucide="info" style="width: 12px; height: 12px;"></i> Penugasan Lead Project adalah wewenang Ketua UBM / Administrator. Anda dapat mendaftarkan anggota tim di bawah.</span>';
+      }
+    } else if (isLeadLocked) {
       leadInput.readOnly = true;
       leadInput.style.backgroundColor = '#f1f5f9';
       leadInput.style.cursor = 'not-allowed';
@@ -357,7 +388,7 @@ function renderTeamAssignmentWorkspace(orderId) {
         lockBadge.innerHTML = '<span class="badge badge-amber" style="font-size: 10px; padding: 2px 6px;">Perlu Disimpan</span>';
       }
       if (hintText) {
-        hintText.innerHTML = 'Masukkan nama Project Lead / Penanggung Jawab. Setelah disimpan, Lead Project akan terkunci secara permanen.';
+        hintText.innerHTML = 'Pilih akun terdaftar atau masukkan nama Project Lead / Penanggung Jawab. Setelah disimpan, Lead Project akan terkunci secara permanen.';
       }
     }
   }
@@ -414,6 +445,24 @@ function renderTeamAssignmentWorkspace(orderId) {
   if (window.lucide) lucide.createIcons();
 }
 
+function autoFillTeamMemberFromAccount(inputEl) {
+  if (!inputEl) return;
+  const val = (inputEl.value || '').trim();
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  const user = users.find(u => u.name === val || `${u.name} • ${u.role}`.includes(val) || val.includes(u.name));
+  if (user) {
+    inputEl.value = user.name;
+    const row = inputEl.closest('.pm-team-row');
+    if (row) {
+      const roleInp = row.querySelector('.pm-member-role');
+      if (roleInp && !roleInp.value) {
+        roleInp.value = user.role || 'Member';
+      }
+    }
+  }
+}
+window.autoFillTeamMemberFromAccount = autoFillTeamMemberFromAccount;
+
 function addProjectTeamMemberRow(member = null) {
   const container = document.getElementById('pm-team-list');
   if (!container) return;
@@ -424,7 +473,7 @@ function addProjectTeamMemberRow(member = null) {
   
   row.innerHTML = `
     <div>
-      <input type="text" class="form-control form-control-sm pm-member-name" placeholder="Nama Lengkap Anggota" required value="${escapeAttr(member?.name || '')}">
+      <input type="text" class="form-control form-control-sm pm-member-name" list="users-assignment-datalist" placeholder="Pilih akun atau ketik nama..." required value="${escapeAttr(member?.name || '')}" onchange="autoFillTeamMemberFromAccount(this)">
     </div>
     <div>
       <input type="text" class="form-control form-control-sm pm-member-role" placeholder="Role / Keahlian (e.g. Wiring)" value="${escapeAttr(member?.role || '')}">
@@ -461,7 +510,10 @@ async function saveTeamAssignmentData() {
     }
   });
 
-  const leadName = document.getElementById('pm-lead-name')?.value?.trim() || existingProject?.projectLead || 'Belum diassign';
+  const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
+  const leadName = canAssignLead
+    ? (document.getElementById('pm-lead-name')?.value?.trim() || existingProject?.projectLead || 'Belum diassign')
+    : (existingProject?.projectLead || 'Belum diassign');
   const department = document.getElementById('pm-department')?.value?.trim() || 'Engineering';
 
   const payload = {

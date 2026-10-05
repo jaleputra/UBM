@@ -123,17 +123,26 @@ function renderPurchasingTable() {
         </span>
       `;
     } else {
-      statusHtml = `
-        <div style="display: flex; justify-content: flex-start; align-items: center;">
-          <select class="pr-status-select status-pengajuan"
-                  onchange="updatePurchasingStatusDirect('${pr.id}', this.value)"
-                  title="Pilih status persetujuan Request Pengadaan (Hanya bisa dipilih satu kali)">
-            <option value="Pengajuan" selected>🟡 Pengajuan</option>
-            <option value="Disetujui">🟢 Disetujui</option>
-            <option value="Ditolak">🔴 Ditolak</option>
-          </select>
-        </div>
-      `;
+      const canApprove = typeof hasRolePermission === 'function' ? hasRolePermission('canApprovePurchasing') : true;
+      if (!canApprove) {
+        statusHtml = `
+          <span class="badge" style="font-size: 11.5px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #fde68a; background-color: #fef3c7; color: #b45309;" title="Menunggu persetujuan Bagian Keuangan">
+            🟡 Pengajuan
+          </span>
+        `;
+      } else {
+        statusHtml = `
+          <div style="display: flex; justify-content: flex-start; align-items: center;">
+            <select class="pr-status-select status-pengajuan"
+                    onchange="updatePurchasingStatusDirect('${pr.id}', this.value)"
+                    title="Persetujuan Keuangan: Pilih status persetujuan Request Pengadaan">
+              <option value="Pengajuan" selected>🟡 Pengajuan</option>
+              <option value="Disetujui">🟢 Disetujui</option>
+              <option value="Ditolak">🔴 Ditolak</option>
+            </select>
+          </div>
+        `;
+      }
     }
 
     return `
@@ -173,6 +182,12 @@ function renderPurchasingTable() {
 
 // Function update status PR langsung dari tabel (Pengajuan <-> Disetujui <-> Ditolak)
 async function updatePurchasingStatusDirect(prId, newStatus) {
+  if (typeof hasRolePermission === 'function' && !hasRolePermission('canApprovePurchasing')) {
+    showToast('⚠️ Anda tidak memiliki wewenang untuk menyetujui pengadaan barang (Wewenang Bagian Keuangan / Pimpinan).', 'warning');
+    renderPurchasingTable();
+    return;
+  }
+
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr) {
     showToast('Data Request Pengadaan tidak ditemukan', 'warning');

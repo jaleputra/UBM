@@ -452,6 +452,9 @@ function renderFinanceTable() {
             <button class="btn btn-sm btn-primary" style="background: #0f172a; border-color: #0f172a; font-size: 11px; padding: 5px 8px; font-weight: 700;" onclick="printProjectFinanceReport('${p.id}')" title="Cetak Laporan Keuangan Proyek">
               <i data-lucide="printer" style="width: 12px; height: 12px;"></i> Cetak
             </button>
+            <button class="btn btn-sm btn-outline" style="color: #dc2626; border-color: #fecdd3; background: #fff1f2; font-size: 11px; padding: 5px 8px; font-weight: 700;" onclick="deleteProjectFinanceRow('${p.id}')" title="Hapus Data Keuangan Proyek">
+              <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i> Hapus
+            </button>
           </div>
         </td>
       </tr>
@@ -1167,10 +1170,48 @@ function exportFinanceToCSV() {
   showToast('Laporan Keuangan Project berhasil diekspor ke CSV', 'success');
 }
 
+// 5. HAPUS DATA KEUANGAN PROYEK (SINGLE & ALL)
+async function deleteProjectFinanceRow(projectId) {
+  if (!confirm(`Apakah Anda yakin ingin menghapus data keuangan project #${projectId}?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.projects = (state.projects || []).filter(p => p.id !== projectId);
+    showToast(`Data keuangan project #${projectId} berhasil dihapus`, 'success');
+    renderFinanceTable();
+    if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  } catch (err) {
+    console.error('Error deleting project finance row:', err);
+    showToast('Gagal menghapus data keuangan project: ' + err.message, 'error');
+  }
+}
+
+async function clearAllProjectFinanceData() {
+  if (!confirm('Apakah Anda yakin ingin menghapus SEMUA data keuangan project? Tindakan ini akan mengosongkan seluruh data finansial dan laporan project.')) {
+    return;
+  }
+  try {
+    const res = await fetch('/api/finance/clear-all', { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.projects = [];
+    state.project_reports = [];
+    showToast('Semua data keuangan project berhasil dihapus', 'success');
+    renderFinanceTable();
+    if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  } catch (err) {
+    console.error('Error clearing all project finance data:', err);
+    showToast('Gagal menghapus semua data keuangan: ' + err.message, 'error');
+  }
+}
+
 // Global window exposure
 window.getProjectFinancialData = getProjectFinancialData;
 window.renderFinanceTable = renderFinanceTable;
 window.filterFinanceTable = filterFinanceTable;
+window.deleteProjectFinanceRow = deleteProjectFinanceRow;
+window.clearAllProjectFinanceData = clearAllProjectFinanceData;
 window.openProjectFinanceDetailModal = openProjectFinanceDetailModal;
 window.openAdjustProjectModalCostModal = openAdjustProjectModalCostModal;
 window.recalculateModalCostAdjustForm = recalculateModalCostAdjustForm;
