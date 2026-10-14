@@ -206,12 +206,117 @@
   "delivery": [],
   "projects": [
     {
+      "id": "PRJ-2026-0139-397",
+      "projectName": "Training Center",
+      "customerName": "External",
+      "orderId": "",
+      "isDirect": true,
+      "projectLead": "Rizaldi Putra, M.Kom.",
+      "isLeadLocked": true,
+      "department": "Engineering",
+      "status": "In Progress",
+      "startDate": "2026-10-07",
+      "dueDate": "2026-10-28",
+      "team": [
+        {
+          "name": "Deddy Sibarani, S.E.",
+          "role": "Teknisi",
+          "phone": ""
+        },
+        {
+          "name": "Bambang Prakoso, S.T.",
+          "role": "Teknisi",
+          "phone": ""
+        }
+      ],
+      "progressPercent": 38,
+      "milestones": [
+        {
+          "id": "ms-tc-1",
+          "title": "Penyusunan Kurikulum & Modul Pelatihan",
+          "pic": "Rizaldi Putra, M.Kom.",
+          "startDate": "2026-10-07",
+          "dueDate": "2026-10-12",
+          "status": "Completed",
+          "subtasks": [
+            {
+              "id": "st-tc-1",
+              "title": "Silabus otomasi industri",
+              "done": true
+            },
+            {
+              "id": "st-tc-2",
+              "title": "Modul praktikum PLC & SCADA",
+              "done": true
+            }
+          ]
+        },
+        {
+          "id": "ms-tc-2",
+          "title": "Setup Meja Praktik & Instalasi Trainer PLC",
+          "pic": "Bambang Prakoso, S.T.",
+          "startDate": "2026-10-12",
+          "dueDate": "2026-10-18",
+          "status": "In Progress",
+          "subtasks": [
+            {
+              "id": "st-tc-3",
+              "title": "Wiring trainer kit 6 unit",
+              "done": true
+            },
+            {
+              "id": "st-tc-4",
+              "title": "Kalibrasi sensor & power supply",
+              "done": false
+            }
+          ]
+        },
+        {
+          "id": "ms-tc-3",
+          "title": "Uji Coba Sistem Komunikasi Lab & Jaringan",
+          "pic": "Deddy Sibarani, S.E.",
+          "startDate": "2026-10-18",
+          "dueDate": "2026-10-23",
+          "status": "Pending",
+          "subtasks": [
+            {
+              "id": "st-tc-5",
+              "title": "Setup router industri & switch",
+              "done": false
+            }
+          ]
+        },
+        {
+          "id": "ms-tc-4",
+          "title": "Simulasi Pelatihan Batch 1 & Evaluasi",
+          "pic": "Rizaldi Putra, M.Kom.",
+          "startDate": "2026-10-23",
+          "dueDate": "2026-10-28",
+          "status": "Pending",
+          "subtasks": [
+            {
+              "id": "st-tc-6",
+              "title": "Uji coba running materi ke peserta demo",
+              "done": false
+            }
+          ]
+        }
+      ],
+      "notes": "Program inisiatif pelatihan otomasi industri UBM",
+      "createdAt": "2026-10-07T03:12:40.141Z",
+      "updatedAt": "2026-10-07T03:31:22.887Z"
+    },
+    {
       "id": "PRJ-2026-1406-464",
       "orderId": "ORD-2026-2992-511",
       "projectName": "Smart Door",
       "customerName": "PT Minori",
       "projectLead": "Ir. Hendra Wijaya, M.T.",
       "department": "Engineering",
+      "status": "In Progress",
+      "startDate": "2026-10-05",
+      "dueDate": "2026-10-19",
+      "progressPercent": 45,
       "team": [
         {
           "name": "Deddy Sibarani, S.E.",
@@ -222,6 +327,108 @@
           "name": "Bambang Prakoso, S.T.",
           "role": "Member",
           "phone": ""
+        }
+      ],
+      "milestones": [
+        {
+          "id": "ms-sd-1",
+          "title": "Perancangan Wiring & Skematik Smart Door",
+          "pic": "Ir. Hendra Wijaya, M.T.",
+          "startDate": "2026-10-05",
+          "dueDate": "2026-10-08",
+          "status": "Completed",
+          "subtasks": [
+            {
+              "id": "st-sd-1",
+              "title": "Review spesifikasi elektrikal & sensor",
+              "done": true
+            },
+            {
+              "id": "st-sd-2",
+              "title": "Finalisasi diagram pengkabelan & catu daya",
+              "done": true
+            }
+          ]
+        },
+        {
+          "id": "ms-sd-2",
+          "title": "Fabrikasi Housing & Perakitan Mekanikal",
+          "pic": "Bambang Prakoso, S.T.",
+          "startDate": "2026-10-08",
+          "dueDate": "2026-10-13",
+          "status": "In Progress",
+          "subtasks": [
+            {
+              "id": "st-sd-3",
+              "title": "Pemotongan & bending plat enclosure",
+              "done": true
+            },
+            {
+              "id": "st-sd-4",
+              "title": "Perakitan engsel heavy duty & slot motor",
+              "done": false
+            }
+          ]
+        },
+        {
+          "id": "ms-sd-3",
+          "title": "Instalasi Controller & Integrasi Sensor IoT",
+          "pic": "Bambang Prakoso, S.T.",
+          "startDate": "2026-10-12",
+          "dueDate": "2026-10-16",
+          "status": "In Progress",
+          "subtasks": [
+            {
+              "id": "st-sd-5",
+              "title": "Pemasangan modul RFID & keypad access",
+              "done": false
+            },
+            {
+              "id": "st-sd-6",
+              "title": "Pengujian respon magnetic lock",
+              "done": false
+            }
+          ]
+        },
+        {
+          "id": "ms-sd-4",
+          "title": "Quality Control & Stress Testing Sistem",
+          "pic": "Ir. Hendra Wijaya, M.T.",
+          "startDate": "2026-10-16",
+          "dueDate": "2026-10-18",
+          "status": "Pending",
+          "subtasks": [
+            {
+              "id": "st-sd-7",
+              "title": "Stress test siklus buka-tutup 500x",
+              "done": false
+            },
+            {
+              "id": "st-sd-8",
+              "title": "Inspeksi keamanan instalasi grounding",
+              "done": false
+            }
+          ]
+        },
+        {
+          "id": "ms-sd-5",
+          "title": "Serah Terima & Instalasi di Lokasi PT Minori",
+          "pic": "Ir. Hendra Wijaya, M.T.",
+          "startDate": "2026-10-18",
+          "dueDate": "2026-10-19",
+          "status": "Pending",
+          "subtasks": [
+            {
+              "id": "st-sd-9",
+              "title": "Pengiriman unit ke lokasi Cikarang",
+              "done": false
+            },
+            {
+              "id": "st-sd-10",
+              "title": "Commissioning & penandatanganan BAST",
+              "done": false
+            }
+          ]
         }
       ],
       "isLeadLocked": true,
@@ -284,6 +491,21 @@
   "service_tickets": [],
   "warranty_claims": [],
   "activity_logs": [
+    {
+      "id": "LOG-2026-8433-431",
+      "projectName": "UBM",
+      "task": "Pengembangan aplikasi UBMT",
+      "pic": "Bambang Prakoso, S.T.",
+      "category": "Produksi",
+      "startDate": "2026-10-07",
+      "endDate": "2026-10-07",
+      "startTime": "2026-10-07",
+      "endTime": "2026-10-07",
+      "status": "Sedang Berjalan",
+      "notes": "1. Dashboard gantt chart dashboard seluruh project\n2. Quotation jasa input harga jual, modal berupa bagi hasil, administrasi, sales dan takumi \n3. halaman project management tersendiri yang menghubungkan semua project ke dashboard",
+      "updatedAt": "2026-10-07T02:29:28.376Z",
+      "createdAt": "2026-10-07T02:29:28.433Z"
+    },
     {
       "id": "LOG-2026-2130-362",
       "projectName": "UBM",
@@ -366,13 +588,18 @@
       "pic": "Bintang",
       "category": "Maintenance",
       "startDate": "2026-10-05",
-      "endDate": "2026-10-05",
+      "endDate": "2026-10-09",
       "startTime": "2026-10-05",
-      "endTime": "2026-10-05",
+      "endTime": "2026-10-09",
       "status": "Sedang Berjalan",
       "notes": "Perbaikan Smart Laundry di Nagomi. menyatukan dashboard Nagomi dan Minori",
-      "updatedAt": "2026-10-05T02:50:21.338Z",
-      "createdAt": "2026-10-05T02:50:21.347Z"
+      "updatedAt": "2026-10-07T02:27:41.897Z",
+      "createdAt": "2026-10-05T02:50:21.347Z",
+      "report": {
+        "description": "Sedang pengajuan biaya perbaikan mesin",
+        "link": "",
+        "updatedAt": "2026-10-07T02:27:25.399Z"
+      }
     },
     {
       "id": "LOG-2026-0079-623",

@@ -181,7 +181,7 @@ function navigateTo(viewName) {
     logs: { title: 'Log Kegiatan & Kalender UBM', sub: 'Pencatatan kegiatan operasional UBM, waktu pengerjaan dari-sampai, PIC penanggung jawab, dan kalender kegiatan', btn: '+ Catat Kegiatan' },
     quotations: { title: 'Quotation', sub: 'Penawaran harga produk & jasa ke calon pelanggan, kuantiti, kalkulasi PPN & garansi', btn: 'Quotation Baru' },
     orders: { title: 'Manajemen Order Penjualan', sub: 'Daftar pesanan penjualan pelanggan & status pengerjaan', btn: 'Order Baru' },
-    projects: { title: 'Project Management', sub: 'Daftar project terdaftar, Project Lead, tim pelaksana & progress pengerjaan', btn: '+ Alokasi Tim & Project' },
+    projects: { title: 'Project Management', sub: 'Daftar project terdaftar, Project Lead, tim pelaksana & progress pengerjaan', btn: '+ Project Management Baru' },
     timeline: { title: 'Project Management & Timeline', sub: 'Pengaturan jadwal pengerjaan, deadline, dan milestone tahapan project', btn: 'Kembali ke Order' },
     bom: { title: 'Bill of Materials (BOM)', sub: 'Master formula, struktur bahan baku dan estimasi HPP produk', btn: null },
     'bom-form': { title: 'Formulir Master BOM', sub: 'Input struktur komponen, bahan baku, dan estimasi HPP produk', btn: 'Kembali ke BOM' },
@@ -225,7 +225,13 @@ function handleQuickCreate() {
     case 'logs': if (typeof focusLogForm === 'function') focusLogForm(); break;
     case 'quotations': openQuotationModal(); break;
     case 'orders': openOrderModal(); break;
-    case 'projects': openProjectAssignmentWorkspace(); break;
+    case 'projects':
+      if (typeof openCreateDirectProjectModal === 'function') {
+        openCreateDirectProjectModal();
+      } else {
+        openProjectAssignmentWorkspace();
+      }
+      break;
     case 'po': openPOModal(); break;
     case 'invoices': openInvoiceModal(); break;
     case 'purchasing': openPurchasingModal(); break;

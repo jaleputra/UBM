@@ -18,6 +18,9 @@
       <button class="btn btn-outline btn-sm" onclick="exportDataToCSV('projects')" style="height: 36px;">
         <i data-lucide="download"></i> Export CSV
       </button>
+      <button class="btn btn-primary btn-sm" onclick="openCreateDirectProjectModal()" style="height: 36px; background: #4f46e5; border-color: #4f46e5; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+        <i data-lucide="plus"></i> + Project Management Baru
+      </button>
     </div>
   </div>
 
@@ -34,7 +37,7 @@
             <th style="width: 155px; font-size: 11px; text-transform: uppercase;">Jadwal / Deadline</th>
             <th style="width: 160px; font-size: 11px; text-transform: uppercase;">Progress Timeline</th>
             <th style="width: 110px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
-            <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Detail Timeline</th>
+            <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi / Timeline</th>
           </tr>
         </thead>
         <tbody id="table-projects-body">

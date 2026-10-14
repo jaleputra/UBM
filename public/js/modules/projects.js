@@ -89,10 +89,10 @@ function renderProjectsTableView() {
     const dateRange = p.startDate && p.dueDate ? `${p.startDate} s/d ${p.dueDate}` : (p.dueDate ? `Deadline: ${p.dueDate}` : '-');
 
     return `
-      <tr style="cursor: pointer; transition: background-color 0.15s ease;" class="project-row" onclick="openProjectTimelinePage('${p.orderId || p.id}')" title="Klik untuk membuka Detail Timeline & Milestone">
+      <tr style="cursor: pointer; transition: background-color 0.15s ease;" class="project-row" onclick="openProjectTimelinePage('${p.id || p.orderId}')" title="Klik untuk membuka Detail Timeline & Milestone">
         <td>
           <span class="mono-id font-bold text-primary" style="font-size: 11px;">${p.id}</span>
-          ${p.orderId ? `<div class="font-xs text-muted font-mono" style="font-size: 10px; margin-top: 2px;">Ref: ${p.orderId}</div>` : ''}
+          ${p.orderId ? `<div class="font-xs text-muted font-mono" style="font-size: 10px; margin-top: 2px;">Ref: ${p.orderId}</div>` : `<div class="font-xs text-muted" style="font-size: 10px; margin-top: 2px;"><span class="badge badge-outline" style="font-size: 9px; padding: 1px 5px; color: #4338ca; border-color: #c7d2fe; background: #eef2ff;">Direct / Mandiri</span></div>`}
         </td>
         <td>
           <div class="font-bold text-main" style="word-break: break-word; font-size: 13px; color: #1e40af;">${escapeHtml(p.projectName || 'Project Engineering')}</div>
@@ -128,9 +128,14 @@ function renderProjectsTableView() {
         </td>
         <td style="text-align: center;"><span class="badge ${badgeClass}" style="font-size: 10px; padding: 3px 7px;">${p.status || 'Planning'}</span></td>
         <td class="text-right" onclick="event.stopPropagation()">
-          <button class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe; font-size: 11px; padding: 4px 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; background: #fdf4ff;" onclick="openProjectTimelinePage('${p.orderId || p.id}')" title="Buka Detail Timeline & Milestone">
-            <i data-lucide="folder-kanban" style="width: 13px; height: 13px;"></i> Timeline &rarr;
-          </button>
+          <div style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px;">
+            <button class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe; font-size: 11px; padding: 4px 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; background: #fdf4ff;" onclick="openProjectTimelinePage('${p.id || p.orderId}')" title="Buka Detail Timeline & Milestone">
+              <i data-lucide="folder-kanban" style="width: 13px; height: 13px;"></i> Timeline
+            </button>
+            <button class="btn-icon btn-danger-ghost" style="width: 28px; height: 28px; border-radius: 4px;" title="Hapus Project" onclick="deleteResource('projects', '${p.id}')">
+              <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -272,9 +277,229 @@ function viewProjectDetail(projectId) {
   if (window.lucide) lucide.createIcons();
 }
 
+// -------------------------------------------------------------
+// DIRECT / STANDALONE PROJECT MANAGEMENT CREATION
+// -------------------------------------------------------------
+function openCreateDirectProjectModal() {
+  const form = document.getElementById('form-create-direct-project');
+  if (form) form.reset();
+
+  const orderSelect = document.getElementById('direct-pm-order-select');
+  if (orderSelect) {
+    let opts = '<option value="">-- Tanpa Referensi Order (Project Langsung / Mandiri) --</option>';
+    const orders = state.orders || [];
+    orders.forEach(o => {
+      opts += `<option value="${o.id}">[${o.id}] ${escapeHtml(o.customerName)} - ${escapeHtml(o.projectName || o.items?.[0]?.itemName || 'Order')} (${formatRupiah(o.grandTotal)})</option>`;
+    });
+    orderSelect.innerHTML = opts;
+    orderSelect.value = '';
+  }
+
+  const nameInput = document.getElementById('direct-pm-name');
+  if (nameInput) nameInput.value = '';
+
+  const customerInput = document.getElementById('direct-pm-customer');
+  if (customerInput) customerInput.value = 'Internal UBM';
+
+  const deptInput = document.getElementById('direct-pm-department');
+  if (deptInput) deptInput.value = 'Engineering';
+
+  const statusSelect = document.getElementById('direct-pm-status');
+  if (statusSelect) statusSelect.value = 'Planning';
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const startInput = document.getElementById('direct-pm-start-date');
+  if (startInput) startInput.value = todayStr;
+
+  const dueInput = document.getElementById('direct-pm-due-date');
+  if (dueInput) {
+    const dueObj = new Date();
+    dueObj.setDate(dueObj.getDate() + 30);
+    dueInput.value = dueObj.toISOString().split('T')[0];
+  }
+
+  const leadSelect = document.getElementById('direct-pm-lead-name');
+  if (leadSelect) {
+    if (typeof getUserDropdownOptions === 'function') {
+      leadSelect.innerHTML = getUserDropdownOptions('', '-- Pilih Akun Lead Project --');
+    } else {
+      const users = state.users || [];
+      leadSelect.innerHTML = '<option value="">-- Pilih Akun Lead Project --</option>' +
+        users.map(u => `<option value="${escapeAttr(u.name)}">${escapeHtml(u.name)} (${escapeHtml(u.role)})</option>`).join('');
+    }
+  }
+
+  const teamContainer = document.getElementById('direct-pm-team-list');
+  if (teamContainer) {
+    teamContainer.innerHTML = '';
+    addDirectProjectTeamMemberRow('', 'Teknisi', '');
+  }
+
+  const notesInput = document.getElementById('direct-pm-notes');
+  if (notesInput) notesInput.value = '';
+
+  openModal('modal-create-direct-project');
+  if (window.lucide) lucide.createIcons();
+}
+window.openCreateDirectProjectModal = openCreateDirectProjectModal;
+
+function onDirectProjectOrderChange(orderId) {
+  if (!orderId) {
+    const custInput = document.getElementById('direct-pm-customer');
+    if (custInput && (!custInput.value || custInput.value.trim() === '')) {
+      custInput.value = 'Internal UBM';
+    }
+    return;
+  }
+
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) return;
+
+  const nameInput = document.getElementById('direct-pm-name');
+  if (nameInput) {
+    nameInput.value = order.projectName || order.items?.[0]?.itemName || `Project ${order.id}`;
+  }
+
+  const custInput = document.getElementById('direct-pm-customer');
+  if (custInput) {
+    custInput.value = order.customerName || '';
+  }
+
+  const startInput = document.getElementById('direct-pm-start-date');
+  if (startInput && order.orderDate) {
+    startInput.value = order.orderDate;
+  }
+
+  const dueInput = document.getElementById('direct-pm-due-date');
+  if (dueInput && order.dueDate) {
+    dueInput.value = order.dueDate;
+  }
+}
+window.onDirectProjectOrderChange = onDirectProjectOrderChange;
+
+function addDirectProjectTeamMemberRow(name = '', role = 'Teknisi', phone = '') {
+  const container = document.getElementById('direct-pm-team-list');
+  if (!container) return;
+
+  const rowId = 'direct-team-row-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+  const row = document.createElement('div');
+  row.className = 'direct-team-row';
+  row.id = rowId;
+  row.style.cssText = 'display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 36px; gap: 8px; align-items: center; background: #f8fafc; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color);';
+
+  row.innerHTML = `
+    <div>
+      <input type="text" class="form-control form-control-sm direct-member-name" placeholder="Nama Anggota Tim" value="${escapeAttr(name)}" list="users-assignment-datalist">
+    </div>
+    <div>
+      <input type="text" class="form-control form-control-sm direct-member-role" placeholder="Peran (Teknisi/QC/Drafter)" value="${escapeAttr(role)}">
+    </div>
+    <div>
+      <input type="text" class="form-control form-control-sm direct-member-phone" placeholder="No. Telp / WA" value="${escapeAttr(phone)}">
+    </div>
+    <div style="text-align: center;">
+      <button type="button" class="btn-icon btn-danger-ghost" style="width: 28px; height: 28px;" title="Hapus Anggota" onclick="removeDirectProjectTeamMemberRow(this)">
+        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+      </button>
+    </div>
+  `;
+
+  container.appendChild(row);
+  if (window.lucide) lucide.createIcons();
+}
+window.addDirectProjectTeamMemberRow = addDirectProjectTeamMemberRow;
+
+function removeDirectProjectTeamMemberRow(btn) {
+  const row = btn.closest('.direct-team-row');
+  if (row) row.remove();
+}
+window.removeDirectProjectTeamMemberRow = removeDirectProjectTeamMemberRow;
+
+async function saveDirectProject(openTimeline = false) {
+  const name = document.getElementById('direct-pm-name')?.value?.trim();
+  if (!name) {
+    showToast('Nama Project wajib diisi!', 'warning');
+    document.getElementById('direct-pm-name')?.focus();
+    return;
+  }
+
+  const lead = document.getElementById('direct-pm-lead-name')?.value?.trim();
+  if (!lead) {
+    showToast('Pilih Project Lead / Penanggung Jawab Utama terlebih dahulu!', 'warning');
+    document.getElementById('direct-pm-lead-name')?.focus();
+    return;
+  }
+
+  const orderId = document.getElementById('direct-pm-order-select')?.value?.trim() || null;
+  const customer = document.getElementById('direct-pm-customer')?.value?.trim() || 'Internal UBM';
+  const department = document.getElementById('direct-pm-department')?.value?.trim() || 'Engineering';
+  const status = document.getElementById('direct-pm-status')?.value || 'Planning';
+  const startDate = document.getElementById('direct-pm-start-date')?.value || new Date().toISOString().split('T')[0];
+  const dueDate = document.getElementById('direct-pm-due-date')?.value || '';
+  const notes = document.getElementById('direct-pm-notes')?.value?.trim() || '';
+
+  // Extract team
+  const team = [];
+  document.querySelectorAll('#direct-pm-team-list .direct-team-row').forEach(r => {
+    const mName = r.querySelector('.direct-member-name')?.value?.trim();
+    const mRole = r.querySelector('.direct-member-role')?.value?.trim() || 'Teknisi';
+    const mPhone = r.querySelector('.direct-member-phone')?.value?.trim() || '';
+    if (mName) {
+      team.push({ name: mName, role: mRole, phone: mPhone });
+    }
+  });
+
+  const payload = {
+    projectName: name,
+    customerName: customer,
+    orderId: orderId,
+    isDirect: !orderId,
+    projectLead: lead,
+    isLeadLocked: true,
+    department: department,
+    status: status,
+    startDate: startDate,
+    dueDate: dueDate,
+    team: team,
+    progressPercent: 0,
+    milestones: [],
+    notes: notes,
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const created = await res.json();
+      closeModal('modal-create-direct-project');
+      showToast(`Project Management "${escapeHtml(name)}" berhasil dibuat!`, 'success');
+      await fetchResource('projects');
+      renderProjectsTableView();
+      updateSidebarBadges();
+      loadDashboardData();
+
+      if (openTimeline) {
+        state.timelineReturnView = 'projects';
+        openProjectTimelinePage(created.id || created.orderId);
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      showToast(errData.error || 'Gagal membuat project baru', 'error');
+    }
+  } catch (err) {
+    console.error('Error creating direct project:', err);
+    showToast('Terjadi kesalahan jaringan', 'error');
+  }
+}
+window.saveDirectProject = saveDirectProject;
+
 function openProjectAssignmentWorkspace() {
-  const firstOrder = state.orders.length > 0 ? state.orders[0].id : null;
-  openTeamAssignmentPage(firstOrder);
+  openCreateDirectProjectModal();
 }
 
 // -------------------------------------------------------------
@@ -285,23 +510,38 @@ function openProjectManagementPage(orderId = null) {
 }
 
 function openTeamAssignmentPage(orderId = null) {
-  const targetOrderId = orderId || (state.orders.length > 0 ? state.orders[0].id : null);
-  currentActiveProjectOrderId = targetOrderId;
+  const defaultTarget = orderId || (state.projects.length > 0 ? (state.projects[0].id || state.projects[0].orderId) : (state.orders.length > 0 ? state.orders[0].id : null));
+  currentActiveProjectOrderId = orderId || defaultTarget;
 
   const orderSelect = document.getElementById('pm-order-select');
   if (orderSelect) {
-    if (state.orders.length === 0) {
-      orderSelect.innerHTML = '<option value="">-- Belum Ada Order Penjualan --</option>';
-    } else {
-      orderSelect.innerHTML = state.orders.map(o => `
-        <option value="${o.id}" ${o.id === targetOrderId ? 'selected' : ''}>
-          [${o.id}] ${o.customerName} - ${o.items?.[0]?.itemName || 'Order'} (${formatRupiah(o.grandTotal)})
-        </option>
-      `).join('');
+    let opts = '';
+    const directProjs = (state.projects || []).filter(p => !p.orderId);
+    if (directProjs.length > 0) {
+      opts += '<optgroup label="Project Mandiri / Direct">';
+      directProjs.forEach(dp => {
+        const isSel = (dp.id === currentActiveProjectOrderId) ? 'selected' : '';
+        opts += `<option value="${dp.id}" ${isSel}>[${dp.id}] ${escapeHtml(dp.projectName)} (${escapeHtml(dp.customerName || 'Mandiri')})</option>`;
+      });
+      opts += '</optgroup>';
     }
+
+    if (state.orders && state.orders.length > 0) {
+      opts += '<optgroup label="Order Penjualan">';
+      state.orders.forEach(o => {
+        const isSel = (o.id === currentActiveProjectOrderId) ? 'selected' : '';
+        opts += `<option value="${o.id}" ${isSel}>[${o.id}] ${escapeHtml(o.customerName)} - ${escapeHtml(o.projectName || o.items?.[0]?.itemName || 'Order')} (${formatRupiah(o.grandTotal)})</option>`;
+      });
+      opts += '</optgroup>';
+    }
+
+    if (!opts) {
+      opts = '<option value="">-- Belum Ada Order / Project --</option>';
+    }
+    orderSelect.innerHTML = opts;
   }
 
-  renderTeamAssignmentWorkspace(targetOrderId);
+  renderTeamAssignmentWorkspace(currentActiveProjectOrderId);
   openModal('team-assignment-modal');
   if (window.lucide) lucide.createIcons();
 }
@@ -314,32 +554,52 @@ function switchProjectOrder(orderId) {
 function renderTeamAssignmentWorkspace(orderId) {
   if (!orderId) return;
 
-  const order = state.orders.find(o => o.id === orderId);
-  let project = (state.projects || []).find(p => p.orderId === orderId);
+  const project = (state.projects || []).find(p => p.id === orderId || p.orderId === orderId);
+  const order = state.orders.find(o => o.id === (project?.orderId || orderId));
 
-  // If no project exists yet, generate clean empty default structure
-  if (!project) {
-    const firstItem = order?.items?.[0]?.itemName || 'Produk Pesanan';
-    const projName = order?.projectName || `${firstItem} (${order?.customerName || 'Customer'})`;
-    project = {
-      orderId: orderId,
-      projectName: projName,
-      customerName: order?.customerName || '-',
-      projectLead: '',
-      department: '',
-      status: 'Planning',
-      progressPercent: 0,
-      startDate: order?.orderDate || new Date().toISOString().split('T')[0],
-      dueDate: order?.dueDate || '',
-      team: [],
-      milestones: [],
-      notes: ''
-    };
+  let activeProj = project;
+  if (!activeProj) {
+    if (order) {
+      const firstItem = order?.items?.[0]?.itemName || 'Produk Pesanan';
+      const projName = order?.projectName || `${firstItem} (${order?.customerName || 'Customer'})`;
+      activeProj = {
+        orderId: order.id,
+        projectName: projName,
+        customerName: order?.customerName || '-',
+        projectLead: '',
+        department: '',
+        status: 'Planning',
+        progressPercent: 0,
+        startDate: order?.orderDate || new Date().toISOString().split('T')[0],
+        dueDate: order?.dueDate || '',
+        team: [],
+        milestones: [],
+        notes: ''
+      };
+    } else {
+      activeProj = {
+        id: orderId,
+        projectName: 'Project Mandiri',
+        customerName: 'Internal UBM',
+        projectLead: '',
+        department: 'Engineering',
+        status: 'Planning',
+        progressPercent: 0,
+        startDate: new Date().toISOString().split('T')[0],
+        dueDate: '',
+        team: [],
+        milestones: [],
+        notes: ''
+      };
+    }
   }
 
   // Update Header & Inputs
   const headerOrderId = document.getElementById('pm-header-order-id');
-  if (headerOrderId) headerOrderId.textContent = `${orderId} - ${project.customerName || order?.customerName || ''}`;
+  if (headerOrderId) {
+    const code = activeProj.orderId ? activeProj.orderId : (activeProj.id || orderId);
+    headerOrderId.textContent = `${code} - ${activeProj.projectName || activeProj.customerName || order?.customerName || ''}`;
+  }
 
   const leadInput = document.getElementById('pm-lead-name');
   const lockBadge = document.getElementById('pm-lead-lock-badge');
@@ -515,7 +775,7 @@ function addProjectTeamMemberRow(member = null) {
 
 async function saveTeamAssignmentData() {
   if (!currentActiveProjectOrderId) {
-    showToast('Pilih order penjualan terlebih dahulu', 'warning');
+    showToast('Pilih order atau project terlebih dahulu', 'warning');
     return;
   }
 
@@ -526,8 +786,8 @@ async function saveTeamAssignmentData() {
     return;
   }
 
-  const order = state.orders.find(o => o.id === currentActiveProjectOrderId);
-  const existingProject = (state.projects || []).find(p => p.orderId === currentActiveProjectOrderId);
+  const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
 
   // Extract Team Members
   const team = [];
@@ -548,9 +808,9 @@ async function saveTeamAssignmentData() {
 
   const payload = {
     ...(existingProject || {}),
-    orderId: currentActiveProjectOrderId,
-    projectName: existingProject?.projectName || order?.projectName || `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})`,
-    customerName: order?.customerName || existingProject?.customerName || '-',
+    orderId: existingProject?.orderId || (order ? order.id : ''),
+    projectName: existingProject?.projectName || order?.projectName || (order ? `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})` : 'Project Mandiri'),
+    customerName: existingProject?.customerName || order?.customerName || 'Internal UBM',
     projectLead: leadName,
     department: department,
     team: team,
@@ -600,58 +860,59 @@ function navigateBackFromTimeline() {
 }
 
 function openProjectTimelinePage(orderId = null) {
-  const targetOrderId = orderId || (state.orders.length > 0 ? state.orders[0].id : null);
+  const defaultTarget = orderId || (state.projects.length > 0 ? (state.projects[0].id || state.projects[0].orderId) : (state.orders.length > 0 ? state.orders[0].id : null));
+  const targetOrderId = orderId || defaultTarget;
 
   // Tentukan view asal pemanggil Timeline
   if (state.currentView === 'projects') {
     state.timelineReturnView = 'projects';
-  } else if (state.currentView === 'orders' || targetOrderId) {
+  } else if (state.currentView === 'orders') {
     state.timelineReturnView = 'orders';
   } else if (!state.timelineReturnView) {
     state.timelineReturnView = (state.previousMainView === 'projects' || state.previousView === 'projects') ? 'projects' : 'orders';
   }
 
-  if (targetOrderId) {
-    const order = (state.orders || []).find(o => o.id === targetOrderId);
-    if (order) {
-      const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
-      const isPOAndAccepted = hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
-      if (!isPOAndAccepted) {
-        if (typeof promptPenugasanDisabled === 'function') {
-          promptPenugasanDisabled(targetOrderId);
-        } else {
-          showToast('⚠️ Wajib upload PO Pelanggan dan status Accepted terlebih dahulu!', 'warning');
+  const project = (state.projects || []).find(p => p.id === targetOrderId || p.orderId === targetOrderId);
+  const order = (state.orders || []).find(o => o.id === (project?.orderId || targetOrderId));
+
+  // Validasi khusus jika project terkait langsung dengan Order Penjualan nyata
+  if (order && project?.orderId) {
+    const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
+    const isPOAndAccepted = hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
+    if (!isPOAndAccepted) {
+      if (typeof promptPenugasanDisabled === 'function') {
+        promptPenugasanDisabled(order.id);
+      } else {
+        showToast('⚠️ Wajib upload PO Pelanggan dan status Accepted terlebih dahulu!', 'warning');
+      }
+      return;
+    }
+
+    const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
+    if (!hasProjectLead) {
+      showToast('⚠️ Tentukan Project Leader pada menu Penugasan Tim terlebih dahulu!', 'warning');
+      if (typeof openTeamAssignmentPage === 'function') {
+        openTeamAssignmentPage(order.id);
+      }
+      return;
+    }
+
+    const isService = isServiceOrder(order);
+    if (!isService) {
+      const hasBOM = (state.bom || []).some(b => b.orderId === order.id || (order.items || []).some(item => b.productName && item.itemName && b.productName.toLowerCase().trim() === item.itemName.toLowerCase().trim()));
+      if (!hasBOM) {
+        showToast('⚠️ Bill of Materials (BOM) belum diisi untuk order ini. Silakan isi dan simpan BOM terlebih dahulu sebelum membuat Project Management!', 'warning');
+        if (typeof createBOMFromOrder === 'function') {
+          createBOMFromOrder(order.id);
         }
         return;
-      }
-
-      const project = (state.projects || []).find(p => p.orderId === targetOrderId);
-      const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
-      if (!hasProjectLead) {
-        showToast('⚠️ Tentukan Project Leader pada menu Penugasan Tim terlebih dahulu!', 'warning');
-        if (typeof openTeamAssignmentPage === 'function') {
-          openTeamAssignmentPage(targetOrderId);
-        }
-        return;
-      }
-
-      const isService = isServiceOrder(order);
-      if (!isService) {
-        const hasBOM = (state.bom || []).some(b => b.orderId === targetOrderId || (order.items || []).some(item => b.productName && item.itemName && b.productName.toLowerCase().trim() === item.itemName.toLowerCase().trim()));
-        if (!hasBOM) {
-          showToast('⚠️ Bill of Materials (BOM) belum diisi untuk order ini. Silakan isi dan simpan BOM terlebih dahulu sebelum membuat Project Management!', 'warning');
-          if (typeof createBOMFromOrder === 'function') {
-            createBOMFromOrder(targetOrderId);
-          }
-          return;
-        }
       }
     }
   }
 
   timelineCalendarSelectedYear = null;
   timelineCalendarSelectedMonth = null;
-  currentActiveProjectOrderId = targetOrderId;
+  currentActiveProjectOrderId = project ? (project.id || project.orderId) : targetOrderId;
 
   const returnLabel = (state.timelineReturnView === 'projects') ? 'Kembali ke Project Management' : 'Kembali ke Order Penjualan';
   const backLinkBtn = document.getElementById('timeline-back-link-btn') || document.querySelector('#view-timeline button[onclick*="navigateBackFromTimeline"], #view-timeline button[onclick*="navigateTo"]');
@@ -667,18 +928,33 @@ function openProjectTimelinePage(orderId = null) {
 
   const orderSelect = document.getElementById('timeline-order-select');
   if (orderSelect) {
-    if (state.orders.length === 0) {
-      orderSelect.innerHTML = '<option value="">-- Belum Ada Order Penjualan --</option>';
-    } else {
-      orderSelect.innerHTML = state.orders.map(o => `
-        <option value="${o.id}" ${o.id === targetOrderId ? 'selected' : ''}>
-          [${o.id}] ${o.customerName} - ${o.items?.[0]?.itemName || 'Order'} (${formatRupiah(o.grandTotal)})
-        </option>
-      `).join('');
+    let opts = '';
+    const directProjs = (state.projects || []).filter(p => !p.orderId);
+    if (directProjs.length > 0) {
+      opts += '<optgroup label="Project Mandiri / Direct">';
+      directProjs.forEach(dp => {
+        const isSel = (dp.id === currentActiveProjectOrderId) ? 'selected' : '';
+        opts += `<option value="${dp.id}" ${isSel}>[${dp.id}] ${escapeHtml(dp.projectName)} (${escapeHtml(dp.customerName || 'Mandiri')})</option>`;
+      });
+      opts += '</optgroup>';
     }
+
+    if (state.orders && state.orders.length > 0) {
+      opts += '<optgroup label="Order Penjualan">';
+      state.orders.forEach(o => {
+        const isSel = (o.id === currentActiveProjectOrderId || (project && project.orderId === o.id)) ? 'selected' : '';
+        opts += `<option value="${o.id}" ${isSel}>[${o.id}] ${escapeHtml(o.customerName)} - ${escapeHtml(o.projectName || o.items?.[0]?.itemName || 'Order')} (${formatRupiah(o.grandTotal)})</option>`;
+      });
+      opts += '</optgroup>';
+    }
+
+    if (!opts) {
+      opts = '<option value="">-- Belum Ada Order / Project --</option>';
+    }
+    orderSelect.innerHTML = opts;
   }
 
-  renderTimelineWorkspace(targetOrderId);
+  renderTimelineWorkspace(currentActiveProjectOrderId);
   navigateTo('timeline');
   if (window.lucide) lucide.createIcons();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -694,31 +970,54 @@ function switchTimelineOrder(orderId) {
 function renderTimelineWorkspace(orderId) {
   if (!orderId) return;
 
-  const order = state.orders.find(o => o.id === orderId);
-  let project = (state.projects || []).find(p => p.orderId === orderId);
+  const project = (state.projects || []).find(p => p.id === orderId || p.orderId === orderId);
+  const order = state.orders.find(o => o.id === (project?.orderId || orderId));
 
-  if (!project) {
-    const firstItem = order?.items?.[0]?.itemName || 'Produk Pesanan';
-    const projName = order?.projectName || `${firstItem} (${order?.customerName || 'Customer'})`;
-    project = {
-      orderId: orderId,
-      projectName: projName,
-      customerName: order?.customerName || '-',
-      projectLead: '',
-      department: '',
-      status: 'Planning',
-      progressPercent: 0,
-      startDate: order?.orderDate || new Date().toISOString().split('T')[0],
-      dueDate: order?.dueDate || '',
-      team: [],
-      milestones: [],
-      notes: ''
-    };
+  let activeProj = project;
+  if (!activeProj) {
+    if (order) {
+      const firstItem = order?.items?.[0]?.itemName || 'Produk Pesanan';
+      const projName = order?.projectName || `${firstItem} (${order?.customerName || 'Customer'})`;
+      activeProj = {
+        orderId: order.id,
+        projectName: projName,
+        customerName: order?.customerName || '-',
+        projectLead: '',
+        department: '',
+        status: 'Planning',
+        progressPercent: 0,
+        startDate: order?.orderDate || new Date().toISOString().split('T')[0],
+        dueDate: order?.dueDate || '',
+        team: [],
+        milestones: [],
+        notes: ''
+      };
+    } else {
+      activeProj = {
+        id: orderId,
+        projectName: 'Project Mandiri',
+        customerName: 'Internal UBM',
+        projectLead: '',
+        department: 'Engineering',
+        status: 'Planning',
+        progressPercent: 0,
+        startDate: new Date().toISOString().split('T')[0],
+        dueDate: '',
+        team: [],
+        milestones: [],
+        notes: ''
+      };
+    }
   }
+
+  currentActiveProjectOrderId = activeProj.id || activeProj.orderId || orderId;
 
   // Header & Controls
   const headerOrderId = document.getElementById('timeline-header-order-id');
-  if (headerOrderId) headerOrderId.textContent = `${project.projectName || 'Project'} (${project.customerName || '-'}) [${orderId}]`;
+  if (headerOrderId) {
+    const code = activeProj.orderId ? activeProj.orderId : (activeProj.id || 'DIRECT');
+    headerOrderId.textContent = `${activeProj.projectName || 'Project'} (${activeProj.customerName || '-'}) [${code}]`;
+  }
 
   const statusSelect = document.getElementById('timeline-status-select');
   if (statusSelect) statusSelect.value = project.status || 'Planning';
@@ -2231,7 +2530,7 @@ function updateTimelineHeaderBadge() {
 // -------------------------------------------------------------
 async function saveProjectTimelineData(redirect = true) {
   if (!currentActiveProjectOrderId) {
-    showToast('Pilih order penjualan terlebih dahulu', 'warning');
+    showToast('Pilih order atau project terlebih dahulu', 'warning');
     return;
   }
 
@@ -2242,8 +2541,8 @@ async function saveProjectTimelineData(redirect = true) {
     return;
   }
 
-  const order = state.orders.find(o => o.id === currentActiveProjectOrderId);
-  const existingProject = (state.projects || []).find(p => p.orderId === currentActiveProjectOrderId);
+  const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
 
   // Extract all rich milestones data
   let milestones = [];
@@ -2322,9 +2621,9 @@ async function saveProjectTimelineData(redirect = true) {
 
   const payload = {
     ...(existingProject || {}),
-    orderId: currentActiveProjectOrderId,
-    projectName: existingProject?.projectName || `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})`,
-    customerName: order?.customerName || existingProject?.customerName || '-',
+    orderId: existingProject?.orderId || (order ? order.id : ''),
+    projectName: existingProject?.projectName || (order ? `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})` : 'Project Mandiri'),
+    customerName: existingProject?.customerName || order?.customerName || 'Internal UBM',
     status: status,
     startDate: startDate,
     dueDate: dueDate,
@@ -2353,10 +2652,12 @@ async function saveProjectTimelineData(redirect = true) {
       showToast('Seluruh data Timeline, Sub-Task, Laporan & Diskusi berhasil disimpan!', 'success');
       await fetchResource('projects');
       renderOrdersTable();
+      renderProjectsTableView();
       updateSidebarBadges();
       loadDashboardData();
       if (redirect) {
-        navigateTo('orders');
+        const returnTarget = (state.timelineReturnView === 'projects') ? 'projects' : 'orders';
+        navigateTo(returnTarget);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else {

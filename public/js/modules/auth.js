@@ -56,7 +56,7 @@ function getNormalizedRole(user) {
 const ROLE_PERMISSIONS = {
   'Administrator': {
     name: 'Administrator',
-    allowedViews: ['dashboard', 'logs', 'quotations', 'orders', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'settings'],
+    allowedViews: ['dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'settings'],
     canApproveOrder: true,
     canAssignLead: true,
     canRegisterMembers: true,
@@ -197,6 +197,9 @@ function isViewAllowedForUser(viewName) {
   if (!viewName || viewName === 'dashboard') return true; // Semua role bisa melihat dashboard
   const user = getAuthUser();
   const roleName = getNormalizedRole(user);
+  if (viewName === 'projects') {
+    return roleName === 'Administrator';
+  }
   const perms = ROLE_PERMISSIONS[roleName] || ROLE_PERMISSIONS['Member'];
   return (perms.allowedViews || []).includes(viewName);
 }
