@@ -3,7 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../config/supabase');
-const { readDB, writeDB, mapToSnakeCase, mapToCamelCase } = require('../utils/dbHelper');
+const { readDB, writeDB, mapToSnakeCase, mapToCamelCase, getCloudSync, setCloudSync, CLOUD_SYNC_PREFIX } = require('../utils/dbHelper');
 
 const UPLOADS_PO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'po');
 const UPLOADS_QUO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'quotations');
@@ -58,14 +58,71 @@ function processPOFileStorage(item, id) {
 }
 
 module.exports = function(broadcastReload) {
+  // ---------------- AUTOMATIC CLOUD SYNC BOOTSTRAP ----------------
+  (async function bootstrapCloudSync() {
+    try {
+      const db = readDB();
+
+      // 1. Sync Settings
+      const cloudSettings = await getCloudSync('settings');
+      if (!cloudSettings || Object.keys(cloudSettings).length === 0) {
+        if (db.settings && Object.keys(db.settings).length > 0) {
+          await setCloudSync('settings', db.settings);
+          console.log('⚡ [Cloud Sync] Pengaturan profil berhasil diunggah ke Supabase Cloud Store');
+        }
+      } else {
+        db.settings = { ...(db.settings || {}), ...cloudSettings };
+        writeDB(db);
+      }
+
+      // 2. Sync Users
+      const cloudUsers = await getCloudSync('users');
+      if (!cloudUsers || cloudUsers.length === 0) {
+        if (Array.isArray(db.users) && db.users.length > 0) {
+          await setCloudSync('users', db.users);
+          console.log(`⚡ [Cloud Sync] ${db.users.length} akun pengguna berhasil diunggah ke Supabase Cloud Store`);
+        }
+      } else {
+        db.users = cloudUsers;
+        writeDB(db);
+      }
+
+      // 3. Sync Other Resources
+      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims'];
+      for (const resName of resourcesToSync) {
+        const cloudData = await getCloudSync(resName);
+        if (!cloudData || cloudData.length === 0) {
+          if (Array.isArray(db[resName]) && db[resName].length > 0) {
+            await setCloudSync(resName, db[resName]);
+          }
+        } else if (Array.isArray(cloudData) && cloudData.length > 0) {
+          db[resName] = cloudData;
+          writeDB(db);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [Cloud Sync] Bootstrap notice:', err.message);
+    }
+  })();
+
   // ---------------- AUTHENTICATION ENDPOINTS ----------------
   const ADMIN_EMAIL = 'admin@ubm.co.id';
   const ADMIN_PASSWORD = 'bisnisdigital365';
 
-  router.post('/auth/login', (req, res) => {
+  router.post('/auth/login', async (req, res) => {
     const { email, password } = req.body || {};
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanPassword = (password || '').trim();
+
+    // Pull latest users from Supabase Cloud Store so newly created users on any device can login immediately
+    try {
+      const cloudUsers = await getCloudSync('users');
+      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        const db = readDB();
+        db.users = cloudUsers;
+        writeDB(db);
+      }
+    } catch (e) {}
 
     const db = readDB();
     const users = db.users || [];
@@ -80,7 +137,7 @@ module.exports = function(broadcastReload) {
         department: 'Operations & Management',
         avatar: 'AD'
       };
-      console.log(`🔐 [Auth] Login berhasil untuk akun: ${u.email}`);
+      console.log(`🔐 [Auth] Login berhasil untuk akun: ${u.email} (Role: ${u.role})`);
       return res.json({
         success: true,
         message: 'Login berhasil',
@@ -276,57 +333,73 @@ module.exports = function(broadcastReload) {
   });
 
   // ---------------- COMPANY SETTINGS / PROFILE ENDPOINT ----------------
-  router.get('/settings', (req, res) => {
-    try {
-      const db = readDB();
-      const defaultSettings = {
-        companyName: "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
-        companyShortName: "UBM Takumi",
-        institutionName: "Yayasan Takumi Bina Karya",
-        parentInstitution: "Politeknik Takumi",
-        tagline: "Unit Bisnis Mahasiswa - Teaching Factory & Engineering Solutions",
-        phone: "(021) 8990-1234",
-        whatsapp: "0812-3456-7890",
-        email: "ubm@takumi.ac.id",
-        website: "ubm.takumi.ac.id",
-        address: "Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Kab. Bekasi, Jawa Barat 17530",
-        city: "Bekasi",
-        leaderName: "Ir. Hendra Wijaya, M.T.",
-        leaderNip: "19850412 201012 1 002",
-        leaderRole: "Ketua Unit Bisnis Mandiri (UBM)",
-        wadir1Name: "Dr. Eng. Tri Wahyudi, M.Eng.",
-        wadir1Nip: "19820315 200804 1 003",
-        wadir1Role: "Wakil Direktur I Politeknik Takumi",
-        headAfterSales: "Bambang S., S.T.",
-        headFinance: "Siti Rahma, S.E.",
-        bankName: "Bank Mandiri",
-        bankBranch: "Cabang Cikarang",
-        bankAccount: "156-00-1234567-8",
-        bankAccountName: "Unit Bisnis Mandiri Politeknik Takumi",
-        paymentInstructions: "Pembayaran ditransfer ke Bank Mandiri Cabang Cikarang No. Rek: 156-00-1234567-8 a.n. Unit Bisnis Mandiri Politeknik Takumi",
-        copyrightText: "Copyright © Bisnis Digital Takumi"
-      };
+  const defaultCompanySettings = {
+    companyName: "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
+    companyShortName: "UBM Takumi",
+    institutionName: "Yayasan Takumi Bina Karya",
+    parentInstitution: "Politeknik Takumi",
+    tagline: "Unit Bisnis Mahasiswa - Teaching Factory & Engineering Solutions",
+    phone: "(021) 8990-1234",
+    whatsapp: "0812-3456-7890",
+    email: "ubm@takumi.ac.id",
+    website: "ubm.takumi.ac.id",
+    address: "Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Kab. Bekasi, Jawa Barat 17530",
+    city: "Bekasi",
+    leaderName: "Ir. Hendra Wijaya, M.T.",
+    leaderNip: "19850412 201012 1 002",
+    leaderRole: "Ketua Unit Bisnis Mandiri (UBM)",
+    wadir1Name: "Dr. Eng. Tri Wahyudi, M.Eng.",
+    wadir1Nip: "19820315 200804 1 003",
+    wadir1Role: "Wakil Direktur I Politeknik Takumi",
+    headAfterSales: "Bambang S., S.T.",
+    headFinance: "Siti Rahma, S.E.",
+    bankName: "Bank Mandiri",
+    bankBranch: "Cabang Cikarang",
+    bankAccount: "156-00-1234567-8",
+    bankAccountName: "Unit Bisnis Mandiri Politeknik Takumi",
+    paymentInstructions: "Pembayaran ditransfer ke Bank Mandiri Cabang Cikarang No. Rek: 156-00-1234567-8 a.n. Unit Bisnis Mandiri Politeknik Takumi",
+    copyrightText: "Copyright © Bisnis Digital Takumi"
+  };
 
-      const settings = db.settings ? { ...defaultSettings, ...db.settings } : defaultSettings;
+  router.get('/settings', async (req, res) => {
+    try {
+      let settings = await getCloudSync('settings');
+      if (!settings || Object.keys(settings).length === 0) {
+        const db = readDB();
+        settings = (db.settings && Object.keys(db.settings).length > 0)
+          ? { ...defaultCompanySettings, ...db.settings }
+          : defaultCompanySettings;
+        setCloudSync('settings', settings).catch(() => {});
+      } else {
+        settings = { ...defaultCompanySettings, ...settings };
+      }
+
+      const db = readDB();
+      db.settings = settings;
+      writeDB(db);
+
       res.json(settings);
     } catch (err) {
       console.error('Error fetching settings:', err);
-      res.status(500).json({ error: 'Gagal memuat pengaturan sistem' });
+      const db = readDB();
+      res.json(db.settings || defaultCompanySettings);
     }
   });
 
-  router.put('/settings', (req, res) => {
+  router.put('/settings', async (req, res) => {
     try {
       const db = readDB();
       const updatedSettings = {
-        ...(db.settings || {}),
+        ...(db.settings || defaultCompanySettings),
         ...req.body,
         updatedAt: new Date().toISOString()
       };
       db.settings = updatedSettings;
       writeDB(db);
 
-      console.log('⚙️ [Settings] Pengaturan profil perusahaan berhasil diperbarui');
+      await setCloudSync('settings', updatedSettings);
+
+      console.log('⚙️ [Settings] Pengaturan profil perusahaan berhasil diperbarui di Supabase Cloud Store');
       broadcastReload({ type: 'reload', resource: 'settings' });
       res.json(updatedSettings);
     } catch (err) {
@@ -444,17 +517,38 @@ module.exports = function(broadcastReload) {
     }
   });
 
-  const missingSupabaseTables = new Set(['activity_logs', 'users', 'projects', 'project_reports']);
+  const missingSupabaseTables = new Set();
 
-  // ---------------- GENERIC CRUD HELPER FUNCTION ----------------
+  // ---------------- GENERIC CRUD HELPER FUNCTION WITH CLOUD SYNC ----------------
   function registerCrudRoutes(resourceName, idPrefix) {
     // GET ALL
     router.get(`/${resourceName}`, async (req, res) => {
       const db = readDB();
-      const localItems = db[resourceName] || [];
+      const localItems = Array.isArray(db[resourceName]) ? db[resourceName] : [];
 
       try {
-        if (supabase && !missingSupabaseTables.has(resourceName)) {
+        // Special case: delivery table holds Cloud Store rows; filter out system rows
+        if (resourceName === 'delivery' && supabase) {
+          const { data, error } = await supabase
+            .from('delivery')
+            .select('*')
+            .not('id', 'like', `${CLOUD_SYNC_PREFIX}%`)
+            .order('created_at', { ascending: false });
+
+          if (!error && data) {
+            const cleanDeliveries = mapToCamelCase(data);
+            const cleanLocal = localItems.filter(l => l.id && !l.id.startsWith(CLOUD_SYNC_PREFIX));
+            const remoteIds = new Set(cleanDeliveries.map(r => r.id));
+            const extraLocal = cleanLocal.filter(l => !remoteIds.has(l.id));
+            const merged = [...cleanDeliveries, ...extraLocal];
+            db.delivery = merged;
+            writeDB(db);
+            return res.json(merged);
+          }
+        }
+
+        // Check native Supabase table if not known to be missing
+        if (supabase && !missingSupabaseTables.has(resourceName) && resourceName !== 'users') {
           const { data, error } = await supabase
             .from(resourceName)
             .select('*')
@@ -462,34 +556,66 @@ module.exports = function(broadcastReload) {
 
           if (!error && data) {
             const remoteCamel = mapToCamelCase(data);
-            // Merge with local DB to ensure custom fields (like poDocument, poFileUrl, isLeadLocked, quotationId) are never lost
+
+            // Fetch cloud store items to retain any JSON or extended fields not present in SQL columns
+            let cloudItems = [];
+            try {
+              const cData = await getCloudSync(resourceName);
+              if (Array.isArray(cData)) cloudItems = cData;
+            } catch (e) {}
+
+            const remoteIds = new Set(remoteCamel.map(r => r.id));
             const merged = remoteCamel.map(remoteItem => {
-              const local = localItems.find(l => l.id === remoteItem.id);
+              const localMatch = localItems.find(l => l.id === remoteItem.id) || {};
+              const cloudMatch = cloudItems.find(c => c.id === remoteItem.id) || {};
               return {
-                ...local,
+                ...localMatch,
+                ...cloudMatch,
                 ...remoteItem,
-                quotationId: remoteItem.quotationId || local?.quotationId || '',
-                poDocument: remoteItem.poDocument || local?.poDocument || null,
-                poFileUrl: remoteItem.poFileUrl || local?.poFileUrl || local?.poDocument?.url || '',
-                poFileName: remoteItem.poFileName || local?.poFileName || local?.poDocument?.name || '',
-                isLeadLocked: remoteItem.isLeadLocked !== undefined ? remoteItem.isLeadLocked : local?.isLeadLocked
+                // Ensure critical rich fields (e.g. poDocument, poFileUrl, poFileName) are NEVER wiped out by missing SQL columns
+                poDocument: remoteItem.poDocument || cloudMatch.poDocument || localMatch.poDocument || undefined,
+                poFileUrl: remoteItem.poFileUrl || cloudMatch.poFileUrl || localMatch.poFileUrl || undefined,
+                poFileName: remoteItem.poFileName || cloudMatch.poFileName || localMatch.poFileName || undefined,
+                items: (remoteItem.items && remoteItem.items.length > 0) ? remoteItem.items : (cloudMatch.items || localMatch.items || []),
+                additionalServices: remoteItem.additionalServices || cloudMatch.additionalServices || localMatch.additionalServices || []
               };
             });
-            const remoteIds = new Set(remoteCamel.map(r => r.id));
+
             const extraLocal = localItems.filter(l => l.id && l.id !== 'undefined' && !remoteIds.has(l.id));
-            return res.json([...merged, ...extraLocal]);
+            const fullMerged = [...merged, ...extraLocal];
+            db[resourceName] = fullMerged;
+            writeDB(db);
+            return res.json(fullMerged);
           } else if (error) {
-            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+            if (error.code === 'PGRST205' || error.message.includes('Could not find the table') || error.message.includes('relation') || error.message.includes('does not exist')) {
               missingSupabaseTables.add(resourceName);
             }
-            console.warn(`[Supabase] GET /api/${resourceName} notice:`, error.message);
           }
         }
       } catch (err) {
-        console.warn(`[Supabase] Fallback GET /api/${resourceName}:`, err.message);
+        console.warn(`[Supabase] GET /api/${resourceName} native check notice:`, err.message);
       }
 
-      res.json(localItems);
+      // Fallback: Fetch from Supabase Cloud Store for all devices synchronization
+      try {
+        const cloudData = await getCloudSync(resourceName);
+        if (Array.isArray(cloudData) && cloudData.length > 0) {
+          db[resourceName] = cloudData;
+          writeDB(db);
+          return res.json(cloudData);
+        } else if (localItems.length > 0) {
+          // Push local seed data to Cloud Store so other devices immediately receive it
+          setCloudSync(resourceName, localItems).catch(() => {});
+        }
+      } catch (syncErr) {
+        console.warn(`[Cloud Sync] Fallback GET /api/${resourceName}:`, syncErr.message);
+      }
+
+      const cleanResult = resourceName === 'delivery'
+        ? localItems.filter(l => l.id && !l.id.startsWith(CLOUD_SYNC_PREFIX))
+        : localItems;
+
+      res.json(cleanResult);
     });
 
     // GET SINGLE
@@ -507,19 +633,22 @@ module.exports = function(broadcastReload) {
 
           if (!error && data) {
             const remoteCamel = mapToCamelCase(data);
+            let cloudMatch = null;
+            try {
+              const cloudItems = await getCloudSync(resourceName);
+              if (Array.isArray(cloudItems)) cloudMatch = cloudItems.find(c => c.id === req.params.id);
+            } catch (e) {}
             return res.json({
               ...localItem,
+              ...cloudMatch,
               ...remoteCamel,
-              quotationId: remoteCamel.quotationId || localItem?.quotationId || '',
-              poDocument: remoteCamel.poDocument || localItem?.poDocument || null,
-              poFileUrl: remoteCamel.poFileUrl || localItem?.poFileUrl || '',
-              poFileName: remoteCamel.poFileName || localItem?.poFileName || ''
+              poDocument: remoteCamel.poDocument || cloudMatch?.poDocument || localItem?.poDocument || undefined,
+              poFileUrl: remoteCamel.poFileUrl || cloudMatch?.poFileUrl || localItem?.poFileUrl || undefined,
+              poFileName: remoteCamel.poFileName || cloudMatch?.poFileName || localItem?.poFileName || undefined
             });
           }
         }
-      } catch (err) {
-        console.warn(`[Supabase] Fallback GET single in ${resourceName}:`, err.message);
-      }
+      } catch (err) {}
 
       if (!localItem) return res.status(404).json({ error: `${resourceName} not found` });
       res.json(localItem);
@@ -528,16 +657,16 @@ module.exports = function(broadcastReload) {
     // POST (CREATE)
     router.post(`/${resourceName}`, async (req, res) => {
       const db = readDB();
-      const items = db[resourceName] || [];
+      const items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
       const newId = req.body.id || `${idPrefix}-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
       
       let newItem = {
         id: newId,
         ...req.body,
-        createdAt: new Date().toISOString()
+        createdAt: req.body.createdAt || new Date().toISOString()
       };
 
-      // Process and save any Base64 PDF to disk for fast, lightweight storage
+      // Process and save any Base64 PDF to disk
       if (resourceName === 'orders') {
         newItem = processPOFileStorage(newItem, newId);
 
@@ -552,9 +681,8 @@ module.exports = function(broadcastReload) {
               quotations[qIdx].status = quoStatus;
               quotations[qIdx].updatedAt = new Date().toISOString();
               db.quotations = quotations;
-              if (supabase && !missingSupabaseTables.has('quotations')) {
-                supabase.from('quotations').update({ status: quoStatus }).eq('id', quoId).then(() => {}).catch(() => {});
-              }
+              writeDB(db);
+              setCloudSync('quotations', quotations).catch(() => {});
               broadcastReload({ type: 'reload', resource: 'quotations' });
             }
           } catch (e) {
@@ -563,34 +691,23 @@ module.exports = function(broadcastReload) {
         }
       }
 
+      // Try inserting into native Supabase table if available
       try {
-        if (supabase && !missingSupabaseTables.has(resourceName)) {
+        if (supabase && !missingSupabaseTables.has(resourceName) && resourceName !== 'users') {
           let snakeItem = mapToSnakeCase(newItem);
-          if (resourceName === 'orders') {
-            delete snakeItem.quotation_id;
-            delete snakeItem.po_document;
-            delete snakeItem.po_file_url;
-            delete snakeItem.po_file_name;
-          }
-
-          let data = null;
-          let error = null;
           let cleanSnake = { ...snakeItem };
 
-          for (let attempt = 0; attempt < 5; attempt++) {
+          for (let attempt = 0; attempt < 8; attempt++) {
             const res = await supabase.from(resourceName).insert([cleanSnake]).select();
-            data = res.data;
-            error = res.error;
+            if (!res.error) break;
 
-            if (!error) break;
-
-            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+            if (res.error.code === 'PGRST205' || res.error.message.includes('Could not find the table')) {
               missingSupabaseTables.add(resourceName);
               break;
             }
 
-            if (error && (error.code === 'PGRST204' || error.message.includes('column') || error.message.includes('schema'))) {
-              const missingCol = (error.message.match(/'([^']+)' column/) || error.message.match(/column "([^"]+)"/) || error.message.match(/column '([^']+)'/))?.[1];
+            if (res.error && (res.error.code === 'PGRST204' || res.error.message.includes('column') || res.error.message.includes('schema'))) {
+              const missingCol = (res.error.message.match(/'([^']+)' column/) || res.error.message.match(/column "([^"]+)"/) || res.error.message.match(/column '([^']+)'/))?.[1];
               if (missingCol && cleanSnake.hasOwnProperty(missingCol)) {
                 delete cleanSnake[missingCol];
                 continue;
@@ -598,24 +715,23 @@ module.exports = function(broadcastReload) {
             }
             break;
           }
-
-          if (!error && data && data.length > 0) {
-            items.unshift(newItem);
-            db[resourceName] = items;
-            writeDB(db);
-            broadcastReload({ type: 'reload', resource: resourceName });
-            return res.status(201).json({ ...newItem, ...mapToCamelCase(data[0]) });
-          } else if (error) {
-            console.warn(`[Supabase] Insert notice in ${resourceName}:`, error.message);
-          }
         }
       } catch (err) {
-        console.warn(`[Supabase] Insert exception in ${resourceName}:`, err.message);
+        console.warn(`[Supabase] Insert notice in ${resourceName}:`, err.message);
       }
 
-      items.unshift(newItem);
+      // Add to local DB cache
+      const existingIdx = items.findIndex(i => i.id === newItem.id);
+      if (existingIdx !== -1) {
+        items[existingIdx] = newItem;
+      } else {
+        items.unshift(newItem);
+      }
       db[resourceName] = items;
       writeDB(db);
+
+      // Persist to Supabase Cloud Store so all devices see the new item immediately
+      await setCloudSync(resourceName, items);
 
       broadcastReload({ type: 'reload', resource: resourceName });
       res.status(201).json(newItem);
@@ -627,7 +743,7 @@ module.exports = function(broadcastReload) {
         return res.status(400).json({ error: 'ID tidak valid' });
       }
 
-      // Reject direct edits on quotations that are already converted to sales orders (unless it's just status update)
+      // Reject direct edits on quotations that are already converted to sales orders
       if (resourceName === 'quotations') {
         const db = readDB();
         const orders = db.orders || [];
@@ -652,65 +768,32 @@ module.exports = function(broadcastReload) {
         updatedAt: new Date().toISOString()
       };
 
-      // Process and save any Base64 PDF to disk for fast, lightweight storage
       if (resourceName === 'orders') {
         updateData = processPOFileStorage(updateData, req.params.id);
-
-        // Auto-update linked Quotation to 'Accepted' if order has quotation reference
-        const quoId = updateData.quotationId || (updateData.notes && (updateData.notes.match(/QUO-[\w-]+/i) || [])[0]);
-        if (quoId) {
-          try {
-            const db = readDB();
-            const quotations = db.quotations || [];
-            const qIdx = quotations.findIndex(q => q.id === quoId);
-            if (qIdx !== -1 && quotations[qIdx].status !== 'Accepted') {
-              quotations[qIdx].status = 'Accepted';
-              quotations[qIdx].updatedAt = new Date().toISOString();
-              db.quotations = quotations;
-              writeDB(db);
-              if (supabase && !missingSupabaseTables.has('quotations')) {
-                supabase.from('quotations').update({ status: 'Accepted' }).eq('id', quoId).then(() => {}).catch(() => {});
-              }
-              broadcastReload({ type: 'reload', resource: 'quotations' });
-            }
-          } catch (e) {
-            console.error('Error auto-updating quotation in PUT order:', e);
-          }
-        }
       }
 
+      // Update native Supabase table if available
       try {
-        if (supabase && !missingSupabaseTables.has(resourceName)) {
+        if (supabase && !missingSupabaseTables.has(resourceName) && resourceName !== 'users') {
           let snakeItem = mapToSnakeCase(updateData);
-          if (resourceName === 'orders') {
-            delete snakeItem.quotation_id;
-            delete snakeItem.po_document;
-            delete snakeItem.po_file_url;
-            delete snakeItem.po_file_name;
-          }
-
-          let data = null;
-          let error = null;
           let cleanSnake = { ...snakeItem };
 
-          for (let attempt = 0; attempt < 5; attempt++) {
+          for (let attempt = 0; attempt < 8; attempt++) {
             const res = await supabase
               .from(resourceName)
               .update(cleanSnake)
               .eq('id', req.params.id)
               .select();
-            data = res.data;
-            error = res.error;
 
-            if (!error) break;
+            if (!res.error) break;
 
-            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+            if (res.error.code === 'PGRST205' || res.error.message.includes('Could not find the table')) {
               missingSupabaseTables.add(resourceName);
               break;
             }
 
-            if (error && (error.code === 'PGRST204' || error.message.includes('column') || error.message.includes('schema'))) {
-              const missingCol = (error.message.match(/'([^']+)' column/) || error.message.match(/column "([^"]+)"/) || error.message.match(/column '([^']+)'/))?.[1];
+            if (res.error && (res.error.code === 'PGRST204' || res.error.message.includes('column') || res.error.message.includes('schema'))) {
+              const missingCol = (res.error.message.match(/'([^']+)' column/) || res.error.message.match(/column "([^"]+)"/) || res.error.message.match(/column '([^']+)'/))?.[1];
               if (missingCol && cleanSnake.hasOwnProperty(missingCol)) {
                 delete cleanSnake[missingCol];
                 continue;
@@ -718,31 +801,13 @@ module.exports = function(broadcastReload) {
             }
             break;
           }
-
-          if (!error && data && data.length > 0) {
-            const db = readDB();
-            const items = db[resourceName] || [];
-            const idx = items.findIndex(i => i.id === req.params.id);
-            if (idx !== -1) {
-              items[idx] = { ...items[idx], ...updateData, id: req.params.id };
-            } else {
-              items.push({ id: req.params.id, ...updateData });
-            }
-            db[resourceName] = items;
-            writeDB(db);
-
-            broadcastReload({ type: 'reload', resource: resourceName });
-            return res.json({ ...updateData, ...mapToCamelCase(data[0]) });
-          } else if (error) {
-            console.warn(`[Supabase] Update notice in ${resourceName}:`, error.message);
-          }
         }
       } catch (err) {
-        console.warn(`[Supabase] Update exception in ${resourceName}:`, err.message);
+        console.warn(`[Supabase] Update notice in ${resourceName}:`, err.message);
       }
 
       const db = readDB();
-      const items = db[resourceName] || [];
+      const items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
       const idx = items.findIndex(i => i.id === req.params.id);
       if (idx === -1) {
         items.push({ id: req.params.id, ...updateData });
@@ -752,6 +817,9 @@ module.exports = function(broadcastReload) {
       db[resourceName] = items;
       writeDB(db);
 
+      // Persist to Supabase Cloud Store for multi-device sync
+      await setCloudSync(resourceName, items);
+
       broadcastReload({ type: 'reload', resource: resourceName });
       res.json(items[idx === -1 ? items.length - 1 : idx]);
     });
@@ -759,34 +827,23 @@ module.exports = function(broadcastReload) {
     // DELETE
     router.delete(`/${resourceName}/:id`, async (req, res) => {
       try {
-        if (supabase && !missingSupabaseTables.has(resourceName)) {
-          const { error } = await supabase
+        if (supabase && !missingSupabaseTables.has(resourceName) && resourceName !== 'users') {
+          await supabase
             .from(resourceName)
             .delete()
             .eq('id', req.params.id);
-
-          if (!error) {
-            const db = readDB();
-            const items = db[resourceName] || [];
-            db[resourceName] = items.filter(i => i.id !== req.params.id);
-            writeDB(db);
-            broadcastReload({ type: 'reload', resource: resourceName });
-            return res.json({ message: 'Deleted successfully from Supabase', id: req.params.id });
-          } else {
-            if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
-              missingSupabaseTables.add(resourceName);
-            }
-            console.error(`[Supabase] Delete error in ${resourceName}:`, error.message);
-          }
         }
       } catch (err) {
-        console.warn(`[Supabase] Delete exception in ${resourceName}:`, err.message);
+        console.warn(`[Supabase] Delete notice in ${resourceName}:`, err.message);
       }
 
       const db = readDB();
-      const items = db[resourceName] || [];
-      db[resourceName] = items.filter(i => i.id !== req.params.id);
+      const items = (Array.isArray(db[resourceName]) ? db[resourceName] : []).filter(i => i.id !== req.params.id);
+      db[resourceName] = items;
       writeDB(db);
+
+      // Persist deletion to Supabase Cloud Store for multi-device sync
+      await setCloudSync(resourceName, items);
 
       broadcastReload({ type: 'reload', resource: resourceName });
       res.json({ message: 'Deleted successfully', id: req.params.id });

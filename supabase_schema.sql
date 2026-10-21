@@ -192,8 +192,175 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Migration support for existing Supabase databases
-ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+-- ---------------------------------------------------------
+-- 8. TABLE: users (Manajemen Akun Pengguna & Hak Akses Role)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.users (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(100) NOT NULL DEFAULT 'Member',
+    department VARCHAR(255) DEFAULT 'Operations & Management',
+    status VARCHAR(50) NOT NULL DEFAULT 'Aktif',
+    avatar VARCHAR(10),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_status ON public.users(status);
+
+-- ---------------------------------------------------------
+-- 9. TABLE: settings (Pengaturan Profil Perusahaan & Sistem)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.settings (
+    id VARCHAR(50) PRIMARY KEY DEFAULT 'current',
+    company_name VARCHAR(255) NOT NULL,
+    company_short_name VARCHAR(100),
+    institution_name VARCHAR(255),
+    parent_institution VARCHAR(255),
+    tagline TEXT,
+    phone VARCHAR(100),
+    whatsapp VARCHAR(100),
+    email VARCHAR(255),
+    website VARCHAR(255),
+    address TEXT,
+    city VARCHAR(100),
+    leader_name VARCHAR(255),
+    leader_nip VARCHAR(100),
+    leader_role VARCHAR(255),
+    wadir1_name VARCHAR(255),
+    wadir1_nip VARCHAR(100),
+    wadir1_role VARCHAR(255),
+    head_after_sales VARCHAR(255),
+    head_finance VARCHAR(255),
+    bank_name VARCHAR(100),
+    bank_branch VARCHAR(100),
+    bank_account VARCHAR(100),
+    bank_account_name VARCHAR(255),
+    payment_instructions TEXT,
+    copyright_text VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 10. TABLE: projects (Project Management & Timeline)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.projects (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    project_name VARCHAR(255) NOT NULL,
+    customer_name VARCHAR(255),
+    project_lead VARCHAR(255),
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    end_date DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Planning',
+    progress_percent NUMERIC(5, 2) NOT NULL DEFAULT 0,
+    milestones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    team JSONB NOT NULL DEFAULT '[]'::jsonb,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_status ON public.projects(status);
+CREATE INDEX IF NOT EXISTS idx_projects_lead ON public.projects(project_lead);
+
+-- ---------------------------------------------------------
+-- 11. TABLE: bast (Berita Acara Serah Terima)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.bast (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    bast_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    work_summary TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'Draft',
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pdf_url TEXT,
+    pdf_filename TEXT,
+    uploaded_document JSONB,
+    documentation_photos JSONB NOT NULL DEFAULT '[]'::jsonb,
+    proof_notes TEXT,
+    handed_over_date DATE,
+    receiver_name VARCHAR(255),
+    has_proof BOOLEAN DEFAULT FALSE,
+    proof_updated_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 12. TABLE: project_reports (Laporan Pelaksanaan Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.project_reports (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    report_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    author VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'Submitted',
+    actual_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+    returned_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+    labor_hours NUMERIC(10, 2) DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 13. TABLE: maintenance (Pemeliharaan Berkala Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.maintenance (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    schedule_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status VARCHAR(50) DEFAULT 'Scheduled',
+    inspection_checklist JSONB NOT NULL DEFAULT '[]'::jsonb,
+    technician_name VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 14. TABLE: service_tickets (Tiket Perbaikan & Servis Non-Garansi)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.service_tickets (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    ticket_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    issue_description TEXT NOT NULL,
+    priority VARCHAR(50) DEFAULT 'Medium',
+    status VARCHAR(50) DEFAULT 'Open',
+    repair_cost NUMERIC(15, 2) DEFAULT 0,
+    technician_name VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 15. TABLE: warranty_claims (Klaim Garansi Resmi)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.warranty_claims (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    claim_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    claim_reason TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'Under Review',
+    approved_by VARCHAR(255),
+    resolution_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
 
 -- =========================================================
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
@@ -248,6 +415,30 @@ CREATE TRIGGER trigger_delivery_updated_at BEFORE UPDATE ON public.delivery FOR 
 DROP TRIGGER IF EXISTS trigger_activity_logs_updated_at ON public.activity_logs;
 CREATE TRIGGER trigger_activity_logs_updated_at BEFORE UPDATE ON public.activity_logs FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
+DROP TRIGGER IF EXISTS trigger_users_updated_at ON public.users;
+CREATE TRIGGER trigger_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_settings_updated_at ON public.settings;
+CREATE TRIGGER trigger_settings_updated_at BEFORE UPDATE ON public.settings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_projects_updated_at ON public.projects;
+CREATE TRIGGER trigger_projects_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_bast_updated_at ON public.bast;
+CREATE TRIGGER trigger_bast_updated_at BEFORE UPDATE ON public.bast FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_project_reports_updated_at ON public.project_reports;
+CREATE TRIGGER trigger_project_reports_updated_at BEFORE UPDATE ON public.project_reports FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_maintenance_updated_at ON public.maintenance;
+CREATE TRIGGER trigger_maintenance_updated_at BEFORE UPDATE ON public.maintenance FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_service_tickets_updated_at ON public.service_tickets;
+CREATE TRIGGER trigger_service_tickets_updated_at BEFORE UPDATE ON public.service_tickets FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS trigger_warranty_claims_updated_at ON public.warranty_claims;
+CREATE TRIGGER trigger_warranty_claims_updated_at BEFORE UPDATE ON public.warranty_claims FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 -- =========================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================
@@ -259,6 +450,14 @@ ALTER TABLE public.purchasing ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bom ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.delivery ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bast ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.service_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.warranty_claims ENABLE ROW LEVEL SECURITY;
 
 -- Allow Public / Authenticated Access for Enterprise App Operations
 CREATE POLICY "Allow all access to quotations" ON public.quotations FOR ALL USING (true) WITH CHECK (true);
@@ -269,6 +468,14 @@ CREATE POLICY "Allow all access to purchasing" ON public.purchasing FOR ALL USIN
 CREATE POLICY "Allow all access to bom" ON public.bom FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to delivery" ON public.delivery FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to users" ON public.users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to settings" ON public.settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to projects" ON public.projects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to bast" ON public.bast FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to project_reports" ON public.project_reports FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to maintenance" ON public.maintenance FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to service_tickets" ON public.service_tickets FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to warranty_claims" ON public.warranty_claims FOR ALL USING (true) WITH CHECK (true);
 
 -- =========================================================
 -- INITIAL SAMPLE DATA SEEDING (UBM ERP Records)

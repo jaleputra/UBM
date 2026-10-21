@@ -81,6 +81,11 @@ function switchSettingsTab(tabKey) {
     if (mainForm) mainForm.style.display = 'none';
     if (topActions) topActions.style.display = 'none';
     renderAccountsTabTable();
+    if (typeof fetchResource === 'function') {
+      fetchResource('users').then(() => {
+        renderAccountsTabTable();
+      }).catch(() => {});
+    }
   } else {
     if (mainForm) mainForm.style.display = 'block';
     if (topActions) topActions.style.display = 'flex';
@@ -843,14 +848,22 @@ async function saveUserAccount(event) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const created = await res.json();
 
-      if (!state.users) state.users = [];
-      const existingIdx = state.users.findIndex(u => u.id === created.id || u.email === created.email);
-      if (existingIdx === -1) {
-        state.users.unshift(created);
+      if (typeof fetchResource === 'function') {
+        await fetchResource('users');
       } else {
-        state.users[existingIdx] = created;
+        if (!state.users) state.users = [];
+        const existingIdx = state.users.findIndex(u => u.id === created.id || u.email === created.email);
+        if (existingIdx === -1) {
+          state.users.unshift(created);
+        } else {
+          state.users[existingIdx] = created;
+        }
       }
       showToast(`Akun ${email} berhasil didaftarkan dan dapat langsung digunakan untuk login!`, 'success');
+    }
+
+    if (typeof fetchResource === 'function') {
+      await fetchResource('users');
     }
 
     resetUserForm();
@@ -956,7 +969,11 @@ async function deleteUserAccount(id) {
     const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    state.users = (state.users || []).filter(u => u.id !== id);
+    if (typeof fetchResource === 'function') {
+      await fetchResource('users');
+    } else {
+      state.users = (state.users || []).filter(u => u.id !== id);
+    }
     showToast(`Akun ${user.name} berhasil dihapus.`, 'info');
     renderAccountsTabTable();
     if (typeof populateUsersAssignmentDatalist === 'function') {

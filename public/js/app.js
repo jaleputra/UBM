@@ -3,27 +3,31 @@
 // Core Application Coordinator & SPA Router
 // =========================================================
 
-// Global State
-const state = {
-  currentView: 'dashboard',
-  orders: [],
-  quotations: [],
-  po: [],
-  invoices: [],
-  purchasing: [],
-  bom: [],
-  delivery: [],
-  projects: [],
-  bast: [],
-  project_reports: [],
-  service_tickets: [],
-  warranty_claims: [],
-  maintenance: [],
-  activity_logs: [],
-  settings: null,
-  stats: null,
-  searchQuery: ''
-};
+// Global State (Safely attached to window)
+window.state = window.state || {};
+var state = window.state;
+Object.assign(state, {
+  currentView: state.currentView || 'dashboard',
+  orders: state.orders || [],
+  quotations: state.quotations || [],
+  po: state.po || [],
+  invoices: state.invoices || [],
+  purchasing: state.purchasing || [],
+  bom: state.bom || [],
+  delivery: state.delivery || [],
+  projects: state.projects || [],
+  bast: state.bast || [],
+  project_reports: state.project_reports || [],
+  service_tickets: state.service_tickets || [],
+  warranty_claims: state.warranty_claims || [],
+  maintenance: state.maintenance || [],
+  activity_logs: state.activity_logs || [],
+  users: state.users || [],
+  settings: state.settings || null,
+  stats: state.stats || null,
+  searchQuery: state.searchQuery || '',
+  ganttCollapsedProjects: state.ganttCollapsedProjects || {}
+});
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -268,6 +272,35 @@ async function loadAllData() {
       fetchResource('users'),
       fetchResource('settings')
     ]);
+    // Sync active session user with latest database state across all devices
+    if (typeof getAuthUser === 'function') {
+      const authUser = getAuthUser();
+      if (authUser && Array.isArray(state.users)) {
+        const liveUser = state.users.find(u =>
+          (u.email || '').trim().toLowerCase() === (authUser.email || '').trim().toLowerCase() ||
+          u.id === authUser.id
+        );
+        if (liveUser) {
+          const updatedAuth = {
+            ...authUser,
+            name: liveUser.name,
+            role: liveUser.role,
+            department: liveUser.department,
+            avatar: liveUser.avatar || liveUser.name?.slice(0, 2).toUpperCase() || 'US'
+          };
+          const userPayload = JSON.stringify(updatedAuth);
+          if (localStorage.getItem('ubm_auth_user')) {
+            localStorage.setItem('ubm_auth_user', userPayload);
+          } else {
+            sessionStorage.setItem('ubm_auth_user', userPayload);
+          }
+          if (typeof updateAppUserUI === 'function') {
+            updateAppUserUI(updatedAuth);
+          }
+        }
+      }
+    }
+
     if (typeof updateAppFooterCopyright === 'function') {
       updateAppFooterCopyright();
     }
@@ -292,47 +325,13 @@ async function fetchResource(resource) {
     const data = await res.json();
     if (resource === 'settings') {
       state.settings = data;
-    } else if (resource === 'activity_logs') {
-      if (Array.isArray(data) && data.length > 0) {
-        state.activity_logs = data;
-        try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
-      } else {
-        // If server returned empty, verify against local backup
-        try {
-          const backup = JSON.parse(localStorage.getItem('ubm_activity_logs_backup') || '[]');
-          if (Array.isArray(backup) && backup.length > 0) {
-            state.activity_logs = backup;
-            // Background restore to server
-            backup.forEach(b => {
-              fetch('/api/activity_logs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(b)
-              }).catch(() => {});
-            });
-          } else {
-            state.activity_logs = [];
-          }
-        } catch (e) {
-          state.activity_logs = [];
-        }
-      }
     } else {
       state[resource] = Array.isArray(data) ? data : [];
     }
     return data;
   } catch (err) {
     console.warn(`[Data Fetch] Gagal mengambil resource ${resource}:`, err.message);
-    if (resource === 'activity_logs') {
-      try {
-        const backup = JSON.parse(localStorage.getItem('ubm_activity_logs_backup') || '[]');
-        if (Array.isArray(backup) && backup.length > 0) {
-          state.activity_logs = backup;
-          return state.activity_logs;
-        }
-      } catch (e) {}
-    }
-    if (!state[resource]) state[resource] = [];
+    if (!state[resource]) state[resource] = (resource === 'settings' ? null : []);
     return state[resource];
   }
 }
@@ -466,8 +465,9 @@ async function deleteResource(resource, id) {
     if (resource === 'purchasing') {
       const prToDelete = (state.purchasing || []).find(p => p.id === id);
       if (prToDelete && (prToDelete.status === 'Disetujui' || prToDelete.status === 'Stock' || prToDelete.status === 'Approved')) {
-        showToast(`⚠️ Request Pengadaan ${id} sudah Disetujui (Terkunci) sehingga tidak dapat dihapus!`, 'warning');
-        return;
+        if (!confirm(`⚠️ Perhatian: Request Pengadaan ${id} berstatus '${prToDelete.status}'. Menghapus data ini akan menghapusnya secara permanen dari Dokumen PR, Proses Pembelian, dan Master Barang.\n\nApakah Anda yakin ingin tetap menghapusnya?`)) {
+          return;
+        }
       }
     }
 

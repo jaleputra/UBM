@@ -115,8 +115,8 @@ function renderOrdersTable() {
        </button>`;
 
     // Syarat akses berjenjang (Sequential Workflow Pipeline):
-    // 1. PO sudah diupload DAN status sudah Accepted
-    const isPOAndAccepted = hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
+    // 1. PO sudah diupload DAN status tidak Cancelled
+    const isPOAndAccepted = hasPO && order.status !== 'Cancelled';
     // 2. Leader Project sudah ditentukan dan disimpan
     const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
     // 3. BOM sudah diisi untuk order ini (Khusus Produk Manufaktur)
@@ -130,10 +130,10 @@ function renderOrdersTable() {
     const isBOMPengajuan = !acceptedBOM && Boolean(pengajuanBOM);
     const isBOMDitolak = !acceptedBOM && !pengajuanBOM && Boolean(rejectedBOM);
 
-    // Tombol 1: Penugasan Tim (Aktif pertama kali setelah PO diupload & status Accepted)
+    // Tombol 1: Penugasan Tim (Aktif seketika setelah PO diupload)
     const btnPenugasan = isPOAndAccepted ?
       `<button class="btn-icon" style="color: #4f46e5;" title="Penugasan Tim & PIC (Project Leader)" onclick="event.stopPropagation(); openTeamAssignmentPage('${order.id}')"><i data-lucide="users"></i></button>` :
-      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan dan status Accepted untuk mengakses Penugasan Tim" onclick="event.stopPropagation(); promptPenugasanDisabled('${order.id}')"><i data-lucide="users"></i></button>`;
+      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan untuk mengakses Penugasan Tim" onclick="event.stopPropagation(); promptPenugasanDisabled('${order.id}')"><i data-lucide="users"></i></button>`;
 
     // Tombol 2: BOM (Jika Jasa: Tampilkan status Non-BOM; Jika Produk: Memerlukan Input BOM)
     let btnBOM = '';
@@ -149,21 +149,25 @@ function renderOrdersTable() {
       } else {
         btnBOM = `<button class="btn-icon" style="color: #2563eb;" title="Input / Formula BOM untuk Order ini" onclick="event.stopPropagation(); createBOMFromOrder('${order.id}')"><i data-lucide="boxes"></i></button>`;
       }
+    } else if (isPOAndAccepted) {
+      btnBOM = `<button class="btn-icon" style="color: #6366f1; background: #f5f3ff;" title="Tentukan Project Leader pada Penugasan Tim untuk mulai mengisi BOM (Klik untuk buka Penugasan Tim)" onclick="event.stopPropagation(); openTeamAssignmentPage('${order.id}')"><i data-lucide="boxes"></i></button>`;
     } else {
-      btnBOM = `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="${!isPOAndAccepted ? '⚠️ Wajib upload PO Pelanggan dan status Accepted terlebih dahulu' : '⚠️ Tentukan Project Leader terlebih dahulu pada Penugasan Tim sebelum mengisi BOM'}" onclick="event.stopPropagation(); promptBOMDisabled('${order.id}')"><i data-lucide="boxes"></i></button>`;
+      btnBOM = `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptBOMDisabled('${order.id}')"><i data-lucide="boxes"></i></button>`;
     }
 
-    // Tombol 3: Project Management (Untuk Jasa: aktif jika PO Accepted & Project Lead ada. Untuk Produk: wajib BOM valid)
+    // Tombol 3: Project Management (Untuk Jasa: aktif jika PO diunggah & Project Lead ada. Untuk Produk: wajib BOM valid)
     const hasValidBOM = isService || (hasBOM && !isBOMDitolak);
     const isProjectActiveAllowed = isPOAndAccepted && hasProjectLead && hasValidBOM;
     const btnProject = isProjectActiveAllowed ?
       `<button class="btn-icon" style="color: #8b5cf6;" title="Project Management (Timeline & Milestone)" onclick="event.stopPropagation(); openProjectTimelinePage('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
-      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="${!isPOAndAccepted ? '⚠️ Wajib upload PO Pelanggan dan status Accepted terlebih dahulu' : (!hasProjectLead ? '⚠️ Tentukan Project Leader pada Penugasan Tim terlebih dahulu' : (isBOMDitolak ? '⚠️ Formula BOM Ditolak. Harap perbaiki dan ajukan ulang BOM terlebih dahulu.' : '⚠️ Isi dan simpan Bill of Materials (BOM) terlebih dahulu sebelum membuat Project Management'))}" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`;
+      (isPOAndAccepted ?
+        `<button class="btn-icon" style="color: #a855f7; opacity: 0.75;" title="${!hasProjectLead ? 'Tentukan Project Leader terlebih dahulu (Klik untuk membuka Penugasan Tim)' : 'Isi dan simpan BOM terlebih dahulu'}" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
+        `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
 
     // Tombol 4: Hapus Order
     const btnDelete = isPOAndAccepted ?
       `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>` :
-      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan dan status Accepted untuk menghapus Order" onclick="event.stopPropagation(); promptPOAndAcceptedRequired('${order.id}')"><i data-lucide="trash-2"></i></button>`;
+      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan untuk menghapus Order" onclick="event.stopPropagation(); promptPOAndAcceptedRequired('${order.id}')"><i data-lucide="trash-2"></i></button>`;
 
     // Action Buttons: Penugasan -> BOM -> Project Management -> Hapus
     const actionsHtml = `
@@ -323,14 +327,9 @@ function promptPenugasanDisabled(orderId) {
   const order = (state.orders || []).find(o => o.id === orderId);
   const hasPO = Boolean(order?.poDocument?.url || order?.poFileUrl || order?.poDocument?.name || order?.poFileName);
 
-  if (!hasPO && order?.status === 'Pengajuan') {
-    showToast('⚠️ Unggah dokumen PO Pelanggan dan ubah status menjadi "Accepted" terlebih dahulu untuk mengaktifkan Penugasan Tim!', 'warning');
+  if (!hasPO) {
+    showToast('⚠️ Unggah berkas dokumen PO Pelanggan terlebih dahulu untuk mengaktifkan Penugasan Tim & menu aksi!', 'warning');
     openUploadPOModal(orderId);
-  } else if (!hasPO) {
-    showToast('⚠️ Unggah dokumen PO Pelanggan terlebih dahulu untuk mengaktifkan Penugasan Tim!', 'warning');
-    openUploadPOModal(orderId);
-  } else if (order?.status === 'Pengajuan' || order?.status !== 'Accepted') {
-    showToast('⚠️ Status order masih "Pengajuan". Ubah status menjadi "Accepted" pada tabel untuk membuka menu Penugasan Tim!', 'warning');
   }
 }
 
@@ -341,9 +340,8 @@ function promptBOMDisabled(orderId) {
     return;
   }
   const hasPO = Boolean(order?.poDocument?.url || order?.poFileUrl || order?.poDocument?.name || order?.poFileName);
-  const isAccepted = order?.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order?.status);
 
-  if (!hasPO || !isAccepted) {
+  if (!hasPO) {
     promptPenugasanDisabled(orderId);
     return;
   }
@@ -914,6 +912,18 @@ async function saveDirectUploadedPO(orderId) {
     uploadedAt: new Date().toISOString()
   };
 
+  // Otomatis aktifkan status order menjadi Accepted jika sebelumnya Pengajuan atau kosong
+  if (!order.status || order.status === 'Pengajuan') {
+    order.status = 'Accepted';
+  }
+
+  // Update optimistik lokal langsung agar UI tabel dan tombol aksi langsung aktif seketika
+  const localIdx = (state.orders || []).findIndex(o => o.id === orderId);
+  if (localIdx !== -1) {
+    state.orders[localIdx] = { ...state.orders[localIdx], ...order };
+  }
+  renderOrdersTable();
+
   try {
     const res = await fetch(`/api/orders/${orderId}`, {
       method: 'PUT',
@@ -924,11 +934,21 @@ async function saveDirectUploadedPO(orderId) {
     if (res.ok) {
       closeModal('form-modal');
       showToast(`Dokumen PO Pelanggan untuk Order #${orderId} berhasil diunggah! Seluruh menu aksi telah aktif.`, 'success');
+
+      // Ambil data terbaru dari server dan pertahankan metadata poDocument
+      const savedOrder = await res.json().catch(() => ({}));
       await fetchResource('orders');
+      const target = (state.orders || []).find(o => o.id === orderId);
+      if (target) {
+        if (!target.poDocument) target.poDocument = order.poDocument;
+        if (!target.poFileUrl) target.poFileUrl = savedOrder.poFileUrl || order.poFileUrl;
+        if (!target.poFileName) target.poFileName = savedOrder.poFileName || order.poFileName;
+      }
       renderOrdersTable();
       updateSidebarBadges();
+      if (window.lucide) lucide.createIcons();
     } else {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       showToast(err.error || 'Gagal menyimpan PO', 'error');
     }
   } catch (err) {

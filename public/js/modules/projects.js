@@ -545,11 +545,13 @@ function openTeamAssignmentPage(orderId = null) {
   openModal('team-assignment-modal');
   if (window.lucide) lucide.createIcons();
 }
+window.openTeamAssignmentPage = openTeamAssignmentPage;
 
 function switchProjectOrder(orderId) {
   currentActiveProjectOrderId = orderId;
   renderTeamAssignmentWorkspace(orderId);
 }
+window.switchProjectOrder = switchProjectOrder;
 
 function renderTeamAssignmentWorkspace(orderId) {
   if (!orderId) return;
@@ -606,12 +608,12 @@ function renderTeamAssignmentWorkspace(orderId) {
   const hintText = document.getElementById('pm-lead-hint');
 
   // Check if project lead has already been saved/assigned or user lacks permission to assign lead
-  const isLeadLocked = Boolean(project.isLeadLocked || (project.id && project.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign'));
+  const isLeadLocked = Boolean(activeProj.isLeadLocked || (activeProj.id && activeProj.projectLead && activeProj.projectLead.trim() !== '' && activeProj.projectLead !== 'Belum diassign'));
   const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
 
   if (leadInput) {
     if (typeof getUserDropdownOptions === 'function') {
-      leadInput.innerHTML = getUserDropdownOptions(project.projectLead || '', '-- Pilih Akun Lead Project --');
+      leadInput.innerHTML = getUserDropdownOptions(activeProj.projectLead || '', '-- Pilih Akun Lead Project --');
     }
     if (!canAssignLead) {
       leadInput.disabled = true;
@@ -656,14 +658,14 @@ function renderTeamAssignmentWorkspace(orderId) {
   }
 
   const deptInput = document.getElementById('pm-department');
-  if (deptInput) deptInput.value = project.department || '';
+  if (deptInput) deptInput.value = activeProj.department || '';
 
   // Render Team Members
   const teamList = document.getElementById('pm-team-list');
   if (teamList) {
     teamList.innerHTML = '';
-    if (project.team && project.team.length > 0) {
-      project.team.forEach(m => addProjectTeamMemberRow(m));
+    if (activeProj.team && activeProj.team.length > 0) {
+      activeProj.team.forEach(m => addProjectTeamMemberRow(m));
     } else {
       addProjectTeamMemberRow();
     }
@@ -671,7 +673,7 @@ function renderTeamAssignmentWorkspace(orderId) {
 
   // Wewenang: Hanya Lead Project atau Administrator yang dapat mendaftarkan/mengubah anggota tim
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
+  const isLead = (typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true) || canAssignLead || !activeProj.projectLead || activeProj.projectLead === 'Belum diassign';
   if (deptInput) deptInput.disabled = !isLead;
 
   const addMemberBtn = document.querySelector('#team-assignment-modal button[onclick*="addProjectTeamMemberRow"]');
@@ -772,6 +774,7 @@ function addProjectTeamMemberRow(member = null) {
   container.appendChild(row);
   if (window.lucide) lucide.createIcons();
 }
+window.addProjectTeamMemberRow = addProjectTeamMemberRow;
 
 async function saveTeamAssignmentData() {
   if (!currentActiveProjectOrderId) {
@@ -780,14 +783,16 @@ async function saveTeamAssignmentData() {
   }
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true;
+  const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
+
+  const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
+  const isExistingLeadAssigned = Boolean(existingProject?.projectLead && existingProject.projectLead !== 'Belum diassign');
+  const isLead = isExistingLeadAssigned ? ((typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true) || canAssignLead) : canAssignLead;
   if (!isLead) {
     showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mendaftarkan dan mengubah tim pelaksana project.', 'warning');
     return;
   }
-
-  const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
-  const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
 
   // Extract Team Members
   const team = [];
@@ -800,7 +805,6 @@ async function saveTeamAssignmentData() {
     }
   });
 
-  const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
   const leadName = canAssignLead
     ? (document.getElementById('pm-lead-name')?.value?.trim() || existingProject?.projectLead || 'Belum diassign')
     : (existingProject?.projectLead || 'Belum diassign');
@@ -850,6 +854,7 @@ async function saveTeamAssignmentData() {
     showToast('Terjadi kesalahan jaringan', 'error');
   }
 }
+window.saveTeamAssignmentData = saveTeamAssignmentData;
 
 // -------------------------------------------------------------
 // 2. TIMELINE & MILESTONE WORKSPACE (Buka saat klik tombol Project Management)
@@ -1020,18 +1025,18 @@ function renderTimelineWorkspace(orderId) {
   }
 
   const statusSelect = document.getElementById('timeline-status-select');
-  if (statusSelect) statusSelect.value = project.status || 'Planning';
+  if (statusSelect) statusSelect.value = activeProj.status || 'Planning';
 
   const startInput = document.getElementById('timeline-start-date');
-  if (startInput) startInput.value = project.startDate || order?.orderDate || '';
+  if (startInput) startInput.value = activeProj.startDate || order?.orderDate || '';
 
   const dueInput = document.getElementById('timeline-due-date');
-  if (dueInput) dueInput.value = project.dueDate || order?.dueDate || '';
+  if (dueInput) dueInput.value = activeProj.dueDate || order?.dueDate || '';
 
   const notesInput = document.getElementById('timeline-notes');
-  if (notesInput) notesInput.value = project.notes || '';
+  if (notesInput) notesInput.value = activeProj.notes || '';
 
-  currentActiveProjectData = project;
+  currentActiveProjectData = activeProj;
 
   // Wewenang: Hanya Lead Project atau Administrator yang dapat mengubah timeline & menambah milestone
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;

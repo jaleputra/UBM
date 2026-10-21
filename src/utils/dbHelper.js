@@ -120,6 +120,64 @@ function mapToCamelCase(data) {
   return result;
 }
 
+// ---------------- SUPABASE CLOUD STORE HELPERS ----------------
+const supabase = require('../config/supabase');
+
+const CLOUD_SYNC_PREFIX = '__SYS_SYNC_';
+const CLOUD_SYNC_SUFFIX = '__';
+
+function getCloudSyncKey(resource) {
+  return `${CLOUD_SYNC_PREFIX}${resource}${CLOUD_SYNC_SUFFIX}`;
+}
+
+async function getCloudSync(resource) {
+  if (!supabase) return null;
+  try {
+    const syncKey = getCloudSyncKey(resource);
+    const { data, error } = await supabase
+      .from('delivery')
+      .select('items, updated_at')
+      .eq('id', syncKey)
+      .single();
+
+    if (!error && data && data.items) {
+      if (resource === 'settings') {
+        return Array.isArray(data.items) ? (data.items[0] || {}) : data.items;
+      }
+      return Array.isArray(data.items) ? data.items : [];
+    }
+  } catch (err) {
+    console.warn(`[Cloud Sync] Error fetching sync for ${resource}:`, err.message);
+  }
+  return null;
+}
+
+async function setCloudSync(resource, data) {
+  if (!supabase) return false;
+  try {
+    const syncKey = getCloudSyncKey(resource);
+    const itemsPayload = Array.isArray(data) ? data : [data];
+    const { error } = await supabase
+      .from('delivery')
+      .upsert({
+        id: syncKey,
+        customer_name: '__UBM_SYS_STORE__',
+        items: itemsPayload,
+        notes: `Cloud store synchronization for ${resource}`,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.warn(`[Cloud Sync] Error saving sync for ${resource}:`, error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[Cloud Sync] Exception saving sync for ${resource}:`, err.message);
+    return false;
+  }
+}
+
 module.exports = {
   readDB,
   writeDB,
@@ -127,5 +185,10 @@ module.exports = {
   mapToCamelCase,
   camelToSnake,
   snakeToCamel,
+  getCloudSync,
+  setCloudSync,
+  getCloudSyncKey,
+  CLOUD_SYNC_PREFIX,
   DB_FILE: LOCAL_DB_FILE
 };
+

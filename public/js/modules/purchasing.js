@@ -168,9 +168,7 @@ function renderPurchasingTable() {
             ${isApproved ?
               `<button class="btn-icon" style="opacity: 0.35; cursor: not-allowed;" title="⚠️ PR sudah Disetujui (Terkunci & Tidak dapat diedit)" onclick="event.stopPropagation(); showToast('⚠️ Request Pengadaan yang sudah Disetujui telah terkunci dan tidak dapat diedit lagi!', 'warning')"><i data-lucide="lock"></i></button>` :
               `<button class="btn-icon" title="Edit PR" onclick="editPurchasing('${pr.id}')"><i data-lucide="edit-3"></i></button>`}
-            ${isApproved ?
-              `<button class="btn-icon btn-danger-ghost" style="opacity: 0.35; cursor: not-allowed;" title="⚠️ PR sudah Disetujui tidak dapat dihapus" onclick="event.stopPropagation(); showToast('⚠️ Request Pengadaan yang sudah Disetujui tidak dapat dihapus!', 'warning')"><i data-lucide="trash-2"></i></button>` :
-              `<button class="btn-icon btn-danger-ghost" title="Hapus PR" onclick="deleteResource('purchasing', '${pr.id}')"><i data-lucide="trash-2"></i></button>`}
+            <button class="btn-icon btn-danger-ghost" title="Hapus PR" onclick="deleteResource('purchasing', '${pr.id}')"><i data-lucide="trash-2"></i></button>
           </div>
         </td>
       </tr>
@@ -465,6 +463,9 @@ function renderPurchasingProcessTable() {
             `}
             <button class="btn-icon" title="Lihat Dokumen PR" onclick="viewPurchasingDetail('${item.prId}')">
               <i data-lucide="file-text"></i>
+            </button>
+            <button class="btn-icon btn-danger-ghost" title="Hapus Barang ini" onclick="deletePurchasingItem('${item.prId}', ${item.itemIndex})">
+              <i data-lucide="trash-2"></i>
             </button>
           </div>
         </td>

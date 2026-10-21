@@ -1,490 +1,115 @@
 {
-  "orders": [
-    {
-      "id": "ORD-2026-2992-511",
-      "quotationId": "QUO-2026-6480-172",
-      "orderType": "produk",
-      "quotationType": "produk",
-      "customerName": "PT Minori",
-      "projectName": "Smart Door",
-      "customerPhone": "09809809809",
-      "customerAddress": "cikarang",
-      "orderDate": "2026-10-05",
-      "dueDate": "2026-10-19",
-      "status": "Accepted",
-      "notes": "Dikonversi dari Surat Penawaran Harga (PRODUK) #QUO-2026-6480-172.\nKetentuan Garansi: Garansi resmi 12 bulan untuk suku cadang dan servis.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\n[KETERANGAN JASA & INSTALASI (NON-BOM)]:\n1. Installasi (50 Lot @ Rp 150.000) = Rp 7.500.000\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "poDocument": {
-        "name": "BPM LEFA .pdf",
-        "url": "/uploads/po/PO_ORD-2026-2992-511_1791176661280.pdf",
-        "uploadedAt": "2026-10-05T05:04:21.254Z"
-      },
-      "poFileUrl": "/uploads/po/PO_ORD-2026-2992-511_1791176661280.pdf",
-      "poFileName": "BPM LEFA .pdf",
-      "items": [
-        {
-          "itemName": "Smart Door",
-          "sku": "001",
-          "qty": 50,
-          "unit": "Unit",
-          "unitPrice": 4000000,
-          "total": 200000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 50,
-          "unit": "Lot",
-          "unitPrice": 150000,
-          "total": 7500000
-        }
-      ],
-      "mainItemsTotal": 200000000,
-      "servicesTotal": 7500000,
-      "itemsTotal": 207500000,
-      "warrantyFee": 10375000,
-      "subtotal": 217875000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 23966250,
-      "grandTotal": 241841250,
-      "createdAt": "2026-10-05T05:04:02.993Z",
-      "updatedAt": "2026-10-05T05:04:29.891Z"
-    }
-  ],
+  "orders": [],
   "po": [
     {
       "id": "PO-2026-001",
-      "vendorName": "PT Schneider Electric Supply",
-      "vendorContact": "Budi Santoso (0813-8899-7766)",
-      "vendorEmail": "sales@schneider-partner.id",
-      "poDate": "2026-08-20",
-      "expectedDate": "2026-08-30",
-      "status": "Received",
-      "paymentTerms": "NET 30",
       "items": [
         {
-          "itemName": "MCCB 3P 250A 36kA",
-          "sku": "MCCB-250A",
           "qty": 9,
+          "sku": "MCCB-250A",
           "unit": "Pcs",
-          "unitPrice": 1450000,
           "total": 14500000,
-          "totalCost": 13050000
+          "itemName": "MCCB 3P 250A 36kA",
+          "totalCost": 13050000,
+          "unitPrice": 1450000
         },
         {
-          "itemName": "Contactor 3P 40A 220V",
-          "sku": "CT-40A",
           "qty": 24,
+          "sku": "CT-40A",
           "unit": "Pcs",
-          "unitPrice": 320000,
           "total": 8000000,
-          "totalCost": 7680000
+          "itemName": "Contactor 3P 40A 220V",
+          "totalCost": 7680000,
+          "unitPrice": 320000
         }
       ],
-      "subtotal": 22500000,
-      "taxRate": 11,
-      "taxAmount": 2475000,
-      "grandTotal": 24975000,
       "notes": "Barang telah diterima di Gudang Utama UBM",
+      "poDate": "2026-08-20",
+      "status": "Received",
+      "taxRate": 11,
+      "subtotal": 22500000,
+      "taxAmount": 2475000,
+      "updatedAt": "2026-09-07T04:35:33.987Z",
+      "grandTotal": 24975000,
+      "vendorName": "PT Schneider Electric Supply",
       "totalAmount": 20730000,
-      "updatedAt": "2026-09-07T04:35:33.987Z"
+      "vendorEmail": "sales@schneider-partner.id",
+      "expectedDate": "2026-08-30",
+      "paymentTerms": "NET 30",
+      "vendorContact": "Budi Santoso (0813-8899-7766)"
     },
     {
       "id": "PO-2026-002",
-      "vendorName": "CV Metal Presisi Perkasa",
-      "vendorContact": "Hendro Wicaksono (0818-4455-6677)",
-      "vendorEmail": "hendro@metalpresisi.com",
-      "poDate": "2026-08-29",
-      "expectedDate": "2026-09-08",
-      "status": "Approved",
-      "paymentTerms": "NET 14",
       "items": [
         {
-          "itemName": "Plat Besi Enclosure SPCC 2.0mm",
-          "sku": "PLT-SPCC-2",
           "qty": 39,
+          "sku": "PLT-SPCC-2",
           "unit": "Lembar",
-          "unitPrice": 280000,
           "total": 14000000,
-          "totalCost": 10920000
+          "itemName": "Plat Besi Enclosure SPCC 2.0mm",
+          "totalCost": 10920000,
+          "unitPrice": 280000
         },
         {
-          "itemName": "Powder Coating Grey RAL 7035",
-          "sku": "PCO-7035",
           "qty": 79,
+          "sku": "PCO-7035",
           "unit": "Kg",
-          "unitPrice": 65000,
           "total": 6500000,
-          "totalCost": 5135000
+          "itemName": "Powder Coating Grey RAL 7035",
+          "totalCost": 5135000,
+          "unitPrice": 65000
         }
       ],
-      "subtotal": 20500000,
-      "taxRate": 11,
-      "taxAmount": 2255000,
-      "grandTotal": 22755000,
       "notes": "Material utama untuk pembuatan Box Panel batch Q3",
+      "poDate": "2026-08-29",
+      "status": "Approved",
+      "taxRate": 11,
+      "subtotal": 20500000,
+      "taxAmount": 2255000,
+      "updatedAt": "2026-09-07T04:35:35.164Z",
+      "grandTotal": 22755000,
+      "vendorName": "CV Metal Presisi Perkasa",
       "totalAmount": 16055000,
-      "updatedAt": "2026-09-07T04:35:35.164Z"
+      "vendorEmail": "hendro@metalpresisi.com",
+      "expectedDate": "2026-09-08",
+      "paymentTerms": "NET 14",
+      "vendorContact": "Hendro Wicaksono (0818-4455-6677)"
     },
     {
       "id": "PO-2026-003",
-      "vendorName": "PT Tembaga Nusantara Jaya",
-      "vendorContact": "Dewi Sartika (0812-7788-9900)",
-      "vendorEmail": "order@tembaganusantara.co.id",
-      "poDate": "2026-09-01",
-      "expectedDate": "2026-09-12",
-      "status": "Pending Approval",
-      "paymentTerms": "Cash on Delivery",
       "items": [
         {
-          "itemName": "Busbar Tembaga Cu 30x5mm (4m)",
-          "sku": "BSB-CU-305",
           "qty": 19,
+          "sku": "BSB-CU-305",
           "unit": "Batang",
-          "unitPrice": 480000,
           "total": 9600000,
-          "totalCost": 9120000
+          "itemName": "Busbar Tembaga Cu 30x5mm (4m)",
+          "totalCost": 9120000,
+          "unitPrice": 480000
         }
       ],
-      "subtotal": 9600000,
-      "taxRate": 11,
-      "taxAmount": 1056000,
-      "grandTotal": 10656000,
       "notes": "Menunggu persetujuan Finance Manager",
-      "totalAmount": 9120000,
-      "updatedAt": "2026-09-07T04:35:35.650Z"
-    }
-  ],
-  "invoices": [
-    {
-      "id": "INV-2026-2992-511",
-      "orderId": "ORD-2026-2992-511",
-      "customerName": "PT Minori",
-      "customerPhone": "09809809809",
-      "customerAddress": "cikarang",
-      "invoiceDate": "2026-10-05",
-      "dueDate": "2026-10-19",
-      "status": "Unpaid",
-      "paymentMethod": "Bank Transfer (Mandiri)",
-      "items": [
-        {
-          "itemName": "Smart Door",
-          "sku": "001",
-          "qty": 50,
-          "unit": "Unit",
-          "unitPrice": 4000000,
-          "total": 200000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 50,
-          "unit": "Lot",
-          "unitPrice": 150000,
-          "total": 7500000
-        }
-      ],
-      "mainItemsTotal": 200000000,
-      "servicesTotal": 7500000,
-      "itemsTotal": 207500000,
-      "warrantyFee": 10375000,
-      "discount": 0,
-      "subtotal": 217875000,
+      "poDate": "2026-09-01",
+      "status": "Pending Approval",
       "taxRate": 11,
-      "taxAmount": 23966250,
-      "grandTotal": 241841250,
-      "paidAmount": 0,
-      "balanceDue": 241841250,
-      "notes": "Faktur Tagihan Resmi untuk Sales Order / Project ORD-2026-2992-511",
-      "createdAt": "2026-10-05T05:04:29.904Z"
+      "subtotal": 9600000,
+      "taxAmount": 1056000,
+      "updatedAt": "2026-09-07T04:35:35.650Z",
+      "grandTotal": 10656000,
+      "vendorName": "PT Tembaga Nusantara Jaya",
+      "totalAmount": 9120000,
+      "vendorEmail": "order@tembaganusantara.co.id",
+      "expectedDate": "2026-09-12",
+      "paymentTerms": "Cash on Delivery",
+      "vendorContact": "Dewi Sartika (0812-7788-9900)"
     }
   ],
+  "invoices": [],
   "purchasing": [],
   "bom": [],
   "delivery": [],
-  "projects": [
-    {
-      "id": "PRJ-2026-0139-397",
-      "projectName": "Training Center",
-      "customerName": "External",
-      "orderId": "",
-      "isDirect": true,
-      "projectLead": "Rizaldi Putra, M.Kom.",
-      "isLeadLocked": true,
-      "department": "Engineering",
-      "status": "In Progress",
-      "startDate": "2026-10-07",
-      "dueDate": "2026-10-28",
-      "team": [
-        {
-          "name": "Deddy Sibarani, S.E.",
-          "role": "Teknisi",
-          "phone": ""
-        },
-        {
-          "name": "Bambang Prakoso, S.T.",
-          "role": "Teknisi",
-          "phone": ""
-        }
-      ],
-      "progressPercent": 38,
-      "milestones": [
-        {
-          "id": "ms-tc-1",
-          "title": "Penyusunan Kurikulum & Modul Pelatihan",
-          "pic": "Rizaldi Putra, M.Kom.",
-          "startDate": "2026-10-07",
-          "dueDate": "2026-10-12",
-          "status": "Completed",
-          "subtasks": [
-            {
-              "id": "st-tc-1",
-              "title": "Silabus otomasi industri",
-              "done": true
-            },
-            {
-              "id": "st-tc-2",
-              "title": "Modul praktikum PLC & SCADA",
-              "done": true
-            }
-          ]
-        },
-        {
-          "id": "ms-tc-2",
-          "title": "Setup Meja Praktik & Instalasi Trainer PLC",
-          "pic": "Bambang Prakoso, S.T.",
-          "startDate": "2026-10-12",
-          "dueDate": "2026-10-18",
-          "status": "In Progress",
-          "subtasks": [
-            {
-              "id": "st-tc-3",
-              "title": "Wiring trainer kit 6 unit",
-              "done": true
-            },
-            {
-              "id": "st-tc-4",
-              "title": "Kalibrasi sensor & power supply",
-              "done": false
-            }
-          ]
-        },
-        {
-          "id": "ms-tc-3",
-          "title": "Uji Coba Sistem Komunikasi Lab & Jaringan",
-          "pic": "Deddy Sibarani, S.E.",
-          "startDate": "2026-10-18",
-          "dueDate": "2026-10-23",
-          "status": "Pending",
-          "subtasks": [
-            {
-              "id": "st-tc-5",
-              "title": "Setup router industri & switch",
-              "done": false
-            }
-          ]
-        },
-        {
-          "id": "ms-tc-4",
-          "title": "Simulasi Pelatihan Batch 1 & Evaluasi",
-          "pic": "Rizaldi Putra, M.Kom.",
-          "startDate": "2026-10-23",
-          "dueDate": "2026-10-28",
-          "status": "Pending",
-          "subtasks": [
-            {
-              "id": "st-tc-6",
-              "title": "Uji coba running materi ke peserta demo",
-              "done": false
-            }
-          ]
-        }
-      ],
-      "notes": "Program inisiatif pelatihan otomasi industri UBM",
-      "createdAt": "2026-10-07T03:12:40.141Z",
-      "updatedAt": "2026-10-07T03:31:22.887Z"
-    },
-    {
-      "id": "PRJ-2026-1406-464",
-      "orderId": "ORD-2026-2992-511",
-      "projectName": "Smart Door",
-      "customerName": "PT Minori",
-      "projectLead": "Ir. Hendra Wijaya, M.T.",
-      "department": "Engineering",
-      "status": "In Progress",
-      "startDate": "2026-10-05",
-      "dueDate": "2026-10-19",
-      "progressPercent": 45,
-      "team": [
-        {
-          "name": "Deddy Sibarani, S.E.",
-          "role": "Keuangan",
-          "phone": ""
-        },
-        {
-          "name": "Bambang Prakoso, S.T.",
-          "role": "Member",
-          "phone": ""
-        }
-      ],
-      "milestones": [
-        {
-          "id": "ms-sd-1",
-          "title": "Perancangan Wiring & Skematik Smart Door",
-          "pic": "Ir. Hendra Wijaya, M.T.",
-          "startDate": "2026-10-05",
-          "dueDate": "2026-10-08",
-          "status": "Completed",
-          "subtasks": [
-            {
-              "id": "st-sd-1",
-              "title": "Review spesifikasi elektrikal & sensor",
-              "done": true
-            },
-            {
-              "id": "st-sd-2",
-              "title": "Finalisasi diagram pengkabelan & catu daya",
-              "done": true
-            }
-          ]
-        },
-        {
-          "id": "ms-sd-2",
-          "title": "Fabrikasi Housing & Perakitan Mekanikal",
-          "pic": "Bambang Prakoso, S.T.",
-          "startDate": "2026-10-08",
-          "dueDate": "2026-10-13",
-          "status": "In Progress",
-          "subtasks": [
-            {
-              "id": "st-sd-3",
-              "title": "Pemotongan & bending plat enclosure",
-              "done": true
-            },
-            {
-              "id": "st-sd-4",
-              "title": "Perakitan engsel heavy duty & slot motor",
-              "done": false
-            }
-          ]
-        },
-        {
-          "id": "ms-sd-3",
-          "title": "Instalasi Controller & Integrasi Sensor IoT",
-          "pic": "Bambang Prakoso, S.T.",
-          "startDate": "2026-10-12",
-          "dueDate": "2026-10-16",
-          "status": "In Progress",
-          "subtasks": [
-            {
-              "id": "st-sd-5",
-              "title": "Pemasangan modul RFID & keypad access",
-              "done": false
-            },
-            {
-              "id": "st-sd-6",
-              "title": "Pengujian respon magnetic lock",
-              "done": false
-            }
-          ]
-        },
-        {
-          "id": "ms-sd-4",
-          "title": "Quality Control & Stress Testing Sistem",
-          "pic": "Ir. Hendra Wijaya, M.T.",
-          "startDate": "2026-10-16",
-          "dueDate": "2026-10-18",
-          "status": "Pending",
-          "subtasks": [
-            {
-              "id": "st-sd-7",
-              "title": "Stress test siklus buka-tutup 500x",
-              "done": false
-            },
-            {
-              "id": "st-sd-8",
-              "title": "Inspeksi keamanan instalasi grounding",
-              "done": false
-            }
-          ]
-        },
-        {
-          "id": "ms-sd-5",
-          "title": "Serah Terima & Instalasi di Lokasi PT Minori",
-          "pic": "Ir. Hendra Wijaya, M.T.",
-          "startDate": "2026-10-18",
-          "dueDate": "2026-10-19",
-          "status": "Pending",
-          "subtasks": [
-            {
-              "id": "st-sd-9",
-              "title": "Pengiriman unit ke lokasi Cikarang",
-              "done": false
-            },
-            {
-              "id": "st-sd-10",
-              "title": "Commissioning & penandatanganan BAST",
-              "done": false
-            }
-          ]
-        }
-      ],
-      "isLeadLocked": true,
-      "createdAt": "2026-10-05T05:04:51.406Z"
-    }
-  ],
-  "quotations": [
-    {
-      "id": "QUO-2026-6480-172",
-      "quotationType": "produk",
-      "customerName": "PT Minori",
-      "projectName": "Smart Door",
-      "picName": "Rizaldi Putra, M.Kom.",
-      "customerPhone": "09809809809",
-      "customerEmail": "kasdjfb@gmail.com",
-      "customerAddress": "cikarang",
-      "quotationDate": "2026-10-05",
-      "validUntil": "2026-10-19",
-      "status": "Accepted",
-      "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
-      "warrantyFee": 10375000,
-      "mainItemsTotal": 200000000,
-      "servicesTotal": 7500000,
-      "itemsTotal": 207500000,
-      "leadTime": "14 hari kerja setelah PO resmi diterima",
-      "paymentTerms": "DP 50% saat PO, Pelunasan setelah serah terima / BAST",
-      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
-      "items": [
-        {
-          "itemName": "Smart Door",
-          "sku": "001",
-          "warranty": "12 Bulan",
-          "qty": 50,
-          "unit": "Unit",
-          "unitPrice": 4000000,
-          "total": 200000000
-        }
-      ],
-      "additionalServices": [
-        {
-          "serviceName": "Installasi",
-          "qty": 50,
-          "unit": "Lot",
-          "unitPrice": 150000,
-          "total": 7500000
-        }
-      ],
-      "subtotal": 217875000,
-      "discount": 0,
-      "taxRate": 11,
-      "taxAmount": 23966250,
-      "grandTotal": 241841250,
-      "createdAt": "2026-10-05T05:03:56.481Z",
-      "updatedAt": "2026-10-05T05:04:21.284Z"
-    }
-  ],
+  "projects": [],
+  "quotations": [],
   "bast": [],
   "project_reports": [],
   "maintenance": [],
@@ -493,327 +118,303 @@
   "activity_logs": [
     {
       "id": "LOG-2026-8433-431",
-      "projectName": "UBM",
-      "task": "Pengembangan aplikasi UBMT",
       "pic": "Bambang Prakoso, S.T.",
-      "category": "Produksi",
-      "startDate": "2026-10-07",
-      "endDate": "2026-10-07",
-      "startTime": "2026-10-07",
-      "endTime": "2026-10-07",
-      "status": "Sedang Berjalan",
+      "task": "Pengembangan aplikasi UBMT",
       "notes": "1. Dashboard gantt chart dashboard seluruh project\n2. Quotation jasa input harga jual, modal berupa bagi hasil, administrasi, sales dan takumi \n3. halaman project management tersendiri yang menghubungkan semua project ke dashboard",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-07",
+      "endTime": "2026-10-07",
+      "category": "Produksi",
+      "createdAt": "2026-10-07T02:29:28.433Z",
+      "startDate": "2026-10-07",
+      "startTime": "2026-10-07",
       "updatedAt": "2026-10-07T02:29:28.376Z",
-      "createdAt": "2026-10-07T02:29:28.433Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-2130-362",
-      "projectName": "UBM",
-      "task": "Buat template kerjasama Ayumi",
       "pic": "Chowal",
-      "category": "Operasional",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-06",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-06",
-      "status": "Sedang Berjalan",
+      "task": "Buat template kerjasama Ayumi",
       "notes": "Buat template bagi hasil Ayumi",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-06",
+      "endTime": "2026-10-06",
+      "category": "Operasional",
+      "createdAt": "2026-10-05T02:54:22.130Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
       "updatedAt": "2026-10-05T02:54:22.119Z",
-      "createdAt": "2026-10-05T02:54:22.130Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-5703-151",
-      "projectName": "UBM",
-      "task": "Proposal Kerjasama",
       "pic": "Chowal",
-      "category": "Operasional",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-05",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-05",
-      "status": "Sedang Berjalan",
+      "task": "Proposal Kerjasama",
       "notes": "Buat proposal kerjasama UBM dengan eksternal untuk vending machine",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-05",
+      "endTime": "2026-10-05",
+      "category": "Operasional",
+      "createdAt": "2026-10-05T02:53:45.703Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
       "updatedAt": "2026-10-05T02:53:45.695Z",
-      "createdAt": "2026-10-05T02:53:45.703Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-7309-457",
-      "projectName": "UBM",
-      "task": "Prioritas Project",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Produksi",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-05",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-05",
-      "status": "Sedang Berjalan",
+      "task": "Prioritas Project",
       "notes": "Buat prioritas project untuk diimplementasikan",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-05",
+      "endTime": "2026-10-05",
+      "category": "Produksi",
+      "createdAt": "2026-10-05T02:53:17.309Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
       "updatedAt": "2026-10-05T02:53:17.295Z",
-      "createdAt": "2026-10-05T02:53:17.309Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-3318-131",
-      "projectName": "UBM",
-      "task": "Revisi Compro",
       "pic": "Gading",
-      "category": "Operasional",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-05",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-05",
-      "status": "Sedang Berjalan",
+      "task": "Revisi Compro",
       "notes": "Revisi Compro, buat slide presentasi",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-05",
+      "endTime": "2026-10-05",
+      "category": "Operasional",
+      "createdAt": "2026-10-05T02:52:33.318Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
       "updatedAt": "2026-10-05T02:52:33.308Z",
-      "createdAt": "2026-10-05T02:52:33.318Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-3241-713",
-      "projectName": "Smart Laundry",
-      "task": "Aplikasi Smart laundry",
       "pic": "Lambok Rommy Sulaeman",
-      "category": "Produksi",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-09",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-09",
-      "status": "Sedang Berjalan",
+      "task": "Aplikasi Smart laundry",
       "notes": "Keuangan Xendit disatukan, legalitas untuk membuat sub income di Xendit supaya mengetahui asal uang masuk",
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-09",
+      "endTime": "2026-10-09",
+      "category": "Produksi",
+      "createdAt": "2026-10-05T02:51:53.241Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
       "updatedAt": "2026-10-05T02:51:53.191Z",
-      "createdAt": "2026-10-05T02:51:53.241Z"
+      "projectName": "Smart Laundry"
     },
     {
       "id": "LOG-2026-1347-691",
-      "projectName": "Smart Laundry",
-      "task": "Perbaikan Smart Laundry di Nagomi",
       "pic": "Bintang",
-      "category": "Maintenance",
-      "startDate": "2026-10-05",
-      "endDate": "2026-10-09",
-      "startTime": "2026-10-05",
-      "endTime": "2026-10-09",
-      "status": "Sedang Berjalan",
+      "task": "Perbaikan Smart Laundry di Nagomi",
       "notes": "Perbaikan Smart Laundry di Nagomi. menyatukan dashboard Nagomi dan Minori",
-      "updatedAt": "2026-10-07T02:27:41.897Z",
-      "createdAt": "2026-10-05T02:50:21.347Z",
       "report": {
-        "description": "Sedang pengajuan biaya perbaikan mesin",
         "link": "",
-        "updatedAt": "2026-10-07T02:27:25.399Z"
-      }
+        "updatedAt": "2026-10-07T02:27:25.399Z",
+        "description": "Sedang pengajuan biaya perbaikan mesin"
+      },
+      "status": "Sedang Berjalan",
+      "endDate": "2026-10-09",
+      "endTime": "2026-10-09",
+      "category": "Maintenance",
+      "createdAt": "2026-10-05T02:50:21.347Z",
+      "startDate": "2026-10-05",
+      "startTime": "2026-10-05",
+      "updatedAt": "2026-10-07T02:27:41.897Z",
+      "projectName": "Smart Laundry"
     },
     {
       "id": "LOG-2026-0079-623",
-      "projectName": "UBM",
-      "task": "Kunjungan kerjasama",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Operasional",
-      "startDate": "2026-09-30",
-      "endDate": "2026-09-30",
-      "startTime": "2026-09-30",
-      "endTime": "2026-09-30",
-      "status": "Selesai",
+      "task": "Kunjungan kerjasama",
       "notes": "Kunjungan ke Duta Laserindo Metal dan Sinar Sakti Metalindo",
-      "updatedAt": "2026-10-05T03:17:33.511Z",
-      "createdAt": "2026-10-05T02:49:00.079Z",
       "report": {
-        "description": "Kerjasama sudah dilakukan, selanjutnya akan mengirimkan proposal kerjasama dan company profile",
         "link": "",
-        "updatedAt": "2026-10-05T03:17:33.292Z"
-      }
+        "updatedAt": "2026-10-05T03:17:33.292Z",
+        "description": "Kerjasama sudah dilakukan, selanjutnya akan mengirimkan proposal kerjasama dan company profile"
+      },
+      "status": "Selesai",
+      "endDate": "2026-09-30",
+      "endTime": "2026-09-30",
+      "category": "Operasional",
+      "createdAt": "2026-10-05T02:49:00.079Z",
+      "startDate": "2026-09-30",
+      "startTime": "2026-09-30",
+      "updatedAt": "2026-10-05T03:17:33.511Z",
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-0674-942",
-      "projectName": "UBM",
-      "task": "Logo dan alur smart laundry",
       "pic": "Gading",
-      "category": "Operasional",
-      "startDate": "2026-09-30",
-      "endDate": "2026-09-30",
-      "startTime": "2026-09-30",
-      "endTime": "2026-09-30",
-      "status": "Selesai",
+      "task": "Logo dan alur smart laundry",
       "notes": "pembuatan alur smart laundry dan logo UBM",
+      "status": "Selesai",
+      "endDate": "2026-09-30",
+      "endTime": "2026-09-30",
+      "category": "Operasional",
+      "createdAt": "2026-09-24T08:09:00.675Z",
+      "startDate": "2026-09-30",
+      "startTime": "2026-09-30",
       "updatedAt": "2026-10-05T02:44:38.158Z",
-      "createdAt": "2026-09-24T08:09:00.675Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-8210-932",
-      "projectName": "DMI",
-      "task": "Data Pemagang Yuzuru",
       "pic": "Chowal",
-      "category": "Koordinasi & Sales",
-      "startDate": "2026-09-23",
-      "endDate": "2026-09-25",
-      "startTime": "2026-09-23",
-      "endTime": "2026-09-25",
-      "status": "Selesai",
+      "task": "Data Pemagang Yuzuru",
       "notes": "Memastikan Data Pemagang Yuzuru",
+      "status": "Selesai",
+      "endDate": "2026-09-25",
+      "endTime": "2026-09-25",
+      "category": "Koordinasi & Sales",
+      "createdAt": "2026-09-24T05:30:18.210Z",
+      "startDate": "2026-09-23",
+      "startTime": "2026-09-23",
       "updatedAt": "2026-10-05T02:49:17.054Z",
-      "createdAt": "2026-09-24T05:30:18.210Z"
+      "projectName": "DMI"
     },
     {
       "id": "LOG-2026-5673-487",
-      "projectName": "UBM",
-      "task": "Publish Aplikasi UBM",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Produksi",
-      "startDate": "2026-09-24",
-      "endDate": "2026-09-24",
-      "startTime": "2026-09-24",
-      "endTime": "2026-09-24",
-      "status": "Selesai",
+      "task": "Publish Aplikasi UBM",
       "notes": "Publish Aplikasi UBM Sementara",
+      "status": "Selesai",
+      "endDate": "2026-09-24",
+      "endTime": "2026-09-24",
+      "category": "Produksi",
+      "createdAt": "2026-09-24T05:25:45.674Z",
+      "startDate": "2026-09-24",
+      "startTime": "2026-09-24",
       "updatedAt": "2026-10-05T02:49:15.236Z",
-      "createdAt": "2026-09-24T05:25:45.674Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-2359-736",
-      "projectName": "UBM",
-      "task": "Timeline Scrum E-Catalogue",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Operasional",
-      "startDate": "2026-09-24",
-      "endDate": "2026-09-24",
-      "startTime": "2026-09-24",
-      "endTime": "2026-09-24",
-      "status": "Selesai",
+      "task": "Timeline Scrum E-Catalogue",
       "notes": "Membuat Timeline Scrum E-Catalogue",
+      "status": "Selesai",
+      "endDate": "2026-09-24",
+      "endTime": "2026-09-24",
+      "category": "Operasional",
+      "createdAt": "2026-09-24T05:23:32.360Z",
+      "startDate": "2026-09-24",
+      "startTime": "2026-09-24",
       "updatedAt": "2026-10-05T02:49:13.496Z",
-      "createdAt": "2026-09-24T05:23:32.360Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-4545-364",
-      "projectName": "UBM",
-      "task": "Timeline Website dan Aplikasi UBM dan Landing Page",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Produksi",
-      "startDate": "2026-09-24",
-      "endDate": "2026-09-24",
-      "startTime": "2026-09-24",
-      "endTime": "2026-09-24",
-      "status": "Selesai",
+      "task": "Timeline Website dan Aplikasi UBM dan Landing Page",
       "notes": "Membuat Timeline Scrum untuk \n- Landing Page UBM\n- Landing page Training Center\n- Aplikasi UBM\n- Aplikasi Training Center",
+      "status": "Selesai",
+      "endDate": "2026-09-24",
+      "endTime": "2026-09-24",
+      "category": "Produksi",
+      "createdAt": "2026-09-24T05:12:44.546Z",
+      "startDate": "2026-09-24",
+      "startTime": "2026-09-24",
       "updatedAt": "2026-10-05T02:49:12.086Z",
-      "createdAt": "2026-09-24T05:12:44.546Z"
+      "projectName": "UBM"
     },
     {
       "id": "LOG-2026-4998-880",
-      "projectName": "Smart Laundry",
-      "task": "Observasi perbaikan Smart Laundry",
       "pic": "Bintang dan pak Asep",
-      "category": "Maintenance",
-      "startDate": "2026-09-28",
-      "endDate": "2026-09-28",
-      "startTime": "2026-09-28",
-      "endTime": "2026-09-28",
-      "status": "Selesai",
+      "task": "Observasi perbaikan Smart Laundry",
       "notes": "- Observasi untuk selanjutnya menjadi rencana perbaikan\n- Menyamakan dengan Minori group dan menjadi 1 dashboard",
+      "status": "Selesai",
+      "endDate": "2026-09-28",
+      "endTime": "2026-09-28",
+      "category": "Maintenance",
+      "createdAt": "2026-09-24T05:08:34.999Z",
+      "startDate": "2026-09-28",
+      "startTime": "2026-09-28",
       "updatedAt": "2026-10-05T02:49:10.630Z",
-      "createdAt": "2026-09-24T05:08:34.999Z"
+      "projectName": "Smart Laundry"
     },
     {
       "id": "LOG-2026-7957-517",
-      "task": "Perbaikan Smart Laundry",
       "pic": "Bintang dan pak Asep",
-      "category": "Maintenance",
-      "startDate": "2026-09-25",
-      "endDate": "2026-09-25",
-      "startTime": "2026-09-25",
-      "endTime": "2026-09-25",
-      "status": "Selesai",
+      "task": "Perbaikan Smart Laundry",
       "notes": "Upload ulang program di Smart Laundry Minori 10 Mesin",
-      "updatedAt": "2026-10-05T02:49:09.014Z",
+      "status": "Selesai",
+      "endDate": "2026-09-25",
+      "endTime": "2026-09-25",
+      "category": "Maintenance",
       "createdAt": "2026-09-24T04:49:57.958Z",
+      "startDate": "2026-09-25",
+      "startTime": "2026-09-25",
+      "updatedAt": "2026-10-05T02:49:09.014Z",
       "projectName": "Smart Laundry"
     },
     {
       "id": "LOG-2026-9161-536",
-      "projectName": "Smart Laundry",
-      "task": "Checking Smart Laundry",
       "pic": "Lambok Rommy Sulaeman",
-      "category": "Maintenance",
-      "startDate": "2026-09-23",
-      "endDate": "2026-09-23",
-      "startTime": "2026-09-23",
-      "endTime": "2026-09-23",
-      "status": "Selesai",
+      "task": "Checking Smart Laundry",
       "notes": "1. Sensor infrared kadang mematikan mesin terkena bayangan, harus direset ulang\n2. program ulang sepereti versi sebelumnya tanpa sensor infrared\n3. kecepatan air masih perlu ditingkatkan\n4. memperbaiki sistem di Nagomi agar sama dan 1 dashboard dengan Minori",
+      "status": "Selesai",
+      "endDate": "2026-09-23",
+      "endTime": "2026-09-23",
+      "category": "Maintenance",
+      "createdAt": "2026-09-24T04:35:19.161Z",
+      "startDate": "2026-09-23",
+      "startTime": "2026-09-23",
       "updatedAt": "2026-09-24T04:38:08.921Z",
-      "createdAt": "2026-09-24T04:35:19.161Z"
+      "projectName": "Smart Laundry"
     },
     {
       "id": "LOG-2026-7731-465",
-      "projectName": "MCU",
-      "task": "Interview pak Anca untuk proses MCU Minori",
       "pic": "Rizaldi Putra, M.Kom. (Ketua UBM)",
-      "category": "Koordinasi & Sales",
-      "startDate": "2026-09-23",
-      "endDate": "2026-09-23",
-      "startTime": "2026-09-23",
-      "endTime": "2026-09-23",
-      "status": "Selesai",
+      "task": "Interview pak Anca untuk proses MCU Minori",
       "notes": "Diskusi dengan pak Anca\n1. Minori bekerjasama dengan klinik samaria\n2. target Minori 2026 2500 pemagang. relisasi saat ini 1700\n3. P3MI untuk MCU lebih khusus untuk pemilihan Rumah Sakit/Klinik harus ada izin Kemnaker\n4. Untuk pemagang lebih mudah tidaK PERLU IZIN KEMNAKER\n5. Waktu yang dibutuhkan untuk mengeluarkan hasil MCU kurang dari 3 hari\n6. Jika tidak sesuai waktu akan dievaluasi untuk mencari Vendor yang bisa memenuhi kebutuhan\n7. masalahnya sistem terintegrasi untuk hasil MCU belum ada\n8. untuk mempercepat waktu MCU bisa menggunakan Sistem dan alat dari Takumi\n9. Takumi akan mencoba menawarkan kerjasama ke Vendor Minori untuk mempercepat pelaksanaan MCU mendapatkan hasil dan terintegrasi dengan sistem Minori.",
+      "status": "Selesai",
+      "endDate": "2026-09-23",
+      "endTime": "2026-09-23",
+      "category": "Koordinasi & Sales",
+      "createdAt": "2026-09-24T04:33:57.732Z",
+      "startDate": "2026-09-23",
+      "startTime": "2026-09-23",
       "updatedAt": "2026-09-24T05:24:44.340Z",
-      "createdAt": "2026-09-24T04:33:57.732Z"
+      "projectName": "MCU"
     }
   ],
   "users": [
     {
+      "id": "USR-2026-153",
+      "name": "Rizaldi Putra",
+      "role": "Ketua UBM",
+      "email": "rizaldi.rip@takumi.ac.id",
+      "avatar": "RP",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-21T08:52:52.668Z",
+      "department": "Bisnis Digital"
+    },
+    {
+      "id": "USR-2026-900",
+      "name": "Rangga Gading Satria",
+      "role": "Member",
+      "email": "rangga.rgs@takumi.ac.id",
+      "avatar": "RG",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-21T01:36:22.994Z",
+      "department": "IT"
+    },
+    {
       "id": "USR-2026-001",
       "name": "Administrator UBM",
-      "email": "admin@ubm.co.id",
-      "password": "bisnisdigital365",
       "role": "Administrator",
-      "department": "Operations & Management",
-      "status": "Aktif",
+      "email": "admin@ubm.co.id",
       "avatar": "AD",
-      "createdAt": "2026-09-01T00:00:00.000Z"
-    },
-    {
-      "id": "USR-2026-002",
-      "name": "Rizaldi Putra, M.Kom.",
-      "email": "rizaldi@ubm.co.id",
-      "password": "ubmpoltek2026",
-      "role": "Ketua UBM",
-      "department": "Manajemen & Kepemimpinan",
       "status": "Aktif",
-      "avatar": "RP",
-      "createdAt": "2026-09-02T00:00:00.000Z"
-    },
-    {
-      "id": "USR-2026-003",
-      "name": "Ir. Hendra Wijaya, M.T.",
-      "email": "lead@ubm.co.id",
-      "password": "12345678",
-      "role": "Member",
-      "department": "",
-      "status": "Aktif",
-      "avatar": "HW",
-      "createdAt": "2026-09-03T00:00:00.000Z",
-      "updatedAt": "2026-10-05T05:05:20.304Z"
-    },
-    {
-      "id": "USR-2026-004",
-      "name": "Deddy Sibarani, S.E.",
-      "email": "finance@ubm.co.id",
-      "password": "keuanganubm2026",
-      "role": "Keuangan",
-      "department": "Keuangan & Penagihan",
-      "status": "Aktif",
-      "avatar": "DS",
-      "createdAt": "2026-09-04T00:00:00.000Z"
-    },
-    {
-      "id": "USR-2026-005",
-      "name": "Bambang Prakoso, S.T.",
-      "email": "member@ubm.co.id",
-      "password": "12345678",
-      "role": "Member",
-      "department": "",
-      "status": "Aktif",
-      "avatar": "BP",
-      "createdAt": "2026-09-05T00:00:00.000Z",
-      "updatedAt": "2026-10-05T05:06:31.716Z"
+      "password": "bisnisdigital365",
+      "createdAt": "2026-09-01T00:00:00.000Z",
+      "department": "Operations & Management"
     }
   ],
   "settings": {
@@ -842,6 +443,7 @@
     "bankAccountName": "Unit Bisnis Mandiri Politeknik Takumi",
     "paymentInstructions": "Pembayaran ditransfer ke Bank Mandiri Cabang Cikarang No. Rek: 156-00-1234567-8 a.n. Unit Bisnis Mandiri Politeknik Takumi",
     "copyrightText": "Copyright © Bisnis Digital Takumi",
-    "updatedAt": "2026-09-16T08:55:48.431Z"
+    "testKey": "cloud_sync_test_1792489447270",
+    "updatedAt": "2026-10-20T09:52:53.916Z"
   }
 }

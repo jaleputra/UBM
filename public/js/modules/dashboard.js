@@ -806,14 +806,18 @@ function scrollGanttToToday() {
   }
 }
 
+// Safe collapse state initialization
+window.state = window.state || {};
 state.ganttCollapsedProjects = state.ganttCollapsedProjects || {};
 
 function toggleGanttProjectCollapse(projId) {
+  state.ganttCollapsedProjects = state.ganttCollapsedProjects || {};
   state.ganttCollapsedProjects[projId] = !state.ganttCollapsedProjects[projId];
   renderDashboardProjectGantt();
 }
 
 function toggleAllGanttCollapse() {
+  state.ganttCollapsedProjects = state.ganttCollapsedProjects || {};
   const projects = state.projects || [];
   const anyOpen = projects.some(p => !state.ganttCollapsedProjects[p.id]);
   projects.forEach(p => {
@@ -821,6 +825,51 @@ function toggleAllGanttCollapse() {
   });
   renderDashboardProjectGantt();
 }
+
+// =========================================================
+// GANTT CHART FULL SCREEN CONTROLLER
+// =========================================================
+function toggleGanttFullScreen() {
+  // Ensure dashboard Project tab is open first
+  if (typeof switchDashboardTab === 'function') {
+    switchDashboardTab('project');
+  }
+
+  const wrapper = document.querySelector('.dashboard-gantt-wrapper');
+  if (!wrapper) return;
+  const isFull = wrapper.classList.toggle('gantt-fullscreen-mode');
+
+  // Update button icon & text
+  const icon = document.getElementById('btn-gantt-fullscreen-icon');
+  const text = document.getElementById('btn-gantt-fullscreen-text');
+  if (icon) {
+    icon.setAttribute('data-lucide', isFull ? 'minimize-2' : 'maximize');
+  }
+  if (text) {
+    text.textContent = isFull ? 'Keluar Fullscreen (ESC)' : 'Layar Penuh';
+  }
+
+  // Prevent background scrolling when in full screen
+  document.body.style.overflow = isFull ? 'hidden' : '';
+
+  if (window.lucide) {
+    lucide.createIcons();
+  }
+
+  // Ensure scroll is centered on current position or today
+  setTimeout(scrollGanttToToday, 120);
+}
+window.toggleGanttFullScreen = toggleGanttFullScreen;
+
+// ESC key to exit full screen
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const wrapper = document.querySelector('.dashboard-gantt-wrapper');
+    if (wrapper && wrapper.classList.contains('gantt-fullscreen-mode')) {
+      toggleGanttFullScreen();
+    }
+  }
+});
 
 function openGanttMilestoneDetail(projId, msId) {
   const p = (state.projects || []).find(x => x.id === projId || x.orderId === projId);
@@ -1014,7 +1063,7 @@ function renderDashboardProjectGantt() {
 
   // 2. Apply Filters (Status Filter & Search Filter)
   const filterSelect = document.getElementById('gantt-status-filter');
-  const filterMode = filterSelect?.value || 'RUNNING';
+  const filterMode = filterSelect?.value || 'ALL';
 
   let displayProjects = combinedProjects;
   if (filterMode === 'RUNNING') {
@@ -1224,7 +1273,7 @@ function renderDashboardProjectGantt() {
   let rowsHtml = '';
 
   displayProjects.forEach(proj => {
-    const isCollapsed = Boolean(state.ganttCollapsedProjects[proj.id]);
+    const isCollapsed = Boolean(state.ganttCollapsedProjects && state.ganttCollapsedProjects[proj.id]);
     const milestones = proj.milestones || [];
     const totalMs = milestones.length;
     const completedMs = milestones.filter(m => m.status === 'Completed').length;
