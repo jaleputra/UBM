@@ -320,7 +320,15 @@ async function loadAllData() {
 
 async function fetchResource(resource) {
   try {
-    const res = await fetch(`/api/${resource}`);
+    const cacheBuster = `_t=${Date.now()}`;
+    const url = `/api/${resource}?${cacheBuster}`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (resource === 'settings') {

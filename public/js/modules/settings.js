@@ -848,22 +848,20 @@ async function saveUserAccount(event) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const created = await res.json();
 
-      if (typeof fetchResource === 'function') {
-        await fetchResource('users');
+      if (!state.users) state.users = [];
+      const existingIdx = state.users.findIndex(u => u.id === created.id || u.email === created.email);
+      if (existingIdx === -1) {
+        state.users.unshift(created);
       } else {
-        if (!state.users) state.users = [];
-        const existingIdx = state.users.findIndex(u => u.id === created.id || u.email === created.email);
-        if (existingIdx === -1) {
-          state.users.unshift(created);
-        } else {
-          state.users[existingIdx] = created;
-        }
+        state.users[existingIdx] = created;
       }
       showToast(`Akun ${email} berhasil didaftarkan dan dapat langsung digunakan untuk login!`, 'success');
     }
 
     if (typeof fetchResource === 'function') {
-      await fetchResource('users');
+      try {
+        await fetchResource('users');
+      } catch (e) {}
     }
 
     resetUserForm();
@@ -969,10 +967,11 @@ async function deleteUserAccount(id) {
     const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+    state.users = (state.users || []).filter(u => u.id !== id);
     if (typeof fetchResource === 'function') {
-      await fetchResource('users');
-    } else {
-      state.users = (state.users || []).filter(u => u.id !== id);
+      try {
+        await fetchResource('users');
+      } catch (e) {}
     }
     showToast(`Akun ${user.name} berhasil dihapus.`, 'info');
     renderAccountsTabTable();

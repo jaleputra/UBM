@@ -12,7 +12,13 @@ async function loadDashboardData() {
       ]);
     }
 
-    const res = await fetch('/api/stats');
+    const res = await fetch(`/api/stats?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
     const data = await res.json();
     state.stats = data;
 

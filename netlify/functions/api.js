@@ -5,7 +5,9 @@ const app = require('../../src/app');
 const serverlessHandler = serverless(app);
 
 exports.handler = async (event, context) => {
-  // Prevent function from waiting for background node event loops (e.g. database connections)
-  context.callbackWaitsForEmptyEventLoop = false;
+  // Ensure background asynchronous tasks (e.g. Supabase writes) complete before ending invocation
+  if (context) {
+    context.callbackWaitsForEmptyEventLoop = true;
+  }
   return await serverlessHandler(event, context);
 };

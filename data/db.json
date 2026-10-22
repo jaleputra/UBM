@@ -384,6 +384,17 @@
   ],
   "users": [
     {
+      "id": "USR-2026-978",
+      "name": "test",
+      "role": "Member",
+      "email": "test@gmail.com",
+      "avatar": "TE",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-22T12:16:15.156Z",
+      "department": "IT"
+    },
+    {
       "id": "USR-2026-381",
       "name": "Reza Ilyasa",
       "role": "Member",

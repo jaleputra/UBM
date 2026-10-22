@@ -11,6 +11,17 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Disable caching for all API responses across CDNs and browsers
+app.use((req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
+  next();
+});
+
 // Client-side error and debug log receiver
 app.post('/api/client-log', (req, res) => {
   try {
@@ -28,8 +39,9 @@ const noopBroadcast = () => {};
 // Mount API router
 const apiRouter = createApiRouter(noopBroadcast);
 
-// Handle both standard /api and Netlify Functions path
+// Handle standard /api, Netlify Functions path, and fallback root path
 app.use('/.netlify/functions/api', apiRouter);
 app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 module.exports = app;

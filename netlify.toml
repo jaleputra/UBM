@@ -2,12 +2,36 @@
   publish = "public"
   functions = "netlify/functions"
 
+[functions]
+  directory = "netlify/functions"
+  included_files = ["data/**", "src/**"]
+
 [build.environment]
   NODE_VERSION = "20"
   SUPABASE_URL = "https://aefhdgktpmneqbhaoily.supabase.co"
   SUPABASE_KEY = "sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL"
   NEXT_PUBLIC_SUPABASE_URL = "https://aefhdgktpmneqbhaoily.supabase.co"
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL"
+
+# Never cache API requests
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    Surrogate-Control = "no-store"
+
+# Revalidate JS assets to avoid stale UI modules
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 # Proxy all /api/* requests to the serverless function
 [[redirects]]
