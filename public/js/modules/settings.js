@@ -61,61 +61,13 @@ function getCompanySettings() {
   };
 }
 
-// ==================== DIRECT SUPABASE CLOUD STORE INTEGRATION ====================
-const UBM_SUPABASE_URL = 'https://aefhdgktpmneqbhaoily.supabase.co';
-const UBM_SUPABASE_KEY = 'sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL';
-
-async function directSupabaseSyncUsers(usersList) {
-  if (!Array.isArray(usersList) || usersList.length === 0) return false;
-  try {
-    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
-      method: 'POST',
-      headers: {
-        'apikey': UBM_SUPABASE_KEY,
-        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify({
-        id: '__SYS_SYNC_users__',
-        customer_name: '__UBM_SYS_STORE__',
-        items: usersList,
-        notes: 'Direct client-side synchronization for users',
-        updated_at: new Date().toISOString()
-      })
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('⚠️ [Direct Supabase Sync] Notice:', err.message);
-    return false;
-  }
-}
-
-async function directSupabaseFetchUsers() {
-  try {
-    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.__SYS_SYNC_users__&select=items&_t=${Date.now()}`, {
-      headers: {
-        'apikey': UBM_SUPABASE_KEY,
-        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
-        'Cache-Control': 'no-cache, no-store'
-      }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items) && data[0].items.length > 0) {
-        return data[0].items;
-      }
-    }
-  } catch (err) {
-    console.warn('⚠️ [Direct Supabase Fetch] Notice:', err.message);
-  }
-  return null;
-}
-
-let activeSettingsTab = 'general';
+let activeSettingsTab = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ubm_active_settings_tab')) || 'general';
 
 function switchSettingsTab(tabKey) {
   activeSettingsTab = tabKey;
+  try {
+    sessionStorage.setItem('ubm_active_settings_tab', tabKey);
+  } catch (e) {}
   
   const tabs = ['general', 'officers', 'banking', 'preview', 'accounts'];
   tabs.forEach(t => {
@@ -133,20 +85,23 @@ function switchSettingsTab(tabKey) {
     if (topActions) topActions.style.display = 'none';
     renderAccountsTabTable();
     
-    // 1. Direct Supabase query (instant real-time result)
-    directSupabaseFetchUsers().then(directUsers => {
-      if (Array.isArray(directUsers) && directUsers.length > 0) {
-        state.users = directUsers;
-        renderAccountsTabTable();
-      }
-    }).catch(() => {}).finally(() => {
-      // 2. Also refresh via backend API
-      if (typeof fetchResource === 'function') {
-        fetchResource('users').then(() => {
+    // 1. Fetch directly from Supabase (instant and real-time)
+    if (typeof directSupabaseFetchUsers === 'function') {
+      directSupabaseFetchUsers().then(directUsers => {
+        if (Array.isArray(directUsers) && directUsers.length > 0) {
+          state.users = directUsers;
+          try { localStorage.setItem('ubm_cached_users', JSON.stringify(directUsers)); } catch (e) {}
           renderAccountsTabTable();
-        }).catch(() => {});
-      }
-    });
+        }
+      }).catch(() => {});
+    }
+    
+    // 2. Also refresh via backend API
+    if (typeof fetchResource === 'function') {
+      fetchResource('users').then(() => {
+        renderAccountsTabTable();
+      }).catch(() => {});
+    }
   } else {
     if (mainForm) mainForm.style.display = 'block';
     if (topActions) topActions.style.display = 'flex';
@@ -540,7 +495,8 @@ function renderSettingsView() {
     </div>
   `;
 
-  switchSettingsTab(activeSettingsTab || 'general');
+  const savedTab = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ubm_active_settings_tab')) || activeSettingsTab || 'general';
+  switchSettingsTab(savedTab);
   if (window.lucide) lucide.createIcons();
 }
 
@@ -919,8 +875,13 @@ async function saveUserAccount(event) {
       showToast(`Akun ${email} berhasil didaftarkan dan dapat langsung digunakan untuk login!`, 'success');
     }
 
-    // Direct real-time sync to Supabase
-    directSupabaseSyncUsers(state.users).catch(() => {});
+    // Direct real-time sync to Supabase & cache in localStorage
+    try {
+      localStorage.setItem('ubm_cached_users', JSON.stringify(state.users));
+    } catch (e) {}
+    if (typeof directSupabaseSyncUsers === 'function') {
+      directSupabaseSyncUsers(state.users).catch(() => {});
+    }
 
     if (typeof fetchResource === 'function') {
       try {
@@ -1033,8 +994,13 @@ async function deleteUserAccount(id) {
 
     state.users = (state.users || []).filter(u => u.id !== id);
 
-    // Direct real-time sync deletion to Supabase
-    directSupabaseSyncUsers(state.users).catch(() => {});
+    // Direct real-time sync deletion to Supabase & cache in localStorage
+    try {
+      localStorage.setItem('ubm_cached_users', JSON.stringify(state.users));
+    } catch (e) {}
+    if (typeof directSupabaseSyncUsers === 'function') {
+      directSupabaseSyncUsers(state.users).catch(() => {});
+    }
 
     if (typeof fetchResource === 'function') {
       try {

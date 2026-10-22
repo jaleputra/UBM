@@ -389,6 +389,16 @@ async function handleAuthLogin(event) {
     let authSuccess = false;
     let authUser = null;
 
+    // Pull latest users directly from Supabase so newly registered accounts can login immediately
+    try {
+      if (typeof directSupabaseFetchUsers === 'function') {
+        const directUsers = await directSupabaseFetchUsers();
+        if (Array.isArray(directUsers) && directUsers.length > 0) {
+          state.users = directUsers;
+        }
+      }
+    } catch (fetchErr) {}
+
     try {
       // 1. Primary verification via backend API
       const res = await fetch('/api/auth/login', {

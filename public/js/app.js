@@ -22,7 +22,13 @@ Object.assign(state, {
   warranty_claims: state.warranty_claims || [],
   maintenance: state.maintenance || [],
   activity_logs: state.activity_logs || [],
-  users: state.users || [],
+  users: (function() {
+    try {
+      const c = localStorage.getItem('ubm_cached_users');
+      if (c) return JSON.parse(c);
+    } catch (e) {}
+    return window.state?.users || [];
+  })(),
   settings: state.settings || null,
   stats: state.stats || null,
   searchQuery: state.searchQuery || '',
@@ -319,6 +325,16 @@ async function loadAllData() {
 }
 
 async function fetchResource(resource) {
+  if (resource === 'users' && typeof directSupabaseFetchUsers === 'function') {
+    try {
+      const directUsers = await directSupabaseFetchUsers();
+      if (Array.isArray(directUsers) && directUsers.length > 0) {
+        state.users = directUsers;
+        return directUsers;
+      }
+    } catch (e) {}
+  }
+
   try {
     const cacheBuster = `_t=${Date.now()}`;
     const url = `/api/${resource}?${cacheBuster}`;
@@ -335,6 +351,9 @@ async function fetchResource(resource) {
       state.settings = data;
     } else {
       state[resource] = Array.isArray(data) ? data : [];
+      if (resource === 'users' && Array.isArray(data) && data.length > 0) {
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
+      }
     }
     return data;
   } catch (err) {

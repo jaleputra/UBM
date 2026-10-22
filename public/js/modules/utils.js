@@ -205,5 +205,65 @@ function getUserDropdownOptions(selectedValue = '', placeholder = '-- Pilih Akun
 
   return html;
 }
-window.getUserDropdownOptions = getUserDropdownOptions;
+// ==================== UNIVERSAL DIRECT SUPABASE CLOUD STORE HELPERS ====================
+const UBM_SUPABASE_URL = 'https://aefhdgktpmneqbhaoily.supabase.co';
+const UBM_SUPABASE_KEY = 'sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL';
+
+async function directSupabaseSyncUsers(usersList) {
+  if (!Array.isArray(usersList) || usersList.length === 0) return false;
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
+      method: 'POST',
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: '__SYS_SYNC_users__',
+        customer_name: '__UBM_SYS_STORE__',
+        items: usersList,
+        notes: 'Direct universal synchronization for users',
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (res.ok) {
+      try { localStorage.setItem('ubm_cached_users', JSON.stringify(usersList)); } catch (e) {}
+    }
+    return res.ok;
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Sync] Notice:', err.message);
+    return false;
+  }
+}
+
+async function directSupabaseFetchUsers() {
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.__SYS_SYNC_users__&select=items`, {
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache, no-store'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items) && data[0].items.length > 0) {
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(data[0].items)); } catch (e) {}
+        return data[0].items;
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Fetch] Notice:', err.message);
+  }
+  try {
+    const cached = localStorage.getItem('ubm_cached_users');
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+  return null;
+}
+
+window.directSupabaseSyncUsers = directSupabaseSyncUsers;
+window.directSupabaseFetchUsers = directSupabaseFetchUsers;
 
