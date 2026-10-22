@@ -77,12 +77,7 @@ module.exports = function(broadcastReload) {
 
       // 2. Sync Users
       const cloudUsers = await getCloudSync('users');
-      if (cloudUsers === null) {
-        if (Array.isArray(db.users) && db.users.length > 0) {
-          await setCloudSync('users', db.users);
-          console.log(`⚡ [Cloud Sync] ${db.users.length} akun pengguna berhasil diunggah ke Supabase Cloud Store`);
-        }
-      } else if (Array.isArray(cloudUsers)) {
+      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
         db.users = cloudUsers;
         writeDB(db);
       }
@@ -621,9 +616,6 @@ module.exports = function(broadcastReload) {
           db[resourceName] = cloudData;
           writeDB(db);
           return res.json(cloudData);
-        } else if (cloudData === null && localItems.length > 0) {
-          // Push local seed data to Cloud Store so other devices immediately receive it
-          await setCloudSync(resourceName, localItems);
         }
       } catch (syncErr) {
         console.warn(`[Cloud Sync] Fallback GET /api/${resourceName}:`, syncErr.message);
@@ -907,7 +899,172 @@ module.exports = function(broadcastReload) {
   registerCrudRoutes('service_tickets', 'SRV');
   registerCrudRoutes('warranty_claims', 'CLM');
   registerCrudRoutes('activity_logs', 'LOG');
-  registerCrudRoutes('users', 'USR');
+  // ---------------- DEDICATED DIRECT SUPABASE USERS MANAGEMENT ----------------
+  const USERS_SYNC_KEY = '__SYS_SYNC_users__';
+
+  async function fetchSupabaseUsers() {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('delivery')
+          .select('items')
+          .eq('id', USERS_SYNC_KEY)
+          .single();
+        if (!error && data && Array.isArray(data.items)) {
+          const db = readDB();
+          db.users = data.items;
+          writeDB(db);
+          return data.items;
+        }
+      } catch (err) {
+        console.warn('⚠️ [Users Supabase] Read notice:', err.message);
+      }
+    }
+    const db = readDB();
+    return Array.isArray(db.users) ? db.users : [];
+  }
+
+  async function saveSupabaseUsers(usersList) {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('delivery')
+          .upsert({
+            id: USERS_SYNC_KEY,
+            customer_name: '__UBM_SYS_STORE__',
+            items: usersList,
+            notes: 'Direct cloud synchronization for users',
+            updated_at: new Date().toISOString()
+          });
+        if (error) {
+          console.error('❌ [Users Supabase] Upsert error:', error.message);
+        } else {
+          console.log(`⚡ [Users Supabase] ${usersList.length} akun pengguna berhasil disimpan langsung ke Supabase`);
+        }
+      } catch (err) {
+        console.error('❌ [Users Supabase] Exception on upsert:', err.message);
+      }
+    }
+    const db = readDB();
+    db.users = usersList;
+    writeDB(db);
+  }
+
+  // 1. GET ALL USERS (Direct Supabase)
+  router.get('/users', async (req, res) => {
+    try {
+      const users = await fetchSupabaseUsers();
+      res.json(users);
+    } catch (err) {
+      const db = readDB();
+      res.json(db.users || []);
+    }
+  });
+
+  // 2. GET SINGLE USER
+  router.get('/users/:id', async (req, res) => {
+    try {
+      const users = await fetchSupabaseUsers();
+      const user = users.find(u => u.id === req.params.id);
+      if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ error: 'Gagal mengambil data pengguna' });
+    }
+  });
+
+  // 3. CREATE USER DIRECTLY TO SUPABASE
+  router.post('/users', async (req, res) => {
+    try {
+      const { name, email, password, role, department, status, avatar } = req.body || {};
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!name || !cleanEmail || !password) {
+        return res.status(400).json({ error: 'Nama, Email, dan Password wajib diisi' });
+      }
+
+      const users = await fetchSupabaseUsers();
+      const duplicate = users.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+      if (duplicate) {
+        return res.status(400).json({ error: `Email ${cleanEmail} sudah terdaftar untuk pengguna lain` });
+      }
+
+      const newId = req.body.id || `USR-2026-${String(Math.floor(Math.random() * 900 + 100))}`;
+      const newUser = {
+        id: newId,
+        name: (name || '').trim(),
+        email: cleanEmail,
+        password: (password || '').trim(),
+        role: role || 'Member',
+        department: department || 'Operations & Management',
+        status: status || 'Aktif',
+        avatar: avatar || (name ? name.slice(0, 2).toUpperCase() : 'US'),
+        createdAt: req.body.createdAt || new Date().toISOString()
+      };
+
+      users.unshift(newUser);
+      await saveSupabaseUsers(users);
+      broadcastReload({ type: 'reload', resource: 'users' });
+      console.log(`✅ [Users API] Akun baru ${newUser.email} (${newUser.role}) berhasil disimpan langsung ke Supabase`);
+      res.status(201).json(newUser);
+    } catch (err) {
+      console.error('❌ [Users API] Gagal membuat akun:', err);
+      res.status(500).json({ error: 'Gagal menyimpan akun ke database' });
+    }
+  });
+
+  // 4. UPDATE USER DIRECTLY IN SUPABASE
+  router.put('/users/:id', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const users = await fetchSupabaseUsers();
+      const idx = users.findIndex(u => u.id === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+      }
+
+      const existing = users[idx];
+      const updated = {
+        ...existing,
+        ...req.body,
+        id: userId,
+        updatedAt: new Date().toISOString()
+      };
+
+      users[idx] = updated;
+      await saveSupabaseUsers(users);
+      broadcastReload({ type: 'reload', resource: 'users' });
+      console.log(`✅ [Users API] Akun ${updated.email} (${userId}) berhasil diperbarui langsung di Supabase`);
+      res.json(updated);
+    } catch (err) {
+      console.error('❌ [Users API] Gagal update akun:', err);
+      res.status(500).json({ error: 'Gagal memperbarui akun di database' });
+    }
+  });
+
+  // 5. DELETE USER DIRECTLY IN SUPABASE
+  router.delete('/users/:id', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const users = await fetchSupabaseUsers();
+      const userToDelete = users.find(u => u.id === userId);
+      if (!userToDelete) {
+        return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+      }
+
+      if ((userToDelete.email || '').toLowerCase() === 'admin@ubm.co.id') {
+        return res.status(403).json({ error: 'Akun Super Administrator Utama tidak dapat dihapus demi keamanan sistem' });
+      }
+
+      const filtered = users.filter(u => u.id !== userId);
+      await saveSupabaseUsers(filtered);
+      broadcastReload({ type: 'reload', resource: 'users' });
+      console.log(`🗑️ [Users API] Akun ${userToDelete.email} (${userId}) berhasil dihapus langsung dari Supabase`);
+      res.json({ message: 'Deleted successfully', id: userId });
+    } catch (err) {
+      console.error('❌ [Users API] Gagal menghapus akun:', err);
+      res.status(500).json({ error: 'Gagal menghapus akun dari database' });
+    }
+  });
 
   // Clear all projects and finance data
   router.delete('/finance/clear-all', async (req, res) => {
