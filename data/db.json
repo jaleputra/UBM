@@ -384,6 +384,17 @@
   ],
   "users": [
     {
+      "id": "USR-2026-381",
+      "name": "Reza Ilyasa",
+      "role": "Member",
+      "email": "reza.ilyasa@takumi.ac.id",
+      "avatar": "RI",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-21T08:57:51.448Z",
+      "department": "IT"
+    },
+    {
       "id": "USR-2026-153",
       "name": "Rizaldi Putra",
       "role": "Ketua UBM",

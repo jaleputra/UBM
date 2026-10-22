@@ -65,7 +65,7 @@ module.exports = function(broadcastReload) {
 
       // 1. Sync Settings
       const cloudSettings = await getCloudSync('settings');
-      if (!cloudSettings || Object.keys(cloudSettings).length === 0) {
+      if (cloudSettings === null || Object.keys(cloudSettings).length === 0) {
         if (db.settings && Object.keys(db.settings).length > 0) {
           await setCloudSync('settings', db.settings);
           console.log('⚡ [Cloud Sync] Pengaturan profil berhasil diunggah ke Supabase Cloud Store');
@@ -77,12 +77,12 @@ module.exports = function(broadcastReload) {
 
       // 2. Sync Users
       const cloudUsers = await getCloudSync('users');
-      if (!cloudUsers || cloudUsers.length === 0) {
+      if (cloudUsers === null) {
         if (Array.isArray(db.users) && db.users.length > 0) {
           await setCloudSync('users', db.users);
           console.log(`⚡ [Cloud Sync] ${db.users.length} akun pengguna berhasil diunggah ke Supabase Cloud Store`);
         }
-      } else {
+      } else if (Array.isArray(cloudUsers)) {
         db.users = cloudUsers;
         writeDB(db);
       }
@@ -91,11 +91,10 @@ module.exports = function(broadcastReload) {
       const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims'];
       for (const resName of resourcesToSync) {
         const cloudData = await getCloudSync(resName);
-        if (!cloudData || cloudData.length === 0) {
-          if (Array.isArray(db[resName]) && db[resName].length > 0) {
-            await setCloudSync(resName, db[resName]);
-          }
-        } else if (Array.isArray(cloudData) && cloudData.length > 0) {
+        if (cloudData === null) {
+          const seedData = Array.isArray(db[resName]) ? db[resName] : [];
+          await setCloudSync(resName, seedData);
+        } else if (Array.isArray(cloudData)) {
           db[resName] = cloudData;
           writeDB(db);
         }
@@ -117,7 +116,7 @@ module.exports = function(broadcastReload) {
     // Pull latest users from Supabase Cloud Store so newly created users on any device can login immediately
     try {
       const cloudUsers = await getCloudSync('users');
-      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+      if (Array.isArray(cloudUsers)) {
         const db = readDB();
         db.users = cloudUsers;
         writeDB(db);
@@ -389,8 +388,17 @@ module.exports = function(broadcastReload) {
   router.put('/settings', async (req, res) => {
     try {
       const db = readDB();
+      let currentSettings = db.settings || defaultCompanySettings;
+      try {
+        const cloudSettings = await getCloudSync('settings');
+        if (cloudSettings && Object.keys(cloudSettings).length > 0) {
+          currentSettings = { ...currentSettings, ...cloudSettings };
+        }
+      } catch (e) {}
+
       const updatedSettings = {
-        ...(db.settings || defaultCompanySettings),
+        ...defaultCompanySettings,
+        ...currentSettings,
         ...req.body,
         updatedAt: new Date().toISOString()
       };
@@ -412,15 +420,24 @@ module.exports = function(broadcastReload) {
   router.get('/stats', async (req, res) => {
     try {
       const db = readDB();
+      const fetchList = async (resName) => {
+        try {
+          const c = await getCloudSync(resName);
+          if (Array.isArray(c)) return c;
+        } catch (e) {}
+        return Array.isArray(db[resName]) ? db[resName] : [];
+      };
 
-      const orders = db.orders || [];
-      const po = db.po || [];
-      const invoices = db.invoices || [];
-      const purchasing = db.purchasing || [];
-      const bom = db.bom || [];
-      const delivery = db.delivery || [];
-      const projects = db.projects || [];
-      const quotations = db.quotations || [];
+      const [orders, po, invoices, purchasing, bom, delivery, projects, quotations] = await Promise.all([
+        fetchList('orders'),
+        fetchList('po'),
+        fetchList('invoices'),
+        fetchList('purchasing'),
+        fetchList('bom'),
+        fetchList('delivery'),
+        fetchList('projects'),
+        fetchList('quotations')
+      ]);
 
       const totalQuotations = quotations.length;
       const totalQuotationValue = quotations.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
@@ -581,8 +598,9 @@ module.exports = function(broadcastReload) {
               };
             });
 
-            const extraLocal = localItems.filter(l => l.id && l.id !== 'undefined' && !remoteIds.has(l.id));
-            const fullMerged = [...merged, ...extraLocal];
+            const extraCloud = cloudItems.filter(c => c.id && !remoteIds.has(c.id));
+            const extraLocal = localItems.filter(l => l.id && l.id !== 'undefined' && !remoteIds.has(l.id) && !cloudItems.some(c => c.id === l.id));
+            const fullMerged = [...merged, ...extraCloud, ...extraLocal];
             db[resourceName] = fullMerged;
             writeDB(db);
             return res.json(fullMerged);
@@ -599,13 +617,13 @@ module.exports = function(broadcastReload) {
       // Fallback: Fetch from Supabase Cloud Store for all devices synchronization
       try {
         const cloudData = await getCloudSync(resourceName);
-        if (Array.isArray(cloudData) && cloudData.length > 0) {
+        if (Array.isArray(cloudData)) {
           db[resourceName] = cloudData;
           writeDB(db);
           return res.json(cloudData);
-        } else if (localItems.length > 0) {
+        } else if (cloudData === null && localItems.length > 0) {
           // Push local seed data to Cloud Store so other devices immediately receive it
-          setCloudSync(resourceName, localItems).catch(() => {});
+          await setCloudSync(resourceName, localItems);
         }
       } catch (syncErr) {
         console.warn(`[Cloud Sync] Fallback GET /api/${resourceName}:`, syncErr.message);
@@ -657,7 +675,16 @@ module.exports = function(broadcastReload) {
     // POST (CREATE)
     router.post(`/${resourceName}`, async (req, res) => {
       const db = readDB();
-      const items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+
+      // Always retrieve latest list from Supabase Cloud Store to prevent race conditions & multi-device overwrites
+      try {
+        const cloudData = await getCloudSync(resourceName);
+        if (Array.isArray(cloudData)) {
+          items = cloudData;
+        }
+      } catch (e) {}
+
       const newId = req.body.id || `${idPrefix}-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
       
       let newItem = {
@@ -807,7 +834,14 @@ module.exports = function(broadcastReload) {
       }
 
       const db = readDB();
-      const items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      try {
+        const cloudData = await getCloudSync(resourceName);
+        if (Array.isArray(cloudData)) {
+          items = cloudData;
+        }
+      } catch (e) {}
+
       const idx = items.findIndex(i => i.id === req.params.id);
       if (idx === -1) {
         items.push({ id: req.params.id, ...updateData });
@@ -838,7 +872,15 @@ module.exports = function(broadcastReload) {
       }
 
       const db = readDB();
-      const items = (Array.isArray(db[resourceName]) ? db[resourceName] : []).filter(i => i.id !== req.params.id);
+      let items = (Array.isArray(db[resourceName]) ? db[resourceName] : []);
+      try {
+        const cloudData = await getCloudSync(resourceName);
+        if (Array.isArray(cloudData)) {
+          items = cloudData;
+        }
+      } catch (e) {}
+
+      items = items.filter(i => i.id !== req.params.id);
       db[resourceName] = items;
       writeDB(db);
 

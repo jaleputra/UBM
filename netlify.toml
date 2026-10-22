@@ -2,6 +2,13 @@
   publish = "public"
   functions = "netlify/functions"
 
+[build.environment]
+  NODE_VERSION = "20"
+  SUPABASE_URL = "https://aefhdgktpmneqbhaoily.supabase.co"
+  SUPABASE_KEY = "sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL"
+  NEXT_PUBLIC_SUPABASE_URL = "https://aefhdgktpmneqbhaoily.supabase.co"
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL"
+
 # Proxy all /api/* requests to the serverless function
 [[redirects]]
   from = "/api/*"
