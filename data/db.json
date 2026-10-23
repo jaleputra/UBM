@@ -1,5 +1,57 @@
 {
-  "orders": [],
+  "orders": [
+    {
+      "id": "ORD-2026-5231-255",
+      "items": [
+        {
+          "qty": 7,
+          "sku": "001",
+          "unit": "Unit",
+          "total": 10500000,
+          "itemName": "Pendampingan",
+          "unitPrice": 1500000
+        },
+        {
+          "qty": 1,
+          "sku": "002",
+          "unit": "Unit",
+          "total": 1562500,
+          "itemName": "Penerjemahan",
+          "unitPrice": 1562500
+        }
+      ],
+      "notes": "Dikonversi dari Surat Penawaran Harga (JASA) #QUO-2026-6186-192.\nKetentuan Garansi: -.\nLead time: 14 hari kerja setelah PO resmi diterima.\n\nCatatan Tambahan:\n1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "status": "Accepted",
+      "dueDate": "2026-11-30",
+      "taxRate": 0,
+      "discount": 0,
+      "subtotal": 12062500,
+      "createdAt": "2026-10-23T08:09:25.232Z",
+      "orderDate": "2026-10-23",
+      "orderType": "jasa",
+      "poFileUrl": "/uploads/po/PO_ORD-2026-5231-255_1792742986658.pdf",
+      "taxAmount": 0,
+      "updatedAt": "2026-10-23T08:09:46.643Z",
+      "grandTotal": 12062500,
+      "itemsTotal": 12062500,
+      "poDocument": {
+        "url": "/uploads/po/PO_ORD-2026-5231-255_1792742986658.pdf",
+        "name": "BKD BI (1).pdf",
+        "uploadedAt": "2026-10-23T08:09:46.470Z"
+      },
+      "poFileName": "BKD BI (1).pdf",
+      "projectName": "Pendampingan",
+      "quotationId": "QUO-2026-6186-192",
+      "warrantyFee": 0,
+      "customerName": "KJRI OSAKA",
+      "customerPhone": "081273420383",
+      "quotationType": "jasa",
+      "servicesTotal": 0,
+      "mainItemsTotal": 12062500,
+      "customerAddress": "Takumi",
+      "additionalServices": []
+    }
+  ],
   "po": [
     {
       "id": "PO-2026-001",
@@ -108,8 +160,76 @@
   "purchasing": [],
   "bom": [],
   "delivery": [],
-  "projects": [],
-  "quotations": [],
+  "projects": [
+    {
+      "id": "PRJ-2026-8853-259",
+      "team": [
+        {
+          "name": "Reza Ilyasa",
+          "role": "Member",
+          "phone": ""
+        }
+      ],
+      "orderId": "ORD-2026-5231-255",
+      "createdAt": "2026-10-23T08:10:08.853Z",
+      "department": "IT",
+      "projectLead": "Rangga Gading Satria",
+      "projectName": "Pendampingan",
+      "customerName": "KJRI OSAKA",
+      "isLeadLocked": true
+    }
+  ],
+  "quotations": [
+    {
+      "id": "QUO-2026-6186-192",
+      "items": [
+        {
+          "qty": 7,
+          "sku": "001",
+          "unit": "",
+          "total": 10500000,
+          "itemName": "Pendampingan",
+          "warranty": "",
+          "unitPrice": 1500000
+        },
+        {
+          "qty": 1,
+          "sku": "002",
+          "unit": "",
+          "total": 1562500,
+          "itemName": "Penerjemahan",
+          "warranty": "",
+          "unitPrice": 1562500
+        }
+      ],
+      "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
+      "status": "Pengajuan",
+      "picName": "Rizaldi Putra",
+      "taxRate": 0,
+      "discount": 0,
+      "leadTime": "14 hari kerja setelah PO resmi diterima",
+      "subtotal": 12062500,
+      "warranty": "-",
+      "createdAt": "2026-10-23T08:09:06.186Z",
+      "taxAmount": 0,
+      "updatedAt": "2026-10-23T08:09:25.237Z",
+      "grandTotal": 12062500,
+      "itemsTotal": 12062500,
+      "validUntil": "2026-11-30",
+      "projectName": "Pendampingan",
+      "warrantyFee": 0,
+      "customerName": "KJRI OSAKA",
+      "paymentTerms": "DP 50% saat PO, Pelunasan setelah serah terima / BAST",
+      "customerEmail": "rizaldi.rip@takumi.ac.id",
+      "customerPhone": "081273420383",
+      "quotationDate": "2026-10-23",
+      "quotationType": "jasa",
+      "servicesTotal": 0,
+      "mainItemsTotal": 12062500,
+      "customerAddress": "Takumi",
+      "additionalServices": []
+    }
+  ],
   "bast": [],
   "project_reports": [],
   "maintenance": [],
@@ -456,39 +576,40 @@
       "date": "2026-10-23",
       "notes": "",
       "createdAt": "2026-10-23T06:12:09.069Z",
+      "updatedAt": "2026-10-23T06:29:43.095Z",
       "clientName": "PT A",
       "invoiceRef": "001",
       "updated_at": "2026-10-23T06:29:43.087Z",
       "percentages": {
-        "takumi": 40,
         "sales": 10,
+        "takumi": 40,
         "adminTax": 20,
         "freelance": 30
       },
       "serviceName": "Pendampingan",
       "billedAmount": 3125000,
       "contributions": {
-        "takumi": {
-          "takumi": true,
-          "ayumi": false
-        },
         "sales": {
-          "takumi": true,
-          "ayumi": false
+          "ayumi": false,
+          "takumi": true
+        },
+        "takumi": {
+          "ayumi": false,
+          "takumi": true
         },
         "adminTax": {
-          "takumi": false,
-          "ayumi": true
+          "ayumi": true,
+          "takumi": false
         },
         "freelance": {
-          "takumi": true,
-          "ayumi": false
+          "ayumi": false,
+          "takumi": true
         }
       },
-      "paymentStatus": "Menunggu",
-      "updatedAt": "2026-10-23T06:29:43.095Z"
+      "paymentStatus": "Menunggu"
     }
   ],
+  "service_expenses": [],
   "settings": {
     "companyName": "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
     "companyShortName": "UBM Takumi",

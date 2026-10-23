@@ -11,6 +11,11 @@
       <span>2. Kerjasama (Bagi Hasil Takumi & Ayumi)</span>
       <span id="badge-partnership-count" style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: #fff; border-radius: 9999px; padding: 2px 8px; font-size: 11px; margin-left: 4px;">0</span>
     </button>
+    <button type="button" id="tab-btn-finance-service-expenses" onclick="switchFinanceTab('service-expenses')" class="btn" style="display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #f1f5f9; color: #475569; transition: all 0.2s ease;">
+      <i data-lucide="car" style="width: 18px; height: 18px;"></i>
+      <span>3. Pengeluaran Jasa (Transport & Uang Makan)</span>
+      <span id="badge-service-expenses-count" style="display: inline-flex; align-items: center; justify-content: center; background: #ea580c; color: #fff; border-radius: 9999px; padding: 2px 8px; font-size: 11px; margin-left: 4px;">0</span>
+    </button>
   </div>
 
   <!-- TAB 1: PROFITABILITAS PROYEK UBM (EXISTING) -->
@@ -190,6 +195,98 @@
             </tr>
           </thead>
           <tbody id="table-partnerships-body">
+            <!-- Populated dynamically via finance.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: PENGELUARAN JASA (TRANSPORTASI & UANG MAKAN) -->
+  <div id="finance-tab-content-service-expenses" style="display: none;">
+    <!-- INFO BANNER PENGELUARAN JASA -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: #9a3412; background: #fff7ed; padding: 12px 18px; border-radius: 8px; border-left: 4px solid #ea580c; margin-bottom: 18px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <i data-lucide="car" style="width: 22px; height: 22px; color: #ea580c; flex-shrink: 0;"></i>
+        <div>
+          <strong>Pengeluaran Jasa (Biaya Transportasi & Uang Makan)</strong>: Rekapitulasi pengajuan biaya operasional, transportasi, bensin/tol, dan uang makan tim/teknisi untuk pelaksanaan order jasa.
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" class="btn btn-sm btn-primary" onclick="openServiceExpenseModal()" style="background: #ea580c; border-color: #ea580c; color: #ffffff; font-weight: 700; height: 34px;">
+          <i data-lucide="plus-circle" style="width: 15px; height: 15px;"></i> + Buat Pengajuan Baru
+        </button>
+      </div>
+    </div>
+
+    <!-- STAT SUMMARY CARDS PENGELUARAN JASA -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px;">
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #ea580c; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #9a3412; font-weight: 700; text-transform: uppercase;">Total Pengeluaran Jasa</div>
+        <div id="kpi-service-expenses-total" class="font-mono" style="font-size: 18px; font-weight: 800; color: #9a3412; margin-top: 4px;">Rp 0</div>
+        <div id="kpi-service-expenses-count" style="font-size: 11px; color: #64748b; margin-top: 2px;">0 Pengajuan Biaya</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 700; text-transform: uppercase;">Total Biaya Transportasi</div>
+        <div id="kpi-service-expenses-transport" class="font-mono" style="font-size: 18px; font-weight: 800; color: #2563eb; margin-top: 4px;">Rp 0</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Bensin, tol, tiket & operasional</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #16a34a; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #166534; font-weight: 700; text-transform: uppercase;">Total Biaya Uang Makan</div>
+        <div id="kpi-service-expenses-meal" class="font-mono" style="font-size: 18px; font-weight: 800; color: #16a34a; margin-top: 4px;">Rp 0</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Konsumsi teknisi di lapangan</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #d97706; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #b45309; font-weight: 700; text-transform: uppercase;">Realisasi Pencairan</div>
+        <div id="kpi-service-expenses-paid" class="font-mono" style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+        <div id="kpi-service-expenses-pending" style="font-size: 11px; color: #d97706; font-weight: 700; margin-top: 2px;">0 Menunggu Pencairan</div>
+      </div>
+    </div>
+
+    <!-- ACTION & FILTER BAR PENGELUARAN JASA -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary btn-sm" onclick="openServiceExpenseModal()" style="height: 36px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; background: #ea580c; border-color: #ea580c;">
+          <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+          <span>+ Ajukan Biaya Jasa</span>
+        </button>
+        <select id="filter-service-expense-status" class="form-control-sm" onchange="filterServiceExpensesTable()" style="height: 36px;">
+          <option value="ALL">Semua Status Pencairan</option>
+          <option value="Diajukan">⏳ Diajukan (Menunggu Review)</option>
+          <option value="Disetujui">👍 Disetujui (Siap Dicairkan)</option>
+          <option value="Dicairkan">💵 Dicairkan / Lunas</option>
+          <option value="Ditolak">❌ Ditolak</option>
+        </select>
+        <input type="text" id="filter-service-expense-search" class="form-control-sm" placeholder="Cari nomor, order, klien, teknisi..." oninput="filterServiceExpensesTable()" style="height: 36px; min-width: 220px;">
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="exportServiceExpensesCSV()" style="height: 36px;">
+          <i data-lucide="download"></i> Export CSV Pengeluaran Jasa
+        </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearAllServiceExpensesData()" style="height: 36px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 600;" title="Hapus semua data pengeluaran jasa">
+          <i data-lucide="trash-2"></i> Hapus Semua Data
+        </button>
+      </div>
+    </div>
+
+    <!-- TABEL DATA PENGELUARAN JASA -->
+    <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+        <table class="data-table" id="table-service-expenses-main" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+              <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Pengajuan</th>
+              <th style="width: 100px; font-size: 11px; text-transform: uppercase;">Tanggal</th>
+              <th style="font-size: 11px; text-transform: uppercase;">Order Jasa & Customer</th>
+              <th style="width: 160px; font-size: 11px; text-transform: uppercase;">Tim Pelaksana / PIC</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase; color: #1e40af;">Transportasi</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase; color: #166534;">Uang Makan</th>
+              <th style="width: 150px; text-align: right; font-size: 11px; text-transform: uppercase; color: #9a3412;">Total Biaya</th>
+              <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-service-expenses-body">
             <!-- Populated dynamically via finance.js -->
           </tbody>
         </table>

@@ -29,6 +29,13 @@ Object.assign(state, {
     } catch (e) {}
     return window.state?.partnerships || [];
   })(),
+  service_expenses: (function() {
+    try {
+      const c = localStorage.getItem('ubm_cached_service_expenses');
+      if (c) return JSON.parse(c);
+    } catch (e) {}
+    return window.state?.service_expenses || [];
+  })(),
   users: (function() {
     try {
       const c = localStorage.getItem('ubm_cached_users');
@@ -283,6 +290,7 @@ async function loadAllData() {
       fetchResource('maintenance'),
       fetchResource('activity_logs'),
       fetchResource('partnerships'),
+      fetchResource('service_expenses'),
       fetchResource('users'),
       fetchResource('settings')
     ]);
@@ -353,6 +361,16 @@ async function fetchResource(resource) {
     } catch (e) {}
   }
 
+  if (resource === 'service_expenses' && typeof directSupabaseFetchServiceExpenses === 'function') {
+    try {
+      const directExpenses = await directSupabaseFetchServiceExpenses();
+      if (Array.isArray(directExpenses)) {
+        state.service_expenses = directExpenses;
+        return directExpenses;
+      }
+    } catch (e) {}
+  }
+
   try {
     const cacheBuster = `_t=${Date.now()}`;
     const url = `/api/${resource}?${cacheBuster}`;
@@ -375,6 +393,9 @@ async function fetchResource(resource) {
       if (resource === 'partnerships' && Array.isArray(data)) {
         try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data)); } catch (e) {}
       }
+      if (resource === 'service_expenses' && Array.isArray(data)) {
+        try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data)); } catch (e) {}
+      }
     }
     return data;
   } catch (err) {
@@ -385,6 +406,15 @@ async function fetchResource(resource) {
 }
 
 function updateSidebarBadges() {
+  const badgeServiceExpenses = document.getElementById('badge-service-expenses-count');
+  if (badgeServiceExpenses) {
+    badgeServiceExpenses.textContent = state.service_expenses?.length || 0;
+  }
+
+  const badgePartnershipCount = document.getElementById('badge-partnership-count');
+  if (badgePartnershipCount) {
+    badgePartnershipCount.textContent = state.partnerships?.length || 0;
+  }
   const badgeLogs = document.getElementById('badge-logs-count');
   if (badgeLogs) badgeLogs.textContent = state.activity_logs?.length || 0;
 
@@ -517,12 +547,15 @@ function renderCurrentView() {
       const savedFinanceTab = sessionStorage.getItem('ubm_active_finance_tab');
       if (savedFinanceTab === 'partnership' && typeof switchFinanceTab === 'function') {
         switchFinanceTab('partnership');
+      } else if ((savedFinanceTab === 'service-expenses' || savedFinanceTab === 'service_expenses') && typeof switchFinanceTab === 'function') {
+        switchFinanceTab('service-expenses');
       } else {
         if (typeof switchFinanceTab === 'function') {
           switchFinanceTab('profit');
         } else {
           if (typeof renderFinanceTable === 'function') renderFinanceTable();
           if (typeof renderPartnershipsTable === 'function') renderPartnershipsTable();
+          if (typeof renderServiceExpensesTable === 'function') renderServiceExpensesTable();
         }
       }
       break;

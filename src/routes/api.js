@@ -83,7 +83,7 @@ module.exports = function(broadcastReload) {
       }
 
       // 3. Sync Other Resources
-      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims', 'partnerships'];
+      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims', 'partnerships', 'service_expenses'];
       for (const resName of resourcesToSync) {
         const cloudData = await getCloudSync(resName);
         if (cloudData === null) {
@@ -900,6 +900,7 @@ module.exports = function(broadcastReload) {
   registerCrudRoutes('warranty_claims', 'CLM');
   registerCrudRoutes('activity_logs', 'LOG');
   registerCrudRoutes('partnerships', 'KSM');
+  registerCrudRoutes('service_expenses', 'EXP-JSA');
   // ---------------- DEDICATED DIRECT SUPABASE USERS MANAGEMENT ----------------
   const USERS_SYNC_KEY = '__SYS_SYNC_users__';
 

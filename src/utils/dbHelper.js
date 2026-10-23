@@ -40,6 +40,7 @@ const DEFAULT_SCHEMA = {
   activity_logs: [],
   users: [],
   partnerships: [],
+  service_expenses: [],
   settings: {}
 };
 

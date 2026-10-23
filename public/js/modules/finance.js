@@ -1244,23 +1244,45 @@ function getPartnershipPercentages() {
 }
 
 /**
- * Switch Sub-Tabs pada Halaman Keuangan (Profitabilitas Proyek vs Kerjasama)
+ * Switch Sub-Tabs pada Halaman Keuangan:
+ * 1. Profitabilitas Proyek UBM ('profit')
+ * 2. Kerjasama & Bagi Hasil ('partnership')
+ * 3. Pengeluaran Jasa (Transport & Uang Makan) ('service-expenses')
  */
 function switchFinanceTab(tabKey) {
   const profitContent = document.getElementById('finance-tab-content-profit');
   const partnershipContent = document.getElementById('finance-tab-content-partnership');
+  const serviceExpenseContent = document.getElementById('finance-tab-content-service-expenses');
+
   const btnProfit = document.getElementById('tab-btn-finance-profit');
   const btnPartnership = document.getElementById('tab-btn-finance-partnership');
+  const btnServiceExpense = document.getElementById('tab-btn-finance-service-expenses');
 
-  if (tabKey === 'partnership') {
-    if (profitContent) profitContent.style.display = 'none';
-    if (partnershipContent) partnershipContent.style.display = 'block';
-
-    if (btnProfit) {
-      btnProfit.style.background = '#f1f5f9';
-      btnProfit.style.color = '#475569';
-      btnProfit.style.boxShadow = 'none';
+  // Reset semua tab styles
+  const allBtns = [btnProfit, btnPartnership, btnServiceExpense];
+  allBtns.forEach(btn => {
+    if (btn) {
+      btn.style.background = '#f1f5f9';
+      btn.style.color = '#475569';
+      btn.style.boxShadow = 'none';
     }
+  });
+
+  if (profitContent) profitContent.style.display = 'none';
+  if (partnershipContent) partnershipContent.style.display = 'none';
+  if (serviceExpenseContent) serviceExpenseContent.style.display = 'none';
+
+  if (tabKey === 'service-expenses' || tabKey === 'service_expenses') {
+    if (serviceExpenseContent) serviceExpenseContent.style.display = 'block';
+    if (btnServiceExpense) {
+      btnServiceExpense.style.background = '#ea580c';
+      btnServiceExpense.style.color = '#ffffff';
+      btnServiceExpense.style.boxShadow = '0 2px 4px rgba(234,88,12,0.25)';
+    }
+    try { sessionStorage.setItem('ubm_active_finance_tab', 'service-expenses'); } catch (e) {}
+    renderServiceExpensesTable();
+  } else if (tabKey === 'partnership') {
+    if (partnershipContent) partnershipContent.style.display = 'block';
     if (btnPartnership) {
       btnPartnership.style.background = '#2563eb';
       btnPartnership.style.color = '#ffffff';
@@ -1270,17 +1292,10 @@ function switchFinanceTab(tabKey) {
     renderPartnershipsTable();
   } else {
     if (profitContent) profitContent.style.display = 'block';
-    if (partnershipContent) partnershipContent.style.display = 'none';
-
     if (btnProfit) {
       btnProfit.style.background = '#2563eb';
       btnProfit.style.color = '#ffffff';
       btnProfit.style.boxShadow = '0 2px 4px rgba(37,99,235,0.2)';
-    }
-    if (btnPartnership) {
-      btnPartnership.style.background = '#f1f5f9';
-      btnPartnership.style.color = '#475569';
-      btnPartnership.style.boxShadow = 'none';
     }
     try { sessionStorage.setItem('ubm_active_finance_tab', 'profit'); } catch (e) {}
     renderFinanceTable();
@@ -2284,3 +2299,1080 @@ window.resetPartnershipPercentagesToDefault = resetPartnershipPercentagesToDefau
 window.previewPartnershipSlip = previewPartnershipSlip;
 window.exportPartnershipCSV = exportPartnershipCSV;
 
+// =========================================================================
+// MODUL PENGELUARAN JASA (TRANSPORTASI & UANG MAKAN PELAKSANAAN JASA)
+// =========================================================================
+
+function renderServiceExpensesTable() {
+  const tbody = document.getElementById('table-service-expenses-body');
+  if (!tbody) return;
+
+  const allItems = Array.isArray(state.service_expenses) ? state.service_expenses : [];
+
+  // Update KPI Cards
+  let totalExpense = 0;
+  let totalTransport = 0;
+  let totalMeal = 0;
+  let totalPaid = 0;
+  let pendingCount = 0;
+
+  allItems.forEach(item => {
+    const transport = parseFloat(item.transportFee) || 0;
+    const meal = parseFloat(item.mealFee) || 0;
+    const total = parseFloat(item.totalExpense) || (transport + meal);
+    totalExpense += total;
+    totalTransport += transport;
+    totalMeal += meal;
+
+    if (item.status === 'Dicairkan') {
+      totalPaid += total;
+    } else if (item.status === 'Diajukan' || item.status === 'Disetujui' || !item.status) {
+      pendingCount++;
+    }
+  });
+
+  const kpiTotal = document.getElementById('kpi-service-expenses-total');
+  const kpiCount = document.getElementById('kpi-service-expenses-count');
+  const kpiTransport = document.getElementById('kpi-service-expenses-transport');
+  const kpiMeal = document.getElementById('kpi-service-expenses-meal');
+  const kpiPaid = document.getElementById('kpi-service-expenses-paid');
+  const kpiPending = document.getElementById('kpi-service-expenses-pending');
+  const badgeCount = document.getElementById('badge-service-expenses-count');
+
+  if (kpiTotal) kpiTotal.textContent = `Rp ${totalExpense.toLocaleString('id-ID')}`;
+  if (kpiCount) kpiCount.textContent = `${allItems.length} Pengajuan Biaya`;
+  if (kpiTransport) kpiTransport.textContent = `Rp ${totalTransport.toLocaleString('id-ID')}`;
+  if (kpiMeal) kpiMeal.textContent = `Rp ${totalMeal.toLocaleString('id-ID')}`;
+  if (kpiPaid) kpiPaid.textContent = `Rp ${totalPaid.toLocaleString('id-ID')}`;
+  if (kpiPending) kpiPending.textContent = `${pendingCount} Menunggu Pencairan`;
+  if (badgeCount) badgeCount.textContent = allItems.length;
+
+  filterServiceExpensesTable();
+}
+
+function filterServiceExpensesTable() {
+  const tbody = document.getElementById('table-service-expenses-body');
+  if (!tbody) return;
+
+  const allItems = Array.isArray(state.service_expenses) ? state.service_expenses : [];
+  const statusFilter = (document.getElementById('filter-service-expense-status')?.value || 'ALL').trim();
+  const searchInput = (document.getElementById('filter-service-expense-search')?.value || '').toLowerCase().trim();
+
+  const filtered = allItems.filter(item => {
+    if (statusFilter !== 'ALL' && (item.status || 'Diajukan') !== statusFilter) {
+      return false;
+    }
+    if (searchInput) {
+      const matchNo = (item.id || '').toLowerCase().includes(searchInput);
+      const matchOrder = (item.orderId || '').toLowerCase().includes(searchInput);
+      const matchCustomer = (item.customerName || '').toLowerCase().includes(searchInput);
+      const matchService = (item.serviceName || '').toLowerCase().includes(searchInput);
+      const matchPIC = (item.picName || '').toLowerCase().includes(searchInput);
+      const matchTeam = (item.teamMembers || '').toLowerCase().includes(searchInput);
+      if (!matchNo && !matchOrder && !matchCustomer && !matchService && !matchPIC && !matchTeam) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <i data-lucide="car" style="width: 32px; height: 32px; stroke-width: 1.5; color: #cbd5e1;"></i>
+            <div style="font-weight: 600; font-size: 13px;">Belum Ada Pengajuan Pengeluaran Jasa</div>
+            <div style="font-size: 11.5px; max-width: 420px; line-height: 1.4;">
+              Klik tombol <strong>+ Buat Pengajuan Baru</strong> atau gunakan aksi pada order penjualan jasa untuk mengajukan biaya transportasi dan uang makan.
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="openServiceExpenseModal()" style="margin-top: 10px; background: #ea580c; border-color: #ea580c;">
+              + Ajukan Biaya Jasa Sekarang
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(item => {
+    const transport = parseFloat(item.transportFee) || 0;
+    const meal = parseFloat(item.mealFee) || 0;
+    const total = parseFloat(item.totalExpense) || (transport + meal);
+
+    const status = item.status || 'Diajukan';
+    let statusBadge = '';
+    if (status === 'Dicairkan') {
+      statusBadge = `<span class="badge badge-success" style="font-size: 10.5px; font-weight: 700; padding: 3px 8px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; cursor: pointer;" onclick="openServiceExpenseStatusModal('${item.id}')" title="Klik untuk ubah status pencairan">💵 Dicairkan</span>`;
+    } else if (status === 'Disetujui') {
+      statusBadge = `<span class="badge badge-info" style="font-size: 10.5px; font-weight: 700; padding: 3px 8px; background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; cursor: pointer;" onclick="openServiceExpenseStatusModal('${item.id}')" title="Klik untuk ubah status pencairan">👍 Disetujui</span>`;
+    } else if (status === 'Ditolak') {
+      statusBadge = `<span class="badge badge-danger" style="font-size: 10.5px; font-weight: 700; padding: 3px 8px; background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; cursor: pointer;" onclick="openServiceExpenseStatusModal('${item.id}')" title="Klik untuk ubah status pencairan">❌ Ditolak</span>`;
+    } else {
+      statusBadge = `<span class="badge badge-warning" style="font-size: 10.5px; font-weight: 700; padding: 3px 8px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; cursor: pointer;" onclick="openServiceExpenseStatusModal('${item.id}')" title="Klik untuk ubah status pencairan">⏳ Diajukan</span>`;
+    }
+
+    const mealPersons = parseInt(item.mealPersons) || 1;
+    const mealDays = parseInt(item.mealDays) || 1;
+    const mealRate = parseFloat(item.mealRate) || 0;
+
+    return `
+      <tr style="transition: background 0.15s ease;">
+        <td style="font-weight: 700; font-family: monospace; font-size: 11.5px; color: #ea580c;">
+          ${escapeHtml(item.id)}
+        </td>
+        <td style="font-size: 11px; color: #64748b; white-space: nowrap;">
+          ${escapeHtml(item.date || '-')}
+        </td>
+        <td>
+          <div style="font-weight: 700; font-size: 12px; color: #0f172a;">${escapeHtml(item.customerName || '-')}</div>
+          <div style="font-size: 11px; color: #475569; margin-top: 1px;">${escapeHtml(item.serviceName || '-')}</div>
+          <div style="margin-top: 3px;">
+            <span class="badge badge-secondary" style="font-size: 9.5px; font-family: monospace; padding: 1px 5px;">
+              ${escapeHtml(item.orderId || 'Direct Jasa')}
+            </span>
+          </div>
+        </td>
+        <td>
+          <div style="font-weight: 700; font-size: 11.5px; color: #1e293b;">
+            👤 ${escapeHtml(item.picName || '-')}
+          </div>
+          ${item.teamMembers ? `
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
+              👥 ${escapeHtml(item.teamMembers)}
+            </div>
+          ` : ''}
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono" style="font-weight: 700; font-size: 12px; color: #1e40af;">
+            Rp ${transport.toLocaleString('id-ID')}
+          </div>
+          <div style="font-size: 9.5px; color: #64748b; margin-top: 1px;">
+            ${escapeHtml(item.transportType || 'Transportasi')}
+          </div>
+          ${item.transportRoute ? `
+            <div style="font-size: 9px; color: #94a3b8; font-style: italic; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto;" title="${escapeHtml(item.transportRoute)}">
+              ${escapeHtml(item.transportRoute)}
+            </div>
+          ` : ''}
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono" style="font-weight: 700; font-size: 12px; color: #166534;">
+            Rp ${meal.toLocaleString('id-ID')}
+          </div>
+          <div style="font-size: 9.5px; color: #64748b; margin-top: 1px;">
+            ${mealPersons} org x ${mealDays} hr
+          </div>
+          <div style="font-size: 9px; color: #94a3b8;">
+            @Rp ${mealRate.toLocaleString('id-ID')}
+          </div>
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono" style="font-weight: 800; font-size: 13px; color: #ea580c;">
+            Rp ${total.toLocaleString('id-ID')}
+          </div>
+          ${item.bankAccount ? `
+            <div style="font-size: 9.5px; color: #64748b; margin-top: 2px;" title="${escapeHtml(item.bankName || '')} ${escapeHtml(item.bankAccount || '')} a.n. ${escapeHtml(item.bankHolder || '')}">
+              💳 ${escapeHtml(item.bankName || 'Bank')} (${escapeHtml(item.bankHolder || '')})
+            </div>
+          ` : ''}
+        </td>
+        <td style="text-align: center;">
+          ${statusBadge}
+          ${item.disbursementDate ? `
+            <div style="font-size: 9px; color: #059669; margin-top: 3px;">
+              Cair: ${escapeHtml(item.disbursementDate)}
+            </div>
+          ` : ''}
+        </td>
+        <td style="text-align: right;">
+          <div class="table-actions" style="justify-content: flex-end; gap: 4px;">
+            <button class="btn-icon" style="color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0;" title="Kelola Pencairan / Status Dana" onclick="openServiceExpenseStatusModal('${item.id}')">
+              <i data-lucide="badge-dollar-sign"></i>
+            </button>
+            <button class="btn-icon" style="color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe;" title="Cetak Voucher Kasbon / Pengeluaran Jasa" onclick="printServiceExpenseVoucher('${item.id}')">
+              <i data-lucide="printer"></i>
+            </button>
+            <button class="btn-icon" title="Edit Pengajuan" onclick="openServiceExpenseModal(null, '${item.id}')">
+              <i data-lucide="edit-3"></i>
+            </button>
+            <button class="btn-icon btn-danger-ghost" title="Hapus Pengajuan" onclick="deleteServiceExpense('${item.id}')">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Membuka Modal Pengajuan Transportasi & Uang Makan Jasa
+ * @param {string|null} orderId - ID Order Penjualan (jika dipanggil dari kolom aksi order jasa)
+ * @param {string|null} expenseId - ID Pengeluaran Jasa (jika mode edit)
+ */
+function openServiceExpenseModal(orderId = null, expenseId = null) {
+  const modal = document.getElementById('modal-service-expense-form');
+  if (!modal) return;
+
+  const selectOrder = document.getElementById('service-expense-order-select');
+  if (selectOrder) {
+    // Kumpulkan semua order jasa
+    const serviceOrders = (state.orders || []).filter(o => {
+      if (typeof isServiceOrder === 'function') return isServiceOrder(o);
+      if (o.orderType === 'jasa' || o.quotationType === 'jasa') return true;
+      if (o.quotationId) {
+        const q = (state.quotations || []).find(quo => quo.id === o.quotationId);
+        if (q && q.quotationType === 'jasa') return true;
+      }
+      return false;
+    });
+
+    let opts = '<option value="">-- Pilih Order Penjualan Jasa --</option>';
+    serviceOrders.forEach(o => {
+      const q = (state.quotations || []).find(quo => quo.id === o.quotationId);
+      const svcName = o.items?.[0]?.itemName || q?.projectName || o.notes?.slice(0, 30) || 'Layanan Jasa';
+      opts += `<option value="${o.id}">${escapeHtml(o.id)} - ${escapeHtml(o.customerName || 'Klien')} (${escapeHtml(svcName)})</option>`;
+    });
+
+    // Tambahkan juga opsi "Input Jasa Langsung (Tanpa Order Terdaftar)"
+    opts += '<option value="__MANUAL__">➕ Input Jasa Manual / Proyek Khusus</option>';
+    selectOrder.innerHTML = opts;
+  }
+
+  const titleEl = document.getElementById('service-expense-modal-title');
+  const idInput = document.getElementById('service-expense-id');
+  const dateInput = document.getElementById('service-expense-date');
+  const custInput = document.getElementById('service-expense-customer');
+  const svcInput = document.getElementById('service-expense-service-name');
+  const picInput = document.getElementById('service-expense-pic');
+  const teamInput = document.getElementById('service-expense-team');
+
+  const transportType = document.getElementById('service-expense-transport-type');
+  const transportRoute = document.getElementById('service-expense-transport-route');
+  const transportFee = document.getElementById('service-expense-transport-fee');
+  const transportNotes = document.getElementById('service-expense-transport-notes');
+
+  const mealPersons = document.getElementById('service-expense-meal-persons');
+  const mealDays = document.getElementById('service-expense-meal-days');
+  const mealRate = document.getElementById('service-expense-meal-rate');
+  const mealNotes = document.getElementById('service-expense-meal-notes');
+
+  const bankName = document.getElementById('service-expense-bank-name');
+  const bankAccount = document.getElementById('service-expense-bank-account');
+  const bankHolder = document.getElementById('service-expense-bank-holder');
+  const statusSelect = document.getElementById('service-expense-status');
+  const generalNotes = document.getElementById('service-expense-general-notes');
+
+  if (expenseId) {
+    // Mode EDIT
+    const item = (state.service_expenses || []).find(x => x.id === expenseId);
+    if (!item) return;
+
+    if (titleEl) titleEl.textContent = `Edit Pengajuan: ${item.id}`;
+    if (idInput) idInput.value = item.id;
+    if (selectOrder) selectOrder.value = item.orderId || '__MANUAL__';
+    if (dateInput) dateInput.value = item.date || new Date().toISOString().split('T')[0];
+    if (custInput) custInput.value = item.customerName || '';
+    if (svcInput) svcInput.value = item.serviceName || '';
+    if (picInput) picInput.value = item.picName || '';
+    if (teamInput) teamInput.value = item.teamMembers || '';
+
+    if (transportType) transportType.value = item.transportType || 'Bensin & Tol';
+    if (transportRoute) transportRoute.value = item.transportRoute || '';
+    if (transportFee) transportFee.value = item.transportFee || 0;
+    if (transportNotes) transportNotes.value = item.transportNotes || '';
+
+    if (mealPersons) mealPersons.value = item.mealPersons || 1;
+    if (mealDays) mealDays.value = item.mealDays || 1;
+    if (mealRate) mealRate.value = item.mealRate || 50000;
+    if (mealNotes) mealNotes.value = item.mealNotes || '';
+
+    if (bankName) bankName.value = item.bankName || '';
+    if (bankAccount) bankAccount.value = item.bankAccount || '';
+    if (bankHolder) bankHolder.value = item.bankHolder || '';
+    if (statusSelect) statusSelect.value = item.status || 'Diajukan';
+    if (generalNotes) generalNotes.value = item.notes || '';
+  } else {
+    // Mode BARU
+    if (titleEl) titleEl.textContent = 'Pengajuan Transportasi & Uang Makan Jasa';
+    if (idInput) idInput.value = '';
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+    // Nilai default
+    if (transportType) transportType.value = 'Bensin & Tol';
+    if (transportRoute) transportRoute.value = '';
+    if (transportFee) transportFee.value = 0;
+    if (transportNotes) transportNotes.value = '';
+
+    if (mealPersons) mealPersons.value = 1;
+    if (mealDays) mealDays.value = 1;
+    if (mealRate) mealRate.value = 50000;
+    if (mealNotes) mealNotes.value = '';
+
+    if (bankName) bankName.value = '';
+    if (bankAccount) bankAccount.value = '';
+    if (bankHolder) bankHolder.value = '';
+    if (statusSelect) statusSelect.value = 'Diajukan';
+    if (generalNotes) generalNotes.value = '';
+
+    if (orderId && selectOrder) {
+      selectOrder.value = orderId;
+      onServiceExpenseOrderChange();
+    } else {
+      if (selectOrder) selectOrder.value = '';
+      if (custInput) custInput.value = '';
+      if (svcInput) svcInput.value = '';
+      if (picInput) picInput.value = '';
+      if (teamInput) teamInput.value = '';
+    }
+  }
+
+  calcServiceExpenseTotals();
+  openModal('modal-service-expense-form');
+}
+
+/**
+ * Handle ketika dropdown order dipilih
+ */
+function onServiceExpenseOrderChange() {
+  const selectOrder = document.getElementById('service-expense-order-select');
+  if (!selectOrder) return;
+
+  const orderId = selectOrder.value;
+  const custInput = document.getElementById('service-expense-customer');
+  const svcInput = document.getElementById('service-expense-service-name');
+  const picInput = document.getElementById('service-expense-pic');
+  const teamInput = document.getElementById('service-expense-team');
+
+  if (!orderId || orderId === '__MANUAL__') {
+    if (custInput) custInput.value = '';
+    if (svcInput) svcInput.value = '';
+    if (picInput) picInput.value = '';
+    if (teamInput) teamInput.value = '';
+    return;
+  }
+
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) return;
+
+  const quo = (state.quotations || []).find(q => q.id === order.quotationId);
+  const proj = (state.projects || []).find(p => p.orderId === order.id);
+
+  if (custInput) custInput.value = order.customerName || quo?.customerName || '';
+  if (svcInput) {
+    const sName = order.items?.[0]?.itemName || quo?.projectName || order.notes?.slice(0, 50) || 'Pelaksanaan Layanan Jasa';
+    svcInput.value = sName;
+  }
+
+  // Isi Leader & Team dari penugasan tim jika ada
+  if (picInput) {
+    picInput.value = proj?.projectLead && proj.projectLead !== 'Belum diassign' ? proj.projectLead : (order.salesPerson || '');
+  }
+  if (teamInput) {
+    if (proj?.team && Array.isArray(proj.team) && proj.team.length > 0) {
+      teamInput.value = proj.team.join(', ');
+      const mealPersons = document.getElementById('service-expense-meal-persons');
+      if (mealPersons) {
+        mealPersons.value = Math.max(1, proj.team.length);
+      }
+    }
+  }
+
+  calcServiceExpenseTotals();
+}
+
+/**
+ * Kalkulasi otomatis subtotal uang makan dan total biaya pengajuan
+ */
+function calcServiceExpenseTotals() {
+  const transportFeeEl = document.getElementById('service-expense-transport-fee');
+  const mealPersonsEl = document.getElementById('service-expense-meal-persons');
+  const mealDaysEl = document.getElementById('service-expense-meal-days');
+  const mealRateEl = document.getElementById('service-expense-meal-rate');
+
+  const transportVal = parseFloat(transportFeeEl?.value) || 0;
+  const personsVal = parseInt(mealPersonsEl?.value) || 1;
+  const daysVal = parseInt(mealDaysEl?.value) || 1;
+  const rateVal = parseFloat(mealRateEl?.value) || 0;
+
+  const mealSubtotal = personsVal * daysVal * rateVal;
+  const grandTotal = transportVal + mealSubtotal;
+
+  const transportBadge = document.getElementById('service-expense-transport-badge');
+  const mealBadge = document.getElementById('service-expense-meal-badge');
+  const mealSubtotalText = document.getElementById('service-expense-meal-subtotal-text');
+  const grandTotalText = document.getElementById('service-expense-grand-total-text');
+
+  if (transportBadge) transportBadge.textContent = `Subtotal: Rp ${transportVal.toLocaleString('id-ID')}`;
+  if (mealBadge) mealBadge.textContent = `Subtotal: Rp ${mealSubtotal.toLocaleString('id-ID')}`;
+  if (mealSubtotalText) mealSubtotalText.textContent = `Rp ${mealSubtotal.toLocaleString('id-ID')}`;
+  if (grandTotalText) grandTotalText.textContent = `Rp ${grandTotal.toLocaleString('id-ID')}`;
+}
+
+/**
+ * Simpan Data Pengajuan Transportasi & Uang Makan Jasa
+ */
+async function saveServiceExpense(event) {
+  if (event) event.preventDefault();
+
+  const idInput = document.getElementById('service-expense-id');
+  const selectOrder = document.getElementById('service-expense-order-select');
+  const dateInput = document.getElementById('service-expense-date');
+  const custInput = document.getElementById('service-expense-customer');
+  const svcInput = document.getElementById('service-expense-service-name');
+  const picInput = document.getElementById('service-expense-pic');
+  const teamInput = document.getElementById('service-expense-team');
+
+  const transportType = document.getElementById('service-expense-transport-type');
+  const transportRoute = document.getElementById('service-expense-transport-route');
+  const transportFee = document.getElementById('service-expense-transport-fee');
+  const transportNotes = document.getElementById('service-expense-transport-notes');
+
+  const mealPersons = document.getElementById('service-expense-meal-persons');
+  const mealDays = document.getElementById('service-expense-meal-days');
+  const mealRate = document.getElementById('service-expense-meal-rate');
+  const mealNotes = document.getElementById('service-expense-meal-notes');
+
+  const bankName = document.getElementById('service-expense-bank-name');
+  const bankAccount = document.getElementById('service-expense-bank-account');
+  const bankHolder = document.getElementById('service-expense-bank-holder');
+  const statusSelect = document.getElementById('service-expense-status');
+  const generalNotes = document.getElementById('service-expense-general-notes');
+
+  const transportVal = parseFloat(transportFee?.value) || 0;
+  const personsVal = parseInt(mealPersons?.value) || 1;
+  const daysVal = parseInt(mealDays?.value) || 1;
+  const rateVal = parseFloat(mealRate?.value) || 0;
+  const mealVal = personsVal * daysVal * rateVal;
+  const totalVal = transportVal + mealVal;
+
+  const isEdit = Boolean(idInput && idInput.value);
+  const nowYear = new Date().getFullYear();
+  const fallbackId = isEdit ? idInput.value : `EXP-JSA-${nowYear}-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900 + 100)}`;
+
+  const existingItem = isEdit ? (state.service_expenses || []).find(x => x.id === idInput.value) : null;
+
+  const payload = {
+    id: fallbackId,
+    orderId: selectOrder?.value || '',
+    date: dateInput?.value || new Date().toISOString().split('T')[0],
+    customerName: custInput?.value?.trim() || '',
+    serviceName: svcInput?.value?.trim() || '',
+    picName: picInput?.value?.trim() || '',
+    teamMembers: teamInput?.value?.trim() || '',
+    transportType: transportType?.value || 'Bensin & Tol',
+    transportRoute: transportRoute?.value?.trim() || '',
+    transportFee: transportVal,
+    transportNotes: transportNotes?.value?.trim() || '',
+    mealPersons: personsVal,
+    mealDays: daysVal,
+    mealRate: rateVal,
+    mealFee: mealVal,
+    mealNotes: mealNotes?.value?.trim() || '',
+    totalExpense: totalVal,
+    bankName: bankName?.value?.trim() || '',
+    bankAccount: bankAccount?.value?.trim() || '',
+    bankHolder: bankHolder?.value?.trim() || '',
+    status: statusSelect?.value || 'Diajukan',
+    notes: generalNotes?.value?.trim() || '',
+    disbursementDate: existingItem?.disbursementDate || '',
+    disbursementRef: existingItem?.disbursementRef || '',
+    financeNotes: existingItem?.financeNotes || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    let savedItem = payload;
+    if (isEdit) {
+      const res = await fetch(`/api/service_expenses/${payload.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) savedItem = await res.json();
+    } else {
+      const res = await fetch('/api/service_expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) savedItem = await res.json();
+    }
+
+    // Update state secara lokal
+    state.service_expenses = state.service_expenses || [];
+    const idx = state.service_expenses.findIndex(x => x.id === savedItem.id);
+    if (idx !== -1) {
+      state.service_expenses[idx] = savedItem;
+    } else {
+      state.service_expenses.unshift(savedItem);
+    }
+
+    // Direct Supabase universal cloud store sync
+    if (typeof directSupabaseSyncServiceExpenses === 'function') {
+      directSupabaseSyncServiceExpenses(state.service_expenses).catch(e => console.warn(e));
+    }
+    try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(state.service_expenses)); } catch (e) {}
+
+    closeModal('modal-service-expense-form');
+    showToast(`Pengajuan ${savedItem.id} berhasil disimpan dan masuk ke Tab Pengeluaran Jasa!`, 'success');
+
+    // Jika sedang di view finance, refresh tabelnya
+    if (state.currentView === 'finance') {
+      switchFinanceTab('service-expenses');
+    }
+    renderServiceExpensesTable();
+
+  } catch (err) {
+    console.warn('API error, saving locally:', err);
+    state.service_expenses = state.service_expenses || [];
+    const idx = state.service_expenses.findIndex(x => x.id === payload.id);
+    if (idx !== -1) {
+      state.service_expenses[idx] = payload;
+    } else {
+      state.service_expenses.unshift(payload);
+    }
+    if (typeof directSupabaseSyncServiceExpenses === 'function') {
+      directSupabaseSyncServiceExpenses(state.service_expenses).catch(() => {});
+    }
+    try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(state.service_expenses)); } catch (e) {}
+
+    closeModal('modal-service-expense-form');
+    showToast(`Pengajuan ${payload.id} disimpan (Offline Mode)`, 'info');
+    if (state.currentView === 'finance') {
+      switchFinanceTab('service-expenses');
+    }
+    renderServiceExpensesTable();
+  }
+}
+
+/**
+ * Hapus data pengeluaran jasa
+ */
+async function deleteServiceExpense(id) {
+  if (!confirm(`Apakah Anda yakin ingin menghapus pengajuan pengeluaran jasa ${id}?`)) {
+    return;
+  }
+
+  try {
+    await fetch(`/api/service_expenses/${id}`, { method: 'DELETE' });
+  } catch (e) {
+    console.warn('Delete API warning:', e);
+  }
+
+  state.service_expenses = (state.service_expenses || []).filter(x => x.id !== id);
+  if (typeof directSupabaseSyncServiceExpenses === 'function') {
+    directSupabaseSyncServiceExpenses(state.service_expenses).catch(() => {});
+  }
+  try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(state.service_expenses)); } catch (e) {}
+
+  renderServiceExpensesTable();
+  showToast(`Pengajuan ${id} berhasil dihapus!`, 'success');
+}
+
+/**
+ * Hapus semua data pengeluaran jasa
+ */
+async function clearAllServiceExpensesData() {
+  if (!confirm('⚠️ PERINGATAN: Apakah Anda yakin ingin MENGHAPUS SEMUA data pengeluaran jasa?')) return;
+  if (!confirm('Tindakan ini tidak dapat dibatalkan. Lanjutkan hapus semua?')) return;
+
+  const currentList = [...(state.service_expenses || [])];
+  for (const item of currentList) {
+    try {
+      await fetch(`/api/service_expenses/${item.id}`, { method: 'DELETE' });
+    } catch (e) {}
+  }
+
+  state.service_expenses = [];
+  if (typeof directSupabaseSyncServiceExpenses === 'function') {
+    directSupabaseSyncServiceExpenses([]).catch(() => {});
+  }
+  try { localStorage.removeItem('ubm_cached_service_expenses'); } catch (e) {}
+
+  renderServiceExpensesTable();
+  showToast('Semua data pengeluaran jasa telah dibersihkan!', 'success');
+}
+
+/**
+ * Buka modal update status pencairan
+ */
+function openServiceExpenseStatusModal(id) {
+  const item = (state.service_expenses || []).find(x => x.id === id);
+  if (!item) return;
+
+  const noEl = document.getElementById('service-expense-status-no');
+  const clientEl = document.getElementById('service-expense-status-client');
+  const picEl = document.getElementById('service-expense-status-pic');
+  const amountEl = document.getElementById('service-expense-status-amount');
+
+  const idInput = document.getElementById('service-expense-status-id');
+  const selectStatus = document.getElementById('service-expense-status-select');
+  const dateInput = document.getElementById('service-expense-status-date');
+  const refInput = document.getElementById('service-expense-status-ref');
+  const notesInput = document.getElementById('service-expense-status-notes');
+
+  if (noEl) noEl.textContent = item.id;
+  if (clientEl) clientEl.textContent = `${item.customerName || '-'} (${item.serviceName || '-'})`;
+  if (picEl) picEl.textContent = item.picName || '-';
+  if (amountEl) {
+    const total = parseFloat(item.totalExpense) || ((parseFloat(item.transportFee) || 0) + (parseFloat(item.mealFee) || 0));
+    amountEl.textContent = `Rp ${total.toLocaleString('id-ID')}`;
+  }
+
+  if (idInput) idInput.value = item.id;
+  if (selectStatus) selectStatus.value = item.status || 'Diajukan';
+  if (dateInput) dateInput.value = item.disbursementDate || (item.status === 'Dicairkan' ? new Date().toISOString().split('T')[0] : '');
+  if (refInput) refInput.value = item.disbursementRef || '';
+  if (notesInput) notesInput.value = item.financeNotes || '';
+
+  openModal('modal-service-expense-status');
+}
+
+/**
+ * Simpan update status pencairan
+ */
+async function saveServiceExpenseStatus(event) {
+  if (event) event.preventDefault();
+
+  const idInput = document.getElementById('service-expense-status-id');
+  const selectStatus = document.getElementById('service-expense-status-select');
+  const dateInput = document.getElementById('service-expense-status-date');
+  const refInput = document.getElementById('service-expense-status-ref');
+  const notesInput = document.getElementById('service-expense-status-notes');
+
+  const id = idInput?.value;
+  if (!id) return;
+
+  const item = (state.service_expenses || []).find(x => x.id === id);
+  if (!item) return;
+
+  item.status = selectStatus?.value || 'Diajukan';
+  item.disbursementDate = dateInput?.value || (item.status === 'Dicairkan' ? new Date().toISOString().split('T')[0] : '');
+  item.disbursementRef = refInput?.value?.trim() || '';
+  item.financeNotes = notesInput?.value?.trim() || '';
+  item.updatedAt = new Date().toISOString();
+
+  try {
+    await fetch(`/api/service_expenses/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+  } catch (e) {
+    console.warn('Update status API notice:', e);
+  }
+
+  if (typeof directSupabaseSyncServiceExpenses === 'function') {
+    directSupabaseSyncServiceExpenses(state.service_expenses).catch(() => {});
+  }
+  try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(state.service_expenses)); } catch (e) {}
+
+  closeModal('modal-service-expense-status');
+  renderServiceExpensesTable();
+  showToast(`Status pengeluaran ${id} berhasil diperbarui: ${item.status}`, 'success');
+}
+
+/**
+ * Cetak Voucher Resmi Kasbon / Pengeluaran Jasa
+ */
+function printServiceExpenseVoucher(id) {
+  const item = (state.service_expenses || []).find(x => x.id === id);
+  if (!item) return;
+
+  const transport = parseFloat(item.transportFee) || 0;
+  const meal = parseFloat(item.mealFee) || 0;
+  const total = parseFloat(item.totalExpense) || (transport + meal);
+
+  const mealPersons = parseInt(item.mealPersons) || 1;
+  const mealDays = parseInt(item.mealDays) || 1;
+  const mealRate = parseFloat(item.mealRate) || 0;
+
+  const printWindow = window.open('', '_blank', 'width=850,height=900');
+  if (!printWindow) {
+    alert('Popup diblokir oleh browser. Izinkan popup untuk mencetak slip/voucher.');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Voucher Kasbon Pengeluaran Jasa - ${escapeHtml(item.id)}</title>
+      <style>
+        body {
+          font-family: Arial, Helvetica, sans-serif;
+          color: #0f172a;
+          margin: 0;
+          padding: 30px;
+          background: #ffffff;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          border-bottom: 2.5px solid #ea580c;
+          padding-bottom: 14px;
+          margin-bottom: 20px;
+        }
+        .company-title {
+          font-size: 18px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        .company-sub {
+          font-size: 11px;
+          color: #64748b;
+          margin-top: 3px;
+        }
+        .voucher-title {
+          text-align: right;
+        }
+        .voucher-badge {
+          display: inline-block;
+          background: #fff7ed;
+          color: #ea580c;
+          border: 1px solid #fed7aa;
+          font-size: 11px;
+          font-weight: 800;
+          padding: 3px 10px;
+          border-radius: 4px;
+          text-transform: uppercase;
+        }
+        .voucher-no {
+          font-family: monospace;
+          font-size: 16px;
+          font-weight: 800;
+          margin-top: 4px;
+          color: #0f172a;
+        }
+        .grid-2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+        .info-box {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          padding: 12px 14px;
+        }
+        .info-title {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: #64748b;
+          border-bottom: 1px solid #e2e8f0;
+          padding-bottom: 4px;
+          margin-bottom: 8px;
+        }
+        .info-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 4px;
+          font-size: 12px;
+        }
+        .info-label {
+          color: #64748b;
+        }
+        .info-val {
+          font-weight: 600;
+          text-align: right;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        th {
+          background: #f1f5f9;
+          border: 1px solid #cbd5e1;
+          padding: 8px 10px;
+          font-size: 11.5px;
+          text-align: left;
+          text-transform: uppercase;
+        }
+        td {
+          border: 1px solid #e2e8f0;
+          padding: 9px 10px;
+          font-size: 12px;
+        }
+        .total-box {
+          background: #fff7ed;
+          border: 1.5px solid #fed7aa;
+          border-radius: 6px;
+          padding: 14px 18px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 30px;
+        }
+        .signatures {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 15px;
+          text-align: center;
+          margin-top: 40px;
+        }
+        .sig-box {
+          border-top: 1px solid #94a3b8;
+          padding-top: 6px;
+          margin-top: 65px;
+          font-size: 11.5px;
+          font-weight: 700;
+        }
+        .sig-role {
+          font-size: 10.5px;
+          color: #64748b;
+          margin-top: 2px;
+          font-weight: normal;
+        }
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+        <button onclick="window.print()" style="padding: 8px 18px; background: #ea580c; color: #fff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer;">
+          🖨️ Cetak Voucher / PDF
+        </button>
+      </div>
+
+      <div class="header">
+        <div>
+          <div class="company-title">UNIT BISNIS MANDIRI POLITEKNIK TAKUMI</div>
+          <div class="company-sub">Engineering, Automation & Industrial Digital Solution</div>
+          <div class="company-sub">Jl. Raya Hankam, Cikarang - Jawa Barat &bull; Email: ubm@takumi.ac.id</div>
+        </div>
+        <div class="voucher-title">
+          <div class="voucher-badge">VOUCHER PENGELUARAN JASA</div>
+          <div class="voucher-no">${escapeHtml(item.id)}</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Tanggal: ${escapeHtml(item.date || '-')}</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="info-box">
+          <div class="info-title">Informasi Order Jasa & Klien</div>
+          <div class="info-row">
+            <span class="info-label">No. Order Jasa:</span>
+            <span class="info-val">${escapeHtml(item.orderId || '-')}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Customer / Perusahaan:</span>
+            <span class="info-val">${escapeHtml(item.customerName || '-')}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Layanan / Pekerjaan:</span>
+            <span class="info-val">${escapeHtml(item.serviceName || '-')}</span>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <div class="info-title">Tim Pelaksana & Rekening Penerima</div>
+          <div class="info-row">
+            <span class="info-label">Project Leader / PIC:</span>
+            <span class="info-val">${escapeHtml(item.picName || '-')}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Anggota Tim:</span>
+            <span class="info-val">${escapeHtml(item.teamMembers || '-')}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Rekening Pencairan:</span>
+            <span class="info-val">${escapeHtml(item.bankName || '')} ${escapeHtml(item.bankAccount || '')} (a.n. ${escapeHtml(item.bankHolder || '')})</span>
+          </div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px; text-align: center;">No</th>
+            <th>Uraian Pengajuan Biaya Pelaksanaan Jasa</th>
+            <th style="width: 180px;">Rincian / Kuantitas</th>
+            <th style="width: 140px; text-align: right;">Nominal (Rp)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; font-weight: 700;">1</td>
+            <td>
+              <strong>Biaya Transportasi Pelaksanaan Jasa</strong>
+              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                Kategori: ${escapeHtml(item.transportType || 'Transportasi')} &bull; Rute: ${escapeHtml(item.transportRoute || '-')}
+              </div>
+              ${item.transportNotes ? `<div style="font-size: 10.5px; color: #475569; font-style: italic;">Catatan: ${escapeHtml(item.transportNotes)}</div>` : ''}
+            </td>
+            <td>
+              1 Paket Perjalanan Dinas
+            </td>
+            <td style="text-align: right; font-family: monospace; font-weight: 700;">
+              Rp ${transport.toLocaleString('id-ID')}
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 700;">2</td>
+            <td>
+              <strong>Biaya Uang Makan Tim / Teknisi Pelaksana Jasa</strong>
+              <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                Konsumsi teknisi di lokasi pengerjaan / site
+              </div>
+              ${item.mealNotes ? `<div style="font-size: 10.5px; color: #475569; font-style: italic;">Catatan: ${escapeHtml(item.mealNotes)}</div>` : ''}
+            </td>
+            <td>
+              ${mealPersons} Orang &times; ${mealDays} Hari<br>
+              <span style="font-size: 10.5px; color: #64748b;">@Rp ${mealRate.toLocaleString('id-ID')}</span>
+            </td>
+            <td style="text-align: right; font-family: monospace; font-weight: 700;">
+              Rp ${mealFee.toLocaleString('id-ID')}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="total-box">
+        <div>
+          <div style="font-size: 11px; color: #9a3412; font-weight: 800; text-transform: uppercase;">TOTAL KASBON / REIMBURSE PENGAJUAN BIAYA JASA</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Status: <strong>${escapeHtml(item.status || 'Diajukan')}</strong> ${item.disbursementRef ? `&bull; Ref: ${escapeHtml(item.disbursementRef)}` : ''}</div>
+        </div>
+        <div style="font-family: monospace; font-size: 22px; font-weight: 800; color: #ea580c;">
+          Rp ${total.toLocaleString('id-ID')}
+        </div>
+      </div>
+
+      <div class="signatures">
+        <div>
+          <div style="font-size: 11px; color: #64748b;">Yang Mengajukan,</div>
+          <div class="sig-box">${escapeHtml(item.picName || 'Teknisi')}</div>
+          <div class="sig-role">Pelaksana Lapangan</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #64748b;">Project Leader / PIC,</div>
+          <div class="sig-box">${escapeHtml(item.picName || 'Leader Jasa')}</div>
+          <div class="sig-role">Koordinator Jasa</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #64748b;">Bagian Keuangan / Kasir,</div>
+          <div class="sig-box">Keuangan UBM</div>
+          <div class="sig-role">Verifikasi & Kasir</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #64748b;">Mengetahui,</div>
+          <div class="sig-box">Direktur / Manajemen UBM</div>
+          <div class="sig-role">Approval Otorisasi</div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+/**
+ * Export data pengeluaran jasa ke file CSV
+ */
+function exportServiceExpensesCSV() {
+  const allItems = Array.isArray(state.service_expenses) ? state.service_expenses : [];
+  if (allItems.length === 0) {
+    showToast('Tidak ada data pengeluaran jasa untuk diekspor!', 'warning');
+    return;
+  }
+
+  const headers = [
+    'No. Pengajuan',
+    'Tanggal',
+    'No. Order Jasa',
+    'Customer / Klien',
+    'Nama Layanan Jasa',
+    'PIC Leader',
+    'Tim Pelaksana',
+    'Kategori Transportasi',
+    'Rute Transportasi',
+    'Biaya Transportasi (Rp)',
+    'Catatan Transportasi',
+    'Jumlah Personel (Orang)',
+    'Durasi Hari',
+    'Tarif Uang Makan (Rp)',
+    'Total Uang Makan (Rp)',
+    'Catatan Uang Makan',
+    'Total Pengajuan Biaya (Rp)',
+    'Bank Tujuan',
+    'No. Rekening',
+    'Atas Nama Penerima',
+    'Status Pencairan',
+    'Tanggal Pencairan',
+    'No. Ref Transfer',
+    'Catatan Keuangan'
+  ];
+
+  const rows = allItems.map(it => {
+    const transport = parseFloat(it.transportFee) || 0;
+    const meal = parseFloat(it.mealFee) || 0;
+    const total = parseFloat(it.totalExpense) || (transport + meal);
+
+    return [
+      `"${it.id}"`,
+      `"${it.date || ''}"`,
+      `"${it.orderId || ''}"`,
+      `"${(it.customerName || '').replace(/"/g, '""')}"`,
+      `"${(it.serviceName || '').replace(/"/g, '""')}"`,
+      `"${(it.picName || '').replace(/"/g, '""')}"`,
+      `"${(it.teamMembers || '').replace(/"/g, '""')}"`,
+      `"${(it.transportType || '').replace(/"/g, '""')}"`,
+      `"${(it.transportRoute || '').replace(/"/g, '""')}"`,
+      transport,
+      `"${(it.transportNotes || '').replace(/"/g, '""')}"`,
+      it.mealPersons || 1,
+      it.mealDays || 1,
+      it.mealRate || 0,
+      meal,
+      `"${(it.mealNotes || '').replace(/"/g, '""')}"`,
+      total,
+      `"${(it.bankName || '').replace(/"/g, '""')}"`,
+      `"${(it.bankAccount || '').replace(/"/g, '""')}"`,
+      `"${(it.bankHolder || '').replace(/"/g, '""')}"`,
+      `"${it.status || 'Diajukan'}"`,
+      `"${it.disbursementDate || ''}"`,
+      `"${it.disbursementRef || ''}"`,
+      `"${(it.financeNotes || it.notes || '').replace(/"/g, '""')}"`
+    ];
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `UBM_PENGELUARAN_JASA_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Data Pengeluaran Jasa berhasil diekspor ke CSV!', 'success');
+}
+
+// Global window exposure Pengeluaran Jasa
+window.renderServiceExpensesTable = renderServiceExpensesTable;
+window.filterServiceExpensesTable = filterServiceExpensesTable;
+window.openServiceExpenseModal = openServiceExpenseModal;
+window.onServiceExpenseOrderChange = onServiceExpenseOrderChange;
+window.calcServiceExpenseTotals = calcServiceExpenseTotals;
+window.saveServiceExpense = saveServiceExpense;
+window.deleteServiceExpense = deleteServiceExpense;
+window.clearAllServiceExpensesData = clearAllServiceExpensesData;
+window.openServiceExpenseStatusModal = openServiceExpenseStatusModal;
+window.saveServiceExpenseStatus = saveServiceExpenseStatus;
+window.printServiceExpenseVoucher = printServiceExpenseVoucher;
+window.exportServiceExpensesCSV = exportServiceExpensesCSV;

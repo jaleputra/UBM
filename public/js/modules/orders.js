@@ -155,14 +155,22 @@ function renderOrdersTable() {
       btnBOM = `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptBOMDisabled('${order.id}')"><i data-lucide="boxes"></i></button>`;
     }
 
-    // Tombol 3: Project Management (Untuk Jasa: aktif jika PO diunggah & Project Lead ada. Untuk Produk: wajib BOM valid)
-    const hasValidBOM = isService || (hasBOM && !isBOMDitolak);
-    const isProjectActiveAllowed = isPOAndAccepted && hasProjectLead && hasValidBOM;
-    const btnProject = isProjectActiveAllowed ?
-      `<button class="btn-icon" style="color: #8b5cf6;" title="Project Management (Timeline & Milestone)" onclick="event.stopPropagation(); openProjectTimelinePage('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
-      (isPOAndAccepted ?
-        `<button class="btn-icon" style="color: #a855f7; opacity: 0.75;" title="${!hasProjectLead ? 'Tentukan Project Leader terlebih dahulu (Klik untuk membuka Penugasan Tim)' : 'Isi dan simpan BOM terlebih dahulu'}" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
-        `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
+    // Tombol 3: Project Management / Pengajuan Transportasi & Uang Makan (Untuk Jasa)
+    let btnProject = '';
+    if (isService) {
+      // Jika Tipe Penawaran adalah Jasa: Ubah tombol project management menjadi Pengajuan Transportasi dan Uang Makan Pelaksanaan Jasa
+      btnProject = isPOAndAccepted ?
+        `<button class="btn-icon" style="color: #ea580c; background: #fff7ed; border: 1.5px solid #fed7aa;" title="Pengajuan Transportasi dan Uang Makan Pelaksanaan Jasa" onclick="event.stopPropagation(); openServiceExpenseModal('${order.id}')"><i data-lucide="car"></i></button>` :
+        `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan untuk Pengajuan Transportasi & Uang Makan Jasa" onclick="event.stopPropagation(); promptPOAndAcceptedRequired('${order.id}')"><i data-lucide="car"></i></button>`;
+    } else {
+      const hasValidBOM = hasBOM && !isBOMDitolak;
+      const isProjectActiveAllowed = isPOAndAccepted && hasProjectLead && hasValidBOM;
+      btnProject = isProjectActiveAllowed ?
+        `<button class="btn-icon" style="color: #8b5cf6;" title="Project Management (Timeline & Milestone)" onclick="event.stopPropagation(); openProjectTimelinePage('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
+        (isPOAndAccepted ?
+          `<button class="btn-icon" style="color: #a855f7; opacity: 0.75;" title="${!hasProjectLead ? 'Tentukan Project Leader terlebih dahulu (Klik untuk membuka Penugasan Tim)' : 'Isi dan simpan BOM terlebih dahulu'}" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
+          `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
+    }
 
     // Tombol 4: Hapus Order
     const btnDelete = isPOAndAccepted ?
@@ -1396,26 +1404,39 @@ function viewOrderDetail(orderId) {
     `;
   }
 
-  const hasValidBOM = isService || (hasBOM && !isBOMDitolak);
-  const timelineBtnModal = (isPOAndAccepted && hasProjectLead && hasValidBOM) ?
-    `<button type="button" class="btn btn-sm btn-primary" style="background: #4f46e5; border-color: #4f46e5; font-size: 11.5px;" onclick="closeModal('preview-modal'); openProjectTimelinePage('${order.id}')">
-       <i data-lucide="folder-kanban"></i> Timeline & Milestone
-     </button>` :
-    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptProjectManagementDisabled('${order.id}')" title="${isBOMDitolak ? '⚠️ Formula BOM Ditolak. Harap ajukan ulang BOM terlebih dahulu.' : (!isService ? '⚠️ Wajib isi BOM terlebih dahulu' : '⚠️ Wajib tentukan Project Lead')}">
-       <i data-lucide="folder-kanban"></i> Timeline & Milestone
-     </button>`;
+  let timelineBtnModal = '';
+  let ganttBtnModal = '';
 
-  const projForOrder = (state.projects || []).find(p => p.orderId === order.id);
-  const projMilestones = projForOrder?.milestones || [];
-  const hasInProgressMsOrder = projMilestones.some(m => m.status === 'In Progress' || m.status === 'in_progress' || m.status === 'Completed' || m.status === 'completed');
+  if (isService) {
+    timelineBtnModal = isPOAndAccepted ?
+      `<button type="button" class="btn btn-sm btn-primary" style="background: #ea580c; border-color: #ea580c; font-size: 11.5px; font-weight: 700; color: #ffffff;" onclick="closeModal('preview-modal'); openServiceExpenseModal('${order.id}')">
+         <i data-lucide="car"></i> Pengajuan Transport & Uang Makan Jasa
+       </button>` :
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptPOAndAcceptedRequired('${order.id}')" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu">
+         <i data-lucide="car"></i> Pengajuan Transport & Uang Makan Jasa
+       </button>`;
+  } else {
+    const hasValidBOM = hasBOM && !isBOMDitolak;
+    timelineBtnModal = (isPOAndAccepted && hasProjectLead && hasValidBOM) ?
+      `<button type="button" class="btn btn-sm btn-primary" style="background: #4f46e5; border-color: #4f46e5; font-size: 11.5px;" onclick="closeModal('preview-modal'); openProjectTimelinePage('${order.id}')">
+         <i data-lucide="folder-kanban"></i> Timeline & Milestone
+       </button>` :
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptProjectManagementDisabled('${order.id}')" title="${isBOMDitolak ? '⚠️ Formula BOM Ditolak. Harap ajukan ulang BOM terlebih dahulu.' : '⚠️ Wajib isi BOM terlebih dahulu'}">
+         <i data-lucide="folder-kanban"></i> Timeline & Milestone
+       </button>`;
 
-  const ganttBtnModal = (isPOAndAccepted && hasProjectLead && hasValidBOM && hasInProgressMsOrder) ?
-    `<button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); openGanttDetailModal('${order.id}')">
-       <i data-lucide="bar-chart-2"></i> Gantt Chart
-     </button>` :
-    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="showToast('⚠️ Gantt Chart belum dapat dibuka karena belum ada milestone yang berstatus In Progress!', 'warning')" title="${!hasInProgressMsOrder ? '⚠️ Milestone belum ada yang In Progress' : '⚠️ Wajib isi data pengerjaan & Penugasan Tim terlebih dahulu'}">
-       <i data-lucide="bar-chart-2"></i> Gantt Chart
-     </button>`;
+    const projForOrder = (state.projects || []).find(p => p.orderId === order.id);
+    const projMilestones = projForOrder?.milestones || [];
+    const hasInProgressMsOrder = projMilestones.some(m => m.status === 'In Progress' || m.status === 'in_progress' || m.status === 'Completed' || m.status === 'completed');
+
+    ganttBtnModal = (isPOAndAccepted && hasProjectLead && hasValidBOM && hasInProgressMsOrder) ?
+      `<button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); openGanttDetailModal('${order.id}')">
+         <i data-lucide="bar-chart-2"></i> Gantt Chart
+       </button>` :
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="showToast('⚠️ Gantt Chart belum dapat dibuka karena belum ada milestone yang berstatus In Progress!', 'warning')" title="${!hasInProgressMsOrder ? '⚠️ Milestone belum ada yang In Progress' : '⚠️ Wajib isi data pengerjaan & Penugasan Tim terlebih dahulu'}">
+         <i data-lucide="bar-chart-2"></i> Gantt Chart
+       </button>`;
+  }
 
   const content = document.getElementById('preview-modal-content') || document.getElementById('preview-modal-body');
   if (!content) return;

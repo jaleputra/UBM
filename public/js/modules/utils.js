@@ -325,3 +325,61 @@ async function directSupabaseFetchPartnerships() {
 window.directSupabaseSyncPartnerships = directSupabaseSyncPartnerships;
 window.directSupabaseFetchPartnerships = directSupabaseFetchPartnerships;
 
+async function directSupabaseSyncServiceExpenses(expensesList) {
+  if (!Array.isArray(expensesList)) return false;
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
+      method: 'POST',
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: '__SYS_SYNC_service_expenses__',
+        customer_name: '__UBM_SYS_STORE__',
+        items: expensesList,
+        notes: 'Direct universal synchronization for service expenses (Transport & Uang Makan Jasa)',
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (res.ok) {
+      try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(expensesList)); } catch (e) {}
+    }
+    return res.ok;
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Sync Service Expenses] Notice:', err.message);
+    return false;
+  }
+}
+
+async function directSupabaseFetchServiceExpenses() {
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.__SYS_SYNC_service_expenses__&select=items`, {
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache, no-store'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items)) {
+        try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data[0].items)); } catch (e) {}
+        return data[0].items;
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Fetch Service Expenses] Notice:', err.message);
+  }
+  try {
+    const cached = localStorage.getItem('ubm_cached_service_expenses');
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+  return null;
+}
+
+window.directSupabaseSyncServiceExpenses = directSupabaseSyncServiceExpenses;
+window.directSupabaseFetchServiceExpenses = directSupabaseFetchServiceExpenses;
+
