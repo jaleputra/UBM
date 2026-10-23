@@ -570,46 +570,38 @@
       "department": "Operations & Management"
     }
   ],
-  "partnerships": [
+  "partnerships": [],
+  "service_expenses": [
     {
-      "id": "KSM-2026-9069-681",
+      "id": "EXP-JSA-2026-4090-464",
+      "orderId": "ORD-2026-5231-255",
       "date": "2026-10-23",
-      "notes": "",
-      "createdAt": "2026-10-23T06:12:09.069Z",
-      "updatedAt": "2026-10-23T06:29:43.095Z",
-      "clientName": "PT A",
-      "invoiceRef": "001",
-      "updated_at": "2026-10-23T06:29:43.087Z",
-      "percentages": {
-        "sales": 10,
-        "takumi": 40,
-        "adminTax": 20,
-        "freelance": 30
-      },
+      "customerName": "KJRI OSAKA",
       "serviceName": "Pendampingan",
-      "billedAmount": 3125000,
-      "contributions": {
-        "sales": {
-          "ayumi": false,
-          "takumi": true
-        },
-        "takumi": {
-          "ayumi": false,
-          "takumi": true
-        },
-        "adminTax": {
-          "ayumi": true,
-          "takumi": false
-        },
-        "freelance": {
-          "ayumi": false,
-          "takumi": true
-        }
-      },
-      "paymentStatus": "Menunggu"
+      "picName": "Rangga Gading Satria",
+      "teamMembers": "[object Object]",
+      "transportType": "Bensin & Tol",
+      "transportRoute": "ICE BSD",
+      "transportFee": 300000,
+      "transportNotes": "Bensin dan Tol",
+      "mealPersons": 3,
+      "mealDays": 4,
+      "mealRate": 35000,
+      "mealFee": 420000,
+      "mealNotes": "",
+      "totalExpense": 720000,
+      "bankName": "BCA",
+      "bankAccount": "093840293840298",
+      "bankHolder": "Rangga",
+      "status": "Diajukan",
+      "notes": "",
+      "disbursementDate": "",
+      "disbursementRef": "",
+      "financeNotes": "",
+      "updatedAt": "2026-10-23T08:29:44.090Z",
+      "createdAt": "2026-10-23T08:29:44.802Z"
     }
   ],
-  "service_expenses": [],
   "settings": {
     "companyName": "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
     "companyShortName": "UBM Takumi",

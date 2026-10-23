@@ -447,7 +447,15 @@ function updateSidebarBadges() {
   if (badgeBOM) badgeBOM.textContent = state.bom?.length || 0;
 
   const badgeProjects = document.getElementById('badge-projects-count');
-  if (badgeProjects) badgeProjects.textContent = state.projects?.length || 0;
+  if (badgeProjects) {
+    const productProjects = (state.projects || []).filter(p => {
+      if (typeof isProjectService === 'function') return !isProjectService(p);
+      const ord = (state.orders || []).find(o => o.id === p.orderId);
+      if (ord && (ord.orderType === 'jasa' || ord.quotationType === 'jasa')) return false;
+      return true;
+    });
+    badgeProjects.textContent = productProjects.length;
+  }
 
   const badgeBast = document.getElementById('badge-bast-count');
   if (badgeBast) {

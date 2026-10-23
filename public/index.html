@@ -303,155 +303,266 @@
             </button>
           </div>
 
-          <!-- TAB CONTENT: RINGKASAN & MONITORING ORDER -->
+          <!-- TAB CONTENT: RINGKASAN & MONITORING ORDER (PRODUK & JASA TERPISAH DALAM 1 HALAMAN) -->
           <div id="dashboard-tab-content-ringkasan" style="display: none;">
-            <!-- Banner Pintas Buka Gantt Chart -->
-            <div style="background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px 18px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="width: 36px; height: 36px; border-radius: 8px; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <i data-lucide="bar-chart-2" style="width: 18px; height: 18px;"></i>
-                </div>
-                <div>
-                  <div style="font-weight: 700; color: #1e1b4b; font-size: 13px;">Gantt Chart Terpadu Semua Project Berjalan</div>
-                  <div style="font-size: 12px; color: #4338ca;">Tersedia visualisasi Gantt Chart timeline interaktif per hari, PIC dan milestone untuk semua project (Smart Door & Training Center).</div>
-                </div>
-              </div>
-              <button type="button" class="btn btn-sm btn-primary" onclick="switchDashboardTab('project')" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; padding: 7px 14px; background: #4f46e5; border-color: #4f46e5;">
-                <i data-lucide="calendar"></i> Buka Gantt Chart Semua Project
-              </button>
-            </div>
-            <!-- Summary Cards Grid 1: Transaksi & Finansial (4 Kolom Proporsional) -->
-            <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
-              <!-- 1. Card Quotation -->
-              <div class="kpi-card accent-purple">
-                <div class="kpi-header">
-                  <span class="kpi-title">Quotation (Penawaran)</span>
-                  <div class="kpi-icon"><i data-lucide="file-check-2"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-quotations-val">0 Penawaran</div>
-                <div class="kpi-footer">
-                  <span class="text-purple" id="kpi-quotations-amount">Rp 0</span>
-                  <span class="text-muted">Total Nilai Penawaran</span>
+            <!-- SEGMENT SWITCHER TOOLBAR (Pemisah Produk & Jasa Tetap Dalam 1 Halaman) -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; background: #ffffff; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Filter Tampilan Dashboard:</span>
+                <div class="submodule-nav-tabs" style="display: inline-flex; background: #f1f5f9; padding: 3px; border-radius: 8px; gap: 3px; border: 1px solid #e2e8f0;">
+                  <button type="button" id="btn-dash-segment-all" onclick="setDashboardSegment('ALL')" class="btn btn-xs" style="border-radius: 6px; border: none; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; background: #2563eb; color: #ffffff; transition: all 0.2s ease;">
+                    🔥 Semua (Produk & Jasa)
+                  </button>
+                  <button type="button" id="btn-dash-segment-product" onclick="setDashboardSegment('PRODUCT')" class="btn btn-xs" style="border-radius: 6px; border: none; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #475569; transition: all 0.2s ease;">
+                    📦 Dashboard Produk Manufaktur
+                  </button>
+                  <button type="button" id="btn-dash-segment-service" onclick="setDashboardSegment('SERVICE')" class="btn btn-xs" style="border-radius: 6px; border: none; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #475569; transition: all 0.2s ease;">
+                    🛠️ Dashboard Layanan Jasa
+                  </button>
                 </div>
               </div>
-
-              <!-- 2. Card Total Sales Order -->
-              <div class="kpi-card accent-blue">
-                <div class="kpi-header">
-                  <span class="kpi-title">Total Sales Order</span>
-                  <div class="kpi-icon"><i data-lucide="shopping-cart"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-orders-val">0 Order</div>
-                <div class="kpi-footer">
-                  <span class="text-success" id="kpi-orders-amount">Rp 0</span>
-                  <span class="text-muted">Total Nilai Order</span>
-                </div>
-              </div>
-
-              <!-- 3. Card Tagihan -->
-              <div class="kpi-card accent-amber">
-                <div class="kpi-header">
-                  <span class="kpi-title">Tagihan & Piutang</span>
-                  <div class="kpi-icon"><i data-lucide="receipt"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-invoices-val">0 Faktur</div>
-                <div class="kpi-footer">
-                  <span class="text-warning" id="kpi-invoices-amount">Rp 0</span>
-                  <span class="text-muted">Outstanding Invoice</span>
-                </div>
-              </div>
-
-              <!-- 4. Card Delivery -->
-              <div class="kpi-card accent-emerald">
-                <div class="kpi-header">
-                  <span class="kpi-title">Delivery & Surat Jalan</span>
-                  <div class="kpi-icon"><i data-lucide="truck"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-delivery-val">0 Pengiriman</div>
-                <div class="kpi-footer">
-                  <span class="text-emerald" id="kpi-delivery-active">Pengiriman Aktif</span>
-                  <span class="text-muted">Status Ekspedisi</span>
-                </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn btn-sm btn-outline" onclick="switchDashboardTab('project')" style="font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                  <i data-lucide="bar-chart-2" style="width: 14px; height: 14px; color: #2563eb;"></i> Buka Gantt Chart Manufaktur
+                </button>
               </div>
             </div>
 
-            <!-- Summary Cards Grid 2: Status & Performa Project Timeline (3 Kolom Proporsional) -->
-            <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 24px;">
-              <!-- 5. Card Project In Progress -->
-              <div class="kpi-card accent-indigo">
-                <div class="kpi-header">
-                  <span class="kpi-title">Total Project In Progress</span>
-                  <div class="kpi-icon"><i data-lucide="play-circle"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-proj-inprogress-val">0 Project</div>
-                <div class="kpi-footer">
-                  <span class="text-indigo" id="kpi-proj-inprogress-sub">Sedang Dikerjakan</span>
-                  <span class="text-muted">Project Berjalan & Aktif</span>
-                </div>
-              </div>
-
-              <!-- 6. Card Project Completed -->
-              <div class="kpi-card accent-emerald">
-                <div class="kpi-header">
-                  <span class="kpi-title">Total Project Completed</span>
-                  <div class="kpi-icon"><i data-lucide="check-circle-2"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-proj-completed-val">0 Project</div>
-                <div class="kpi-footer">
-                  <span class="text-emerald" id="kpi-proj-completed-sub">Selesai 100%</span>
-                  <span class="text-muted">Pesanan Tuntas Dikerjakan</span>
-                </div>
-              </div>
-
-              <!-- 7. Card Persentase Project Overdue -->
-              <div class="kpi-card accent-rose">
-                <div class="kpi-header">
-                  <span class="kpi-title">Persentase Project Overdue</span>
-                  <div class="kpi-icon"><i data-lucide="alert-triangle"></i></div>
-                </div>
-                <div class="kpi-value" id="kpi-proj-overdue-val" style="color: #e11d48;">0%</div>
-                <div class="kpi-footer">
-                  <span class="text-rose" id="kpi-proj-overdue-sub">0 dari 0 Project</span>
-                  <span class="text-muted">Tingkat Keterlambatan Jadwal</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- ==================== SEARCH BAR TABEL DASHBOARD ==================== -->
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+            <!-- SEARCH BAR TABEL DASHBOARD -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
               <div style="position: relative; max-width: 440px; width: 100%;">
                 <i data-lucide="search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #94a3b8; pointer-events: none;"></i>
-                <input type="text" id="dashboard-search-input" class="form-control" placeholder="Cari order, customer, project, PIC... (min. 3 huruf)" oninput="onDashboardSearchInput(this.value)" style="padding-left: 36px; padding-right: 32px; height: 38px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border-color); background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                <input type="text" id="dashboard-search-input" class="form-control" placeholder="Cari order, customer, produk/jasa, PIC... (min. 2 huruf)" oninput="onDashboardSearchInput(this.value)" style="padding-left: 36px; padding-right: 32px; height: 38px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border-color); background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
                 <button type="button" id="dashboard-search-clear-btn" onclick="clearDashboardSearch()" style="display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px;" title="Hapus Pencarian">
                   <i data-lucide="x" style="width: 14px; height: 14px;"></i>
                 </button>
               </div>
-              <div id="dashboard-search-result-hint" style="font-size: 12px; color: var(--text-muted); font-weight: 500;">
-                <!-- Populated dynamically via JS -->
+              <div id="dashboard-search-result-hint" style="font-size: 12px; color: var(--text-muted); font-weight: 500;"></div>
+            </div>
+
+            <!-- ==================== BAGIAN 1: DASHBOARD PRODUK MANUFAKTUR ==================== -->
+            <div id="dashboard-section-product" style="margin-bottom: 28px;">
+              <!-- Header Section Produk -->
+              <div style="background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 36px; height: 36px; border-radius: 8px; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i data-lucide="boxes" style="width: 20px; height: 20px;"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight: 800; color: #1e3a8a; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                      <span>1. Dashboard Produk (Manufaktur & Fabrikasi)</span>
+                      <span class="badge badge-primary" style="font-size: 10px; padding: 2px 7px;">Fisik & BOM</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #3b82f6; margin-top: 1px;">
+                      Monitoring penawaran produk fisik, sales order pabrikasi, formulasi master BOM, dan pengiriman ekspedisi.
+                    </div>
+                  </div>
+                </div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #1e40af;" id="dashboard-product-orders-badge">
+                  0 Order Produk Aktif
+                </div>
+              </div>
+
+              <!-- KPI Grid Produk (4 Cards) -->
+              <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+                <!-- 1. Card Quotation Produk -->
+                <div class="kpi-card accent-purple">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Quotation Produk Fisik</span>
+                    <div class="kpi-icon"><i data-lucide="file-check-2"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-product-quotations-val">0 Penawaran</div>
+                  <div class="kpi-footer">
+                    <span class="text-purple font-mono font-bold" id="kpi-product-quotations-amount">Rp 0</span>
+                    <span class="text-muted">Total Nilai Penawaran</span>
+                  </div>
+                </div>
+
+                <!-- 2. Card Sales Order Produk -->
+                <div class="kpi-card accent-blue">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Sales Order Produk (Omzet)</span>
+                    <div class="kpi-icon"><i data-lucide="shopping-cart"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-product-orders-val">0 Order</div>
+                  <div class="kpi-footer">
+                    <span class="text-success font-mono font-bold" id="kpi-product-orders-amount">Rp 0</span>
+                    <span class="text-muted">Total Kontrak Produk</span>
+                  </div>
+                </div>
+
+                <!-- 3. Card Master BOM Manufaktur -->
+                <div class="kpi-card accent-indigo">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Master Formula BOM</span>
+                    <div class="kpi-icon"><i data-lucide="layers"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-product-bom-val">0 Formula</div>
+                  <div class="kpi-footer">
+                    <span class="text-indigo font-bold" id="kpi-product-bom-sub">0 Disetujui (Accepted)</span>
+                    <span class="text-muted">Formula Terkunci</span>
+                  </div>
+                </div>
+
+                <!-- 4. Card Pengiriman & Delivery -->
+                <div class="kpi-card accent-emerald">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Delivery Produk (Surat Jalan)</span>
+                    <div class="kpi-icon"><i data-lucide="truck"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-product-delivery-val">0 Pengiriman</div>
+                  <div class="kpi-footer">
+                    <span class="text-emerald font-bold" id="kpi-product-delivery-sub">0 Pengiriman Aktif</span>
+                    <span class="text-muted">Status Ekspedisi</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tabel Monitoring Order Produk Manufaktur -->
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <div style="font-size: 12.5px; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="clipboard-list" style="width: 15px; height: 15px; color: #2563eb;"></i>
+                    <span>Daftar Order Penjualan Produk & Jadwal Fabrikasi</span>
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-muted);" id="table-product-orders-count-text">
+                    0 Pesanan Produk
+                  </div>
+                </div>
+                <div class="table-responsive" style="margin: 0; max-height: 380px; overflow-y: auto;">
+                  <table class="data-table" style="margin: 0; width: 100%;">
+                    <thead style="background: #f8fafc; position: sticky; top: 0; z-index: 1;">
+                      <tr>
+                        <th style="width: 4%; text-align: center;">NO.</th>
+                        <th style="width: 10%;">NO. ORDER</th>
+                        <th style="width: 18%;">PERUSAHAAN & PRODUK</th>
+                        <th style="width: 12%;">PIC & TIM</th>
+                        <th style="width: 12%;">FORMULA BOM</th>
+                        <th style="width: 13%;">JADWAL FABRIKASI</th>
+                        <th style="width: 12%;">PROGRESS PROYEK</th>
+                        <th style="width: 9%; text-align: center;">STATUS</th>
+                        <th style="width: 10%; text-align: right;">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody id="gantt-chart-table-body">
+                      <!-- Populated dynamically via JS (Hanya Order Produk) -->
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
-            <!-- ==================== TABEL MONITORING SALES ORDER & GANTT CHART ==================== -->
-            <div class="table-responsive" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-x: auto; background: #ffffff; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-              <table class="data-table" style="margin: 0; width: 100%;">
-                <thead style="background: #f8fafc;">
-                  <tr>
-                    <th style="width: 4%; text-align: center;">NO.</th>
-                    <th style="width: 9%;">NO. ORDER</th>
-                    <th style="width: 15%;">NAMA PERUSAHAAN</th>
-                    <th style="width: 15%;">NAMA PROJECT</th>
-                    <th style="width: 11%;">PIC LEAD & TIM</th>
-                    <th style="width: 12%;">JADWAL PROJECT</th>
-                    <th style="width: 11%; text-align: center;">OVERDUE MILESTONE</th>
-                    <th style="width: 12%;">PROGRESS & TASK</th>
-                    <th style="width: 9%; text-align: center;">STATUS</th>
-                    <th style="width: 10%; text-align: right;">GANTT CHART</th>
-                  </tr>
-                </thead>
-                <tbody id="gantt-chart-table-body">
-                  <!-- Populated dynamically via JS -->
-                </tbody>
-              </table>
+            <!-- ==================== BAGIAN 2: DASHBOARD JASA & LAYANAN ==================== -->
+            <div id="dashboard-section-service" style="margin-bottom: 24px;">
+              <!-- Header Section Jasa -->
+              <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1.5px solid #fed7aa; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 36px; height: 36px; border-radius: 8px; background: #ea580c; color: #ffffff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i data-lucide="wrench" style="width: 20px; height: 20px;"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight: 800; color: #9a3412; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                      <span>2. Dashboard Jasa (Layanan & Operasional Non-BOM)</span>
+                      <span class="badge" style="background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; font-size: 10px; padding: 2px 7px;">🛠️ Jasa / Layanan</span>
+                    </div>
+                    <div style="font-size: 11.5px; color: #c2410c; margin-top: 1px;">
+                      Monitoring penawaran jasa, order pelaksanaan teknisi, serta pengajuan biaya transportasi & uang makan.
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button type="button" class="btn btn-xs btn-primary" onclick="openServiceExpenseModal()" style="background: #ea580c; border-color: #ea580c; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                    <i data-lucide="plus-circle" style="width: 13px; height: 13px;"></i> + Ajukan Biaya Jasa
+                  </button>
+                </div>
+              </div>
+
+              <!-- KPI Grid Jasa (4 Cards) -->
+              <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px;">
+                <!-- 1. Card Quotation Jasa -->
+                <div class="kpi-card" style="border-left: 4px solid #f59e0b;">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Quotation Jasa / Layanan</span>
+                    <div class="kpi-icon" style="color: #f59e0b;"><i data-lucide="file-text"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-service-quotations-val" style="color: #b45309;">0 Penawaran</div>
+                  <div class="kpi-footer">
+                    <span class="font-mono font-bold" id="kpi-service-quotations-amount" style="color: #b45309;">Rp 0</span>
+                    <span class="text-muted">Total Nilai Penawaran</span>
+                  </div>
+                </div>
+
+                <!-- 2. Card Sales Order Jasa -->
+                <div class="kpi-card" style="border-left: 4px solid #ea580c;">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Sales Order Jasa (Omzet)</span>
+                    <div class="kpi-icon" style="color: #ea580c;"><i data-lucide="briefcase"></i></div>
+                  </div>
+                  <div class="kpi-value" id="kpi-service-orders-val" style="color: #ea580c;">0 Order Jasa</div>
+                  <div class="kpi-footer">
+                    <span class="font-mono font-bold" id="kpi-service-orders-amount" style="color: #ea580c;">Rp 0</span>
+                    <span class="text-muted">Total Kontrak Jasa</span>
+                  </div>
+                </div>
+
+                <!-- 3. Card Pengajuan Biaya Transport & Makan -->
+                <div class="kpi-card" style="border-left: 4px solid #0284c7;">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Biaya Transport & Uang Makan</span>
+                    <div class="kpi-icon" style="color: #0284c7;"><i data-lucide="car"></i></div>
+                  </div>
+                  <div class="kpi-value font-mono font-bold" id="kpi-service-expenses-total-val" style="color: #0369a1;">Rp 0</div>
+                  <div class="kpi-footer">
+                    <span class="font-bold" id="kpi-service-expenses-count-sub" style="color: #0284c7;">0 Pengajuan Biaya</span>
+                    <span class="text-muted">Biaya Operasional Jasa</span>
+                  </div>
+                </div>
+
+                <!-- 4. Card Realisasi Pencairan Kasbon -->
+                <div class="kpi-card" style="border-left: 4px solid #16a34a;">
+                  <div class="kpi-header">
+                    <span class="kpi-title">Realisasi Pencairan Kasbon</span>
+                    <div class="kpi-icon" style="color: #16a34a;"><i data-lucide="badge-dollar-sign"></i></div>
+                  </div>
+                  <div class="kpi-value font-mono font-bold" id="kpi-service-disbursed-val" style="color: #15803d;">Rp 0</div>
+                  <div class="kpi-footer">
+                    <span class="font-bold" id="kpi-service-pending-sub" style="color: #d97706;">0 Menunggu Pencairan</span>
+                    <span class="text-muted">Status Keuangan</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tabel Monitoring Order Jasa & Pengeluaran Operasional -->
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="padding: 10px 16px; background: #fff7ed; border-bottom: 1px solid #fed7aa; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <div style="font-size: 12.5px; font-weight: 700; color: #9a3412; display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="car" style="width: 15px; height: 15px; color: #ea580c;"></i>
+                    <span>Daftar Order Jasa, Tim Pelaksana & Realisasi Biaya (Transportasi & Uang Makan)</span>
+                  </div>
+                  <div style="font-size: 11px; color: #c2410c; font-weight: 600;" id="table-service-orders-count-text">
+                    0 Pesanan Jasa
+                  </div>
+                </div>
+                <div class="table-responsive" style="margin: 0; max-height: 380px; overflow-y: auto;">
+                  <table class="data-table" style="margin: 0; width: 100%;">
+                    <thead style="background: #fff7ed; position: sticky; top: 0; z-index: 1;">
+                      <tr>
+                        <th style="width: 4%; text-align: center;">NO.</th>
+                        <th style="width: 11%;">NO. ORDER JASA</th>
+                        <th style="width: 20%;">PERUSAHAAN & LAYANAN JASA</th>
+                        <th style="width: 14%;">TIM / TEKNISI LAPANGAN</th>
+                        <th style="width: 13%; text-align: right;">NILAI KONTRAK JASA</th>
+                        <th style="width: 16%; text-align: right; color: #ea580c;">BIAYA TRANSPORT & MAKAN</th>
+                        <th style="width: 10%; text-align: center;">STATUS PENCAIRAN</th>
+                        <th style="width: 12%; text-align: right;">AKSI PENGAJUAN</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-dashboard-service-body">
+                      <!-- Populated dynamically via JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
 

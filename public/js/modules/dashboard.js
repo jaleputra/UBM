@@ -2,78 +2,221 @@
 // UBM - Dashboard & Gantt Chart Timeline Monitoring Module
 // =========================================================
 
+// Helper: Memeriksa apakah order bertipe Jasa / Layanan (Non-BOM)
+function isServiceOrder(order) {
+  if (!order) return false;
+  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
+  if (order.quotationId) {
+    const quo = (state.quotations || []).find(q => q.id === order.quotationId);
+    if (quo && quo.quotationType === 'jasa') return true;
+  }
+  if (order.notes && (
+    order.notes.toLowerCase().includes('[tipe: jasa]') ||
+    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
+    order.notes.toLowerCase().includes('(jasa)')
+  )) return true;
+  return false;
+}
+window.isServiceOrder = isServiceOrder;
+
+// Helper: Memeriksa apakah project bertipe Jasa
+function isProjectService(p) {
+  if (!p) return false;
+  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.orderId) {
+    const order = (state.orders || []).find(o => o.id === p.orderId);
+    if (order && isServiceOrder(order)) return true;
+  }
+  if (p.quotationId) {
+    const quo = (state.quotations || []).find(q => q.id === p.quotationId);
+    if (quo && quo.quotationType === 'jasa') return true;
+  }
+  if (p.notes && (
+    p.notes.toLowerCase().includes('[tipe: jasa]') ||
+    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
+    p.notes.toLowerCase().includes('(jasa)')
+  )) return true;
+  return false;
+}
+window.isProjectService = isProjectService;
+
+// Segment Switcher: Memisahkan Tampilan Produk & Jasa dalam 1 Halaman Dashboard
+function setDashboardSegment(segment) {
+  state.dashboardSegment = segment || 'ALL';
+  try { localStorage.setItem('ubm_dashboard_segment', state.dashboardSegment); } catch (e) {}
+
+  const btnAll = document.getElementById('btn-dash-segment-all');
+  const btnProduct = document.getElementById('btn-dash-segment-product');
+  const btnService = document.getElementById('btn-dash-segment-service');
+  const secProduct = document.getElementById('dashboard-section-product');
+  const secService = document.getElementById('dashboard-section-service');
+
+  const setBtnStyle = (btn, isActive) => {
+    if (!btn) return;
+    if (isActive) {
+      btn.style.background = '#2563eb';
+      btn.style.color = '#ffffff';
+      btn.style.fontWeight = '700';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = '#475569';
+      btn.style.fontWeight = '600';
+    }
+  };
+
+  setBtnStyle(btnAll, state.dashboardSegment === 'ALL');
+  setBtnStyle(btnProduct, state.dashboardSegment === 'PRODUCT');
+  setBtnStyle(btnService, state.dashboardSegment === 'SERVICE');
+
+  if (secProduct) {
+    secProduct.style.display = (state.dashboardSegment === 'ALL' || state.dashboardSegment === 'PRODUCT') ? 'block' : 'none';
+  }
+  if (secService) {
+    secService.style.display = (state.dashboardSegment === 'ALL' || state.dashboardSegment === 'SERVICE') ? 'block' : 'none';
+  }
+}
+window.setDashboardSegment = setDashboardSegment;
+
 async function loadDashboardData() {
   try {
-    // 1. Pastikan data orders dan projects sudah tersedia sebelum render agar Gantt Chart tidak kosong
-    if (!state.projects || !state.orders || state.projects.length === 0) {
-      await Promise.allSettled([
-        fetchResource('orders'),
-        fetchResource('projects')
-      ]);
+    // 1. Pastikan semua dataset terkait sudah tersedia
+    const toFetch = [];
+    if (!state.orders || state.orders.length === 0) toFetch.push(fetchResource('orders'));
+    if (!state.projects || state.projects.length === 0) toFetch.push(fetchResource('projects'));
+    if (!state.quotations || state.quotations.length === 0) toFetch.push(fetchResource('quotations'));
+    if (!state.bom || state.bom.length === 0) toFetch.push(fetchResource('bom'));
+    if (!state.delivery || state.delivery.length === 0) toFetch.push(fetchResource('delivery'));
+    if (!state.service_expenses || state.service_expenses.length === 0) toFetch.push(fetchResource('service_expenses'));
+    if (toFetch.length > 0) {
+      await Promise.allSettled(toFetch);
     }
 
-    const res = await fetch(`/api/stats?_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
+    try {
+      const res = await fetch(`/api/stats?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (res.ok) {
+        state.stats = await res.json();
       }
-    });
-    const data = await res.json();
-    state.stats = data;
+    } catch (e) {
+      // Abaikan jika offline / direct Supabase
+    }
 
-    // Render Summary KPI Cards
-    const summary = data.summary || {};
+    // 2. Kalkulasi Metrik DASHBOARD PRODUK MANUFAKTUR
+    const productQuos = (state.quotations || []).filter(q => q.quotationType !== 'jasa');
+    const productQuoTotalVal = productQuos.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
+
+    const productOrders = (state.orders || []).filter(o => !isServiceOrder(o));
+    const productOrderTotalVal = productOrders.reduce((sum, o) => sum + (Number(o.grandTotal) || 0), 0);
+    const productActiveOrdersCount = productOrders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').length;
+
+    const bomCount = (state.bom || []).length;
+    const bomAcceptedCount = (state.bom || []).filter(b => b.status === 'Accepted').length;
+
+    const deliveryCount = (state.delivery || []).length;
+    const deliveryActiveCount = (state.delivery || []).filter(d => d.status !== 'Delivered' && d.status !== 'Selesai').length;
+
+    // Update Elemen KPI Produk
+    const elProdQuoVal = document.getElementById('kpi-product-quotations-val');
+    const elProdQuoAmt = document.getElementById('kpi-product-quotations-amount');
+    if (elProdQuoVal) elProdQuoVal.textContent = `${productQuos.length} Penawaran`;
+    if (elProdQuoAmt) elProdQuoAmt.textContent = formatRupiah(productQuoTotalVal);
+
+    const elProdOrdVal = document.getElementById('kpi-product-orders-val');
+    const elProdOrdAmt = document.getElementById('kpi-product-orders-amount');
+    if (elProdOrdVal) elProdOrdVal.textContent = `${productOrders.length} Order`;
+    if (elProdOrdAmt) elProdOrdAmt.textContent = formatRupiah(productOrderTotalVal);
+
+    const elProdBomVal = document.getElementById('kpi-product-bom-val');
+    const elProdBomSub = document.getElementById('kpi-product-bom-sub');
+    if (elProdBomVal) elProdBomVal.textContent = `${bomCount} Formula`;
+    if (elProdBomSub) elProdBomSub.textContent = `${bomAcceptedCount} Disetujui (Accepted)`;
+
+    const elProdDelVal = document.getElementById('kpi-product-delivery-val');
+    const elProdDelSub = document.getElementById('kpi-product-delivery-sub');
+    if (elProdDelVal) elProdDelVal.textContent = `${deliveryCount} Pengiriman`;
+    if (elProdDelSub) elProdDelSub.textContent = `${deliveryActiveCount} Pengiriman Aktif`;
+
+    const elProdOrdBadge = document.getElementById('dashboard-product-orders-badge');
+    if (elProdOrdBadge) elProdOrdBadge.textContent = `${productActiveOrdersCount} Order Produk Aktif`;
+
+    const elProdOrdCountText = document.getElementById('table-product-orders-count-text');
+    if (elProdOrdCountText) elProdOrdCountText.textContent = `${productOrders.length} Pesanan Produk`;
+
+    // 3. Kalkulasi Metrik DASHBOARD LAYANAN JASA
+    const serviceQuos = (state.quotations || []).filter(q => q.quotationType === 'jasa');
+    const serviceQuoTotalVal = serviceQuos.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
+
+    const serviceOrders = (state.orders || []).filter(o => isServiceOrder(o));
+    const serviceOrderTotalVal = serviceOrders.reduce((sum, o) => sum + (Number(o.grandTotal) || 0), 0);
+
+    const serviceExpenses = state.service_expenses || [];
+    const serviceExpenseTotalAmount = serviceExpenses.reduce((sum, e) => {
+      const tot = Number(e.totalAmount) || ((Number(e.transportAmount) || 0) + (Number(e.mealAmount) || 0));
+      return sum + tot;
+    }, 0);
+
+    const serviceDisbursedTotal = serviceExpenses.filter(e => e.status === 'Dicairkan').reduce((sum, e) => {
+      const tot = Number(e.totalAmount) || ((Number(e.transportAmount) || 0) + (Number(e.mealAmount) || 0));
+      return sum + tot;
+    }, 0);
+
+    const servicePendingCount = serviceExpenses.filter(e => e.status !== 'Dicairkan' && e.status !== 'Ditolak').length;
+
+    // Update Elemen KPI Jasa
+    const elSvcQuoVal = document.getElementById('kpi-service-quotations-val');
+    const elSvcQuoAmt = document.getElementById('kpi-service-quotations-amount');
+    if (elSvcQuoVal) elSvcQuoVal.textContent = `${serviceQuos.length} Penawaran`;
+    if (elSvcQuoAmt) elSvcQuoAmt.textContent = formatRupiah(serviceQuoTotalVal);
+
+    const elSvcOrdVal = document.getElementById('kpi-service-orders-val');
+    const elSvcOrdAmt = document.getElementById('kpi-service-orders-amount');
+    if (elSvcOrdVal) elSvcOrdVal.textContent = `${serviceOrders.length} Order Jasa`;
+    if (elSvcOrdAmt) elSvcOrdAmt.textContent = formatRupiah(serviceOrderTotalVal);
+
+    const elSvcExpTotalVal = document.getElementById('kpi-service-expenses-total-val');
+    const elSvcExpCountSub = document.getElementById('kpi-service-expenses-count-sub');
+    if (elSvcExpTotalVal) elSvcExpTotalVal.textContent = formatRupiah(serviceExpenseTotalAmount);
+    if (elSvcExpCountSub) elSvcExpCountSub.textContent = `${serviceExpenses.length} Pengajuan Biaya`;
+
+    const elSvcDisbursedVal = document.getElementById('kpi-service-disbursed-val');
+    const elSvcPendingSub = document.getElementById('kpi-service-pending-sub');
+    if (elSvcDisbursedVal) elSvcDisbursedVal.textContent = formatRupiah(serviceDisbursedTotal);
+    if (elSvcPendingSub) elSvcPendingSub.textContent = `${servicePendingCount} Menunggu Pencairan`;
+
+    const elSvcOrdCountText = document.getElementById('table-service-orders-count-text');
+    if (elSvcOrdCountText) elSvcOrdCountText.textContent = `${serviceOrders.length} Pesanan Jasa`;
+
+    // 4. Backward Compatibility untuk KPI lama jika ada
+    const summary = state.stats?.summary || {};
     const kpiQuotationsVal = document.getElementById('kpi-quotations-val');
     const kpiQuotationsAmount = document.getElementById('kpi-quotations-amount');
-    if (kpiQuotationsVal) kpiQuotationsVal.textContent = `${summary.totalQuotations || 0} Penawaran`;
-    if (kpiQuotationsAmount) kpiQuotationsAmount.textContent = formatRupiah(summary.totalQuotationValue || 0);
+    if (kpiQuotationsVal) kpiQuotationsVal.textContent = `${summary.totalQuotations || (state.quotations?.length || 0)} Penawaran`;
+    if (kpiQuotationsAmount) kpiQuotationsAmount.textContent = formatRupiah(summary.totalQuotationValue || (productQuoTotalVal + serviceQuoTotalVal));
 
     const kpiOrdersVal = document.getElementById('kpi-orders-val');
     const kpiOrdersAmount = document.getElementById('kpi-orders-amount');
-    if (kpiOrdersVal) kpiOrdersVal.textContent = `${summary.totalOrders || 0} Order`;
-    if (kpiOrdersAmount) kpiOrdersAmount.textContent = formatRupiah(summary.totalOrderValue || 0);
+    if (kpiOrdersVal) kpiOrdersVal.textContent = `${summary.totalOrders || (state.orders?.length || 0)} Order`;
+    if (kpiOrdersAmount) kpiOrdersAmount.textContent = formatRupiah(summary.totalOrderValue || (productOrderTotalVal + serviceOrderTotalVal));
 
-    const kpiInvoicesVal = document.getElementById('kpi-invoices-val');
-    const kpiInvoicesAmount = document.getElementById('kpi-invoices-amount');
-    if (kpiInvoicesVal) kpiInvoicesVal.textContent = `${(summary.totalInvoices || 0) - (summary.paidInvoices || 0)} Faktur`;
-    if (kpiInvoicesAmount) kpiInvoicesAmount.textContent = formatRupiah(summary.unpaidInvoicesValue || 0);
-
-    const kpiDeliveryVal = document.getElementById('kpi-delivery-val');
-    const kpiDeliveryActive = document.getElementById('kpi-delivery-active');
-    if (kpiDeliveryVal) kpiDeliveryVal.textContent = `${summary.totalDeliveries || 0} Pengiriman`;
-    if (kpiDeliveryActive) kpiDeliveryActive.textContent = `${summary.activeDeliveries || 0} Pengiriman Aktif`;
-
-    // Render Gantt Chart Project Timeline Table (Tab Ringkasan)
+    // 5. Render Tables (Produk Manufaktur & Layanan Jasa)
     renderDashboardGanttChart();
+    renderDashboardServiceTable();
 
-    // Render Project Tab Gantt Chart & Sync Stats
+    // 6. Render Gantt Chart Project Berjalan
     renderDashboardProjectGantt();
 
-    // Selalu pastikan tab Project (Gantt Chart Berjalan) aktif saat dashboard dibuka
+    // 7. Terapkan segmen preferensi pengguna
+    const savedSegment = localStorage.getItem('ubm_dashboard_segment') || 'ALL';
+    setDashboardSegment(savedSegment);
+
+    // 8. Selalu default tab Project (Gantt Chart Berjalan) saat dashboard pertama kali dibuka
     try { localStorage.removeItem('ubm_dashboard_active_tab'); } catch (e) {}
     switchDashboardTab('project');
-
-    // Render Recent Activities
-    const actList = document.getElementById('dashboard-activity-list');
-    if (actList) {
-      if (data.recentActivities && data.recentActivities.length > 0) {
-        actList.innerHTML = data.recentActivities.map(act => `
-          <div class="activity-item">
-            <div class="activity-left">
-              <span class="activity-tag tag-${act.type}">${act.type}</span>
-              <div>
-                <div class="activity-text">${act.title}</div>
-                <div class="activity-sub">${act.date} &bull; Status: <span class="text-warning">${act.status || 'Active'}</span></div>
-              </div>
-            </div>
-            ${act.amount ? `<div class="font-mono font-bold font-sm">${formatRupiah(act.amount)}</div>` : ''}
-          </div>
-        `).join('');
-      } else {
-        actList.innerHTML = '<div class="text-muted p-3 text-center">Belum ada riwayat aktivitas.</div>';
-      }
-    }
 
     if (window.lucide) lucide.createIcons();
   } catch (err) {
@@ -95,6 +238,7 @@ function onDashboardSearchInput(val) {
     clearBtn.style.display = val && val.trim().length > 0 ? 'inline-flex' : 'none';
   }
   renderDashboardGanttChart();
+  renderDashboardServiceTable();
 }
 
 function clearDashboardSearch() {
@@ -106,18 +250,21 @@ function clearDashboardSearch() {
   const clearBtn = document.getElementById('dashboard-search-clear-btn');
   if (clearBtn) clearBtn.style.display = 'none';
   renderDashboardGanttChart();
+  renderDashboardServiceTable();
   if (input) input.focus();
 }
 
 // -------------------------------------------------------------
 // GANTT CHART & PROJECT TIMELINE MONITORING TABLE RENDERER
+// (KHUSUS PRODUK MANUFAKTUR & PROJECT FABRIKASI)
 // -------------------------------------------------------------
 function renderDashboardGanttChart() {
   const tbody = document.getElementById('gantt-chart-table-body');
   if (!tbody) return;
 
-  const orders = state.orders || [];
-  const projects = state.projects || [];
+  // Saring: HANYA produk manufaktur & non-jasa
+  const orders = (state.orders || []).filter(o => !isServiceOrder(o));
+  const projects = (state.projects || []).filter(p => !isProjectService(p));
   const todayStr = new Date().toISOString().split('T')[0];
 
   let totalCount = 0;
@@ -550,6 +697,134 @@ function renderDashboardGanttChart() {
   if (window.lucide) lucide.createIcons();
 }
 
+// =========================================================
+// TABLE RENDERER: MONITORING SALES ORDER JASA & OPERASIONAL
+// =========================================================
+function renderDashboardServiceTable() {
+  const tbody = document.getElementById('table-dashboard-service-body');
+  if (!tbody) return;
+
+  const serviceOrders = (state.orders || []).filter(o => isServiceOrder(o));
+  const serviceExpenses = state.service_expenses || [];
+  const rawQuery = (state.searchQuery || '').trim().toLowerCase();
+
+  let filtered = serviceOrders;
+  if (rawQuery) {
+    filtered = serviceOrders.filter(o => {
+      const id = (o.id || '').toLowerCase();
+      const cust = (o.customerName || '').toLowerCase();
+      const phone = (o.customerPhone || '').toLowerCase();
+      const proj = (o.projectName || '').toLowerCase();
+      const notes = (o.notes || '').toLowerCase();
+      const items = (o.items || []).map(i => i.itemName || '').join(' ').toLowerCase();
+      return id.includes(rawQuery) || cust.includes(rawQuery) || phone.includes(rawQuery) || proj.includes(rawQuery) || notes.includes(rawQuery) || items.includes(rawQuery);
+    });
+  }
+
+  const countBadge = document.getElementById('table-service-orders-count-text');
+  if (countBadge) {
+    countBadge.textContent = `${filtered.length} Pesanan Jasa${rawQuery ? ' (Difilter)' : ''}`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center text-muted" style="padding: 28px;">
+          ${rawQuery ? `Tidak ada pesanan jasa yang cocok dengan pencarian "<strong>${escapeHtml(rawQuery)}</strong>".` : 'Belum ada data Order Penjualan bertipe Jasa.'}
+        </td>
+      </tr>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((ord, idx) => {
+    // Cari apakah ada pengajuan biaya untuk order ini
+    const relatedExpenses = serviceExpenses.filter(e => 
+      e.orderId === ord.id || 
+      (e.customerName && ord.customerName && e.customerName.toLowerCase() === ord.customerName.toLowerCase())
+    );
+
+    const totalExpenseClaimed = relatedExpenses.reduce((sum, e) => {
+      const tot = Number(e.totalAmount) || ((Number(e.transportAmount) || 0) + (Number(e.mealAmount) || 0));
+      return sum + tot;
+    }, 0);
+
+    const hasDisbursed = relatedExpenses.some(e => e.status === 'Dicairkan');
+    const hasPending = relatedExpenses.some(e => e.status !== 'Dicairkan' && e.status !== 'Ditolak');
+
+    let expenseStatusBadge = `<span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10px; padding: 2px 7px;">Belum Diajukan</span>`;
+    if (relatedExpenses.length > 0) {
+      if (hasDisbursed && !hasPending) {
+        expenseStatusBadge = `<span class="badge badge-success" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="check-check" style="width: 10px; height: 10px;"></i> Dicairkan</span>`;
+      } else if (hasPending) {
+        expenseStatusBadge = `<span class="badge badge-amber" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> Menunggu Cair</span>`;
+      } else {
+        expenseStatusBadge = `<span class="badge badge-danger" style="font-size: 10px; padding: 2px 7px;">Ditolak</span>`;
+      }
+    }
+
+    const firstItemName = ord.items?.[0]?.itemName || ord.projectName || 'Layanan Jasa & Servis';
+    const technicianName = ord.projectLead || ord.pic || relatedExpenses[0]?.pic || relatedExpenses[0]?.team || 'Tim Teknisi Lapangan';
+
+    return `
+      <tr>
+        <td style="vertical-align: middle; text-align: center;">
+          <span style="font-weight: 700; color: #9a3412; font-size: 11.5px;">${idx + 1}</span>
+        </td>
+        <td style="vertical-align: middle;">
+          <span class="mono-id font-bold" style="font-size: 11px; background: #ffedd5; color: #c2410c; padding: 2px 7px; border-radius: 4px; border: 1px solid #fed7aa;">
+            ${escapeHtml(ord.id)}
+          </span>
+          <div style="font-size: 9.5px; color: #ea580c; font-weight: 700; margin-top: 2px;">ORDER JASA</div>
+        </td>
+        <td style="vertical-align: middle;">
+          <div class="font-bold text-main" style="font-size: 12.5px;">${escapeHtml(ord.customerName || '-')}</div>
+          <div style="font-size: 11.5px; color: #475569; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+            <i data-lucide="wrench" style="width: 12px; height: 12px; color: #ea580c; flex-shrink: 0;"></i>
+            <span>${escapeHtml(firstItemName)}</span>
+          </div>
+          ${ord.customerPhone ? `<div class="text-muted font-sm" style="font-size: 10.5px; margin-top: 1px;">📞 ${escapeHtml(ord.customerPhone)}</div>` : ''}
+        </td>
+        <td style="vertical-align: middle;">
+          <div class="font-medium text-main" style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
+            <i data-lucide="user-check" style="width: 13px; height: 13px; color: #0284c7;"></i>
+            <span>${escapeHtml(technicianName)}</span>
+          </div>
+          <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">
+            Tanggal: ${ord.orderDate || ord.createdAt ? String(ord.orderDate || ord.createdAt).slice(0, 10) : '-'}
+          </div>
+        </td>
+        <td style="vertical-align: middle; text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 12.5px; color: #0f172a;">
+            ${formatRupiah(ord.grandTotal || 0)}
+          </div>
+          <div style="font-size: 10px; color: #64748b;">Nilai Tagihan</div>
+        </td>
+        <td style="vertical-align: middle; text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 12.5px; color: #ea580c;">
+            ${formatRupiah(totalExpenseClaimed)}
+          </div>
+          <div style="font-size: 10px; color: #9a3412;">
+            ${relatedExpenses.length > 0 ? `${relatedExpenses.length} Form Klaim Diajukan` : 'Belum Ada Klaim'}
+          </div>
+        </td>
+        <td style="vertical-align: middle; text-align: center;">
+          ${expenseStatusBadge}
+        </td>
+        <td style="vertical-align: middle; text-align: right;">
+          <button type="button" class="btn btn-xs btn-primary" onclick="openServiceExpenseModal('${ord.id}')" style="background: #ea580c; border-color: #ea580c; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap;">
+            <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> + Ajukan Biaya
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+window.renderDashboardServiceTable = renderDashboardServiceTable;
+
 // -------------------------------------------------------------
 function openGanttDetailModal(orderOrProjId) {
   const project = (state.projects || []).find(p => p.id === orderOrProjId || p.orderId === orderOrProjId);
@@ -791,6 +1066,9 @@ function switchDashboardTab(tabName) {
     if (contentProject) contentProject.style.display = 'none';
     if (contentRingkasan) contentRingkasan.style.display = 'block';
     renderDashboardGanttChart();
+    renderDashboardServiceTable();
+    const savedSegment = localStorage.getItem('ubm_dashboard_segment') || 'ALL';
+    setDashboardSegment(savedSegment);
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -957,8 +1235,9 @@ function renderDashboardProjectGantt() {
   const container = document.getElementById('dashboard-project-gantt-view');
   if (!container) return;
 
-  const orders = state.orders || [];
-  const projects = state.projects || [];
+  // Filter HANYA produk manufaktur & non-jasa untuk Gantt Chart Proyek
+  const orders = (state.orders || []).filter(o => !isServiceOrder(o));
+  const projects = (state.projects || []).filter(p => !isProjectService(p));
   const todayStr = new Date().toISOString().split('T')[0];
 
   // 1. Gather all projects (both direct projects and order-linked projects)

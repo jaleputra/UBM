@@ -18,6 +18,28 @@ function isServiceOrder(order) {
   return false;
 }
 
+// Helper: Memeriksa apakah project berasal dari Quotation / Order bertipe Jasa
+function isProjectService(p) {
+  if (!p) return false;
+  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.orderId) {
+    const order = (state.orders || []).find(o => o.id === p.orderId);
+    if (order && isServiceOrder(order)) return true;
+  }
+  if (p.quotationId) {
+    const quo = (state.quotations || []).find(q => q.id === p.quotationId);
+    if (quo && quo.quotationType === 'jasa') return true;
+  }
+  if (p.notes && (
+    p.notes.toLowerCase().includes('[tipe: jasa]') ||
+    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
+    p.notes.toLowerCase().includes('(jasa)')
+  )) return true;
+  return false;
+}
+
+window.isProjectService = isProjectService;
+
 let currentActiveProjectOrderId = null;
 
 // -------------------------------------------------------------
@@ -27,7 +49,8 @@ function renderProjectsTableView() {
   const tbody = document.getElementById('table-projects-body');
   if (!tbody) return;
 
-  let list = state.projects || [];
+  // Project Management KHUSUS Produk Manufaktur (Jasa ditiadakan / tidak masuk ke Project Management)
+  let list = (state.projects || []).filter(p => !isProjectService(p));
   const statusFilter = document.getElementById('filter-project-status')?.value || 'ALL';
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
@@ -865,7 +888,9 @@ function navigateBackFromTimeline() {
 }
 
 function openProjectTimelinePage(orderId = null) {
-  const defaultTarget = orderId || (state.projects.length > 0 ? (state.projects[0].id || state.projects[0].orderId) : (state.orders.length > 0 ? state.orders[0].id : null));
+  const productProjects = (state.projects || []).filter(p => !isProjectService(p));
+  const productOrders = (state.orders || []).filter(o => !isServiceOrder(o));
+  const defaultTarget = orderId || (productProjects.length > 0 ? (productProjects[0].id || productProjects[0].orderId) : (productOrders.length > 0 ? productOrders[0].id : null));
   const targetOrderId = orderId || defaultTarget;
 
   // Tentukan view asal pemanggil Timeline
@@ -879,6 +904,15 @@ function openProjectTimelinePage(orderId = null) {
 
   const project = (state.projects || []).find(p => p.id === targetOrderId || p.orderId === targetOrderId);
   const order = (state.orders || []).find(o => o.id === (project?.orderId || targetOrderId));
+
+  // Jika order/project adalah Jasa, tolak karena jasa tidak masuk ke Project Management Manufaktur
+  if (isServiceOrder(order) || isProjectService(project)) {
+    showToast('⚠️ Kategori Jasa tidak masuk ke Project Management Manufaktur. Silakan gunakan menu Pengajuan Transportasi & Uang Makan Jasa.', 'info');
+    if (typeof openServiceExpenseModal === 'function') {
+      openServiceExpenseModal(order?.id || targetOrderId);
+    }
+    return;
+  }
 
   // Validasi khusus jika project terkait langsung dengan Order Penjualan nyata
   if (order && project?.orderId) {
@@ -902,16 +936,13 @@ function openProjectTimelinePage(orderId = null) {
       return;
     }
 
-    const isService = isServiceOrder(order);
-    if (!isService) {
-      const hasBOM = (state.bom || []).some(b => b.orderId === order.id || (order.items || []).some(item => b.productName && item.itemName && b.productName.toLowerCase().trim() === item.itemName.toLowerCase().trim()));
-      if (!hasBOM) {
-        showToast('⚠️ Bill of Materials (BOM) belum diisi untuk order ini. Silakan isi dan simpan BOM terlebih dahulu sebelum membuat Project Management!', 'warning');
-        if (typeof createBOMFromOrder === 'function') {
-          createBOMFromOrder(order.id);
-        }
-        return;
+    const hasBOM = (state.bom || []).some(b => b.orderId === order.id || (order.items || []).some(item => b.productName && item.itemName && b.productName.toLowerCase().trim() === item.itemName.toLowerCase().trim()));
+    if (!hasBOM) {
+      showToast('⚠️ Bill of Materials (BOM) belum diisi untuk order ini. Silakan isi dan simpan BOM terlebih dahulu sebelum membuat Project Management!', 'warning');
+      if (typeof createBOMFromOrder === 'function') {
+        createBOMFromOrder(order.id);
       }
+      return;
     }
   }
 
@@ -934,7 +965,7 @@ function openProjectTimelinePage(orderId = null) {
   const orderSelect = document.getElementById('timeline-order-select');
   if (orderSelect) {
     let opts = '';
-    const directProjs = (state.projects || []).filter(p => !p.orderId);
+    const directProjs = (state.projects || []).filter(p => !p.orderId && !isProjectService(p));
     if (directProjs.length > 0) {
       opts += '<optgroup label="Project Mandiri / Direct">';
       directProjs.forEach(dp => {
@@ -944,9 +975,9 @@ function openProjectTimelinePage(orderId = null) {
       opts += '</optgroup>';
     }
 
-    if (state.orders && state.orders.length > 0) {
-      opts += '<optgroup label="Order Penjualan">';
-      state.orders.forEach(o => {
+    if (productOrders.length > 0) {
+      opts += '<optgroup label="Order Penjualan Produk (Manufaktur)">';
+      productOrders.forEach(o => {
         const isSel = (o.id === currentActiveProjectOrderId || (project && project.orderId === o.id)) ? 'selected' : '';
         opts += `<option value="${o.id}" ${isSel}>[${o.id}] ${escapeHtml(o.customerName)} - ${escapeHtml(o.projectName || o.items?.[0]?.itemName || 'Order')} (${formatRupiah(o.grandTotal)})</option>`;
       });
