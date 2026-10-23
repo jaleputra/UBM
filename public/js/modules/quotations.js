@@ -186,23 +186,58 @@ function toggleQuotationTypeUI(type) {
     if (subTotalLabel) subTotalLabel.textContent = 'Total Produk Utama:';
   }
 
-  // Update placeholders in existing rows
+  // Update Header Columns for Items (Sembunyikan Garansi & Satuan jika Jasa)
+  const itemsHeader = document.getElementById('quo-items-header');
+  const colWarranty = document.getElementById('quo-col-item-warranty');
+  const colUnit = document.getElementById('quo-col-item-unit');
+
+  if (itemsHeader) {
+    itemsHeader.style.gridTemplateColumns = isJasa
+      ? 'minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px'
+      : 'minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px';
+  }
+  if (colWarranty) colWarranty.style.display = isJasa ? 'none' : 'block';
+  if (colUnit) colUnit.style.display = isJasa ? 'none' : 'block';
+
+  // Update existing item rows (Sembunyikan cell Garansi & Satuan jika Jasa)
   document.querySelectorAll('.quotation-item-row').forEach(row => {
+    row.style.gridTemplateColumns = isJasa
+      ? 'minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px'
+      : 'minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px';
+
+    const cellWarranty = row.querySelector('.quo-cell-warranty');
+    const cellUnit = row.querySelector('.quo-cell-unit');
+    if (cellWarranty) cellWarranty.style.display = isJasa ? 'none' : 'block';
+    if (cellUnit) cellUnit.style.display = isJasa ? 'none' : 'block';
+
     const nameInput = row.querySelector('.item-name');
     const skuInput = row.querySelector('.item-sku');
-    const unitInput = row.querySelector('.item-unit');
-    const warrantyInput = row.querySelector('.item-warranty');
-
     if (nameInput) nameInput.placeholder = isJasa ? 'Uraian pekerjaan / layanan jasa' : 'Nama produk penawaran';
     if (skuInput) skuInput.placeholder = isJasa ? 'KODE-JASA' : 'SKU / Kode';
-    if (unitInput && (!unitInput.value || unitInput.value === 'Unit' || unitInput.value === 'Lot')) {
-      unitInput.value = isJasa ? 'Lot' : 'Unit';
-      unitInput.placeholder = isJasa ? 'Lot/Bulan/Titik' : 'Unit/Pcs';
-    }
-    if (warrantyInput && (!warrantyInput.value || warrantyInput.value === '12 Bulan' || warrantyInput.value === '30 Hari Pengerjaan')) {
-      warrantyInput.value = isJasa ? '30 Hari Pengerjaan' : '12 Bulan';
-    }
   });
+
+  // Update CARD 3: Klausul Garansi Produk (Sembunyikan untuk Jasa)
+  const card3Grid = document.getElementById('quo-card3-grid');
+  const warrantyClauseGroup = document.getElementById('quo-warranty-clause-group');
+  if (card3Grid) {
+    card3Grid.style.gridTemplateColumns = isJasa ? '1fr 1.2fr' : '1.2fr 1fr 1.2fr';
+  }
+  if (warrantyClauseGroup) {
+    warrantyClauseGroup.style.display = isJasa ? 'none' : 'block';
+  }
+
+  // Update CARD 4: Biaya Garansi 5% (Sembunyikan untuk Jasa)
+  const warrantyFeeRow = document.getElementById('quo-warranty-fee-row');
+  const subtotalLabel = document.getElementById('quo-subtotal-label');
+  if (warrantyFeeRow) {
+    warrantyFeeRow.style.display = isJasa ? 'none' : 'flex';
+  }
+  if (subtotalLabel) {
+    subtotalLabel.textContent = isJasa ? 'Subtotal:' : 'Subtotal (Item + Garansi):';
+  }
+
+  // Kalkulasi ulang total keuangan penawaran (Jasa tidak mengenakan biaya garansi)
+  calculateQuotationTotals();
 
   if (window.lucide) lucide.createIcons();
 }
@@ -340,12 +375,12 @@ function openQuotationModal(quotationData = null) {
         </div>
 
         <div style="border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; margin-bottom: 18px;">
-          <div style="display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px; gap: 8px; background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid var(--border-color); font-size: 11px; font-weight: 700; color: #475569;">
+          <div id="quo-items-header" style="display: grid; grid-template-columns: ${isJasa ? 'minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px' : 'minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px'}; gap: 8px; background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid var(--border-color); font-size: 11px; font-weight: 700; color: #475569;">
             <div id="quo-col-item-name">${isJasa ? 'Nama Jasa / Uraian Pekerjaan *' : 'Nama Produk / Deskripsi Item *'}</div>
             <div id="quo-col-item-sku">${isJasa ? 'Kode Jasa' : 'Kode / SKU'}</div>
-            <div>Garansi</div>
-            <div>Qty *</div>
-            <div>Satuan</div>
+            <div id="quo-col-item-warranty" style="${isJasa ? 'display: none;' : ''}">Garansi</div>
+            <div id="quo-col-item-qty">Qty *</div>
+            <div id="quo-col-item-unit" style="${isJasa ? 'display: none;' : ''}">Satuan</div>
             <div id="quo-col-item-price">${isJasa ? 'Tarif / Biaya (Rp) *' : 'Harga Satuan (Rp) *'}</div>
             <div>Total (Rp)</div>
             <div></div>
@@ -391,13 +426,13 @@ function openQuotationModal(quotationData = null) {
       <!-- CARD 3: KETENTUAN GARANSI, WAKTU PENGIRIMAN & PEMBAYARAN -->
       <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 18px 20px;">
         <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px;">
-          <i data-lucide="shield-check" style="width: 16px; height: 16px; color: #8b5cf6;"></i> Ketentuan Garansi, Lead Time & Pembayaran
+          <i data-lucide="shield-check" style="width: 16px; height: 16px; color: #8b5cf6;"></i> Ketentuan Lead Time & Pembayaran
         </h4>
 
-        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 14px;">
-          <div class="form-group">
-            <label class="form-label">Klausul Garansi Produk / Pengerjaan</label>
-            <input type="text" name="warranty" class="form-control" placeholder="Contoh: Garansi 12 Bulan suku cadang & servis" value="${escapeAttr(quotationData?.warranty || (isJasa ? 'Garansi pengerjaan 30 hari kalender setelah serah terima' : 'Garansi resmi 12 bulan untuk suku cadang dan servis'))}">
+        <div id="quo-card3-grid" style="display: grid; grid-template-columns: ${isJasa ? '1fr 1.2fr' : '1.2fr 1fr 1.2fr'}; gap: 14px;">
+          <div class="form-group" id="quo-warranty-clause-group" style="${isJasa ? 'display: none;' : ''}">
+            <label class="form-label">Klausul Garansi Produk</label>
+            <input type="text" name="warranty" class="form-control" placeholder="Contoh: Garansi 12 Bulan suku cadang & servis" value="${escapeAttr(quotationData?.warranty || (isJasa ? '' : 'Garansi resmi 12 bulan untuk suku cadang dan servis'))}">
           </div>
           <div class="form-group">
             <label class="form-label">Estimasi Waktu Pelaksanaan / Pengiriman (Lead Time)</label>
@@ -433,14 +468,14 @@ function openQuotationModal(quotationData = null) {
               <span class="text-muted font-bold">Total Nilai Penawaran:</span>
               <span id="quo-items-total" class="font-mono font-bold text-main">Rp 0</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; background: #f0fdf4; padding: 6px 10px; border-radius: 6px; border: 1px dashed #86efac;">
+            <div id="quo-warranty-fee-row" style="display: ${isJasa ? 'none' : 'flex'}; justify-content: space-between; align-items: center; font-size: 13px; background: #f0fdf4; padding: 6px 10px; border-radius: 6px; border: 1px dashed #86efac;">
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span class="font-bold text-success" style="color: #16a34a; font-size: 12.5px;">+ Biaya Garansi (5%):</span>
               </div>
               <span id="quo-warranty-fee" class="font-mono font-bold text-success" style="color: #16a34a;">Rp 0</span>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-top: 1px solid #e2e8f0; padding-top: 6px;">
-              <span class="text-muted font-bold">Subtotal (Item + Garansi):</span>
+              <span class="text-muted font-bold" id="quo-subtotal-label">${isJasa ? 'Subtotal:' : 'Subtotal (Item + Garansi):'}</span>
               <span id="quo-subtotal" class="font-mono font-bold text-main">Rp 0</span>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
@@ -498,12 +533,12 @@ function addQuotationItemRow(item = null) {
   const typeRadio = document.querySelector('input[name="quotationType"]:checked');
   const isJasa = typeRadio ? (typeRadio.value === 'jasa') : false;
 
-  const defaultUnit = item?.unit || (isJasa ? 'Lot' : 'Unit');
-  const defaultWarranty = item?.warranty || (isJasa ? '30 Hari Pengerjaan' : '12 Bulan');
+  const defaultUnit = item?.unit || (isJasa ? '' : 'Unit');
+  const defaultWarranty = item?.warranty || (isJasa ? '' : '12 Bulan');
 
   const row = document.createElement('div');
   row.className = 'quotation-item-row';
-  row.style = 'display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px; gap: 8px; align-items: center;';
+  row.style = `display: grid; grid-template-columns: ${isJasa ? 'minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px' : 'minmax(0, 2.4fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 40px'}; gap: 8px; align-items: center;`;
 
   row.innerHTML = `
     <div>
@@ -512,14 +547,14 @@ function addQuotationItemRow(item = null) {
     <div>
       <input type="text" class="form-control item-sku" placeholder="${isJasa ? 'KODE-JASA' : 'SKU / Kode'}" value="${escapeAttr(item?.sku || '')}">
     </div>
-    <div>
+    <div class="quo-cell-warranty" style="${isJasa ? 'display: none;' : ''}">
       <input type="text" class="form-control item-warranty" placeholder="Garansi item" value="${escapeAttr(defaultWarranty)}">
     </div>
     <div>
       <input type="number" class="form-control item-qty" placeholder="1" min="1" step="any" required value="${item?.qty || 1}" oninput="calculateQuotationTotals()">
     </div>
-    <div>
-      <input type="text" class="form-control item-unit" placeholder="${isJasa ? 'Lot/Bulan' : 'Unit/Pcs'}" value="${escapeAttr(defaultUnit)}">
+    <div class="quo-cell-unit" style="${isJasa ? 'display: none;' : ''}">
+      <input type="text" class="form-control item-unit" placeholder="${isJasa ? '' : 'Unit/Pcs'}" value="${escapeAttr(defaultUnit)}">
     </div>
     <div>
       <input type="number" class="form-control item-price" placeholder="0" min="0" step="500" required value="${item?.unitPrice || 0}" oninput="calculateQuotationTotals()">
@@ -618,9 +653,12 @@ function calculateQuotationTotals() {
     if (totalInput) totalInput.value = formatRupiah(total);
   });
 
-  // Biaya Garansi 5% dihitung dari total Produk & Jasa
+  const typeRadio = document.querySelector('input[name="quotationType"]:checked');
+  const isJasa = typeRadio ? (typeRadio.value === 'jasa') : false;
+
+  // Biaya Garansi 5% hanya berlaku untuk Produk Manufaktur, Jasa tidak mengenakan garansi
   const itemsTotal = mainItemsTotal + servicesTotal;
-  const warrantyFee = itemsTotal > 0 ? Math.round(itemsTotal * 0.05) : 0;
+  const warrantyFee = isJasa ? 0 : (itemsTotal > 0 ? Math.round(itemsTotal * 0.05) : 0);
   const subtotal = itemsTotal + warrantyFee;
 
   const discountInput = document.getElementById('quo-discount');
@@ -673,14 +711,17 @@ async function submitQuotation(event, id) {
     }
   }
 
+  const quotationType = form.querySelector('input[name="quotationType"]:checked')?.value || 'produk';
+  const isJasa = quotationType === 'jasa';
+
   const items = [];
   const rows = document.querySelectorAll('.quotation-item-row');
   rows.forEach(row => {
     const itemName = row.querySelector('.item-name')?.value.trim();
     const sku = row.querySelector('.item-sku')?.value.trim();
-    const warranty = row.querySelector('.item-warranty')?.value.trim();
+    const warranty = isJasa ? '' : (row.querySelector('.item-warranty')?.value.trim() || '');
     const qty = parseFloat(row.querySelector('.item-qty')?.value) || 1;
-    const unit = row.querySelector('.item-unit')?.value.trim() || 'Unit';
+    const unit = isJasa ? '' : (row.querySelector('.item-unit')?.value.trim() || 'Unit');
     const unitPrice = parseFloat(row.querySelector('.item-price')?.value) || 0;
     const total = qty * unitPrice;
 
@@ -698,7 +739,7 @@ async function submitQuotation(event, id) {
   document.querySelectorAll('.quotation-service-row').forEach(row => {
     const serviceName = row.querySelector('.service-name')?.value.trim();
     const qty = parseFloat(row.querySelector('.service-qty')?.value) || 1;
-    const unit = row.querySelector('.service-unit')?.value.trim() || 'Lot';
+    const unit = isJasa ? '' : (row.querySelector('.service-unit')?.value.trim() || 'Lot');
     const unitPrice = parseFloat(row.querySelector('.service-price')?.value) || 0;
     const total = qty * unitPrice;
     if (serviceName) {
@@ -707,7 +748,6 @@ async function submitQuotation(event, id) {
   });
 
   const { mainItemsTotal, servicesTotal, itemsTotal, warrantyFee, subtotal, discount, taxRate, taxAmount, grandTotal } = calculateQuotationTotals();
-  const quotationType = form.querySelector('input[name="quotationType"]:checked')?.value || 'produk';
 
   const payload = {
     quotationType,
@@ -720,8 +760,8 @@ async function submitQuotation(event, id) {
     quotationDate: form.quotationDate.value,
     validUntil: form.validUntil.value,
     status: isEdit ? (form.status?.value || 'Sent') : 'Sent',
-    warranty: form.warranty.value.trim(),
-    warrantyFee,
+    warranty: isJasa ? '-' : (form.warranty ? form.warranty.value.trim() : '-'),
+    warrantyFee: isJasa ? 0 : warrantyFee,
     mainItemsTotal,
     servicesTotal,
     itemsTotal,
@@ -792,7 +832,7 @@ function buildQuotationPrintableHtml(quo) {
   const mainItemsTotalVal = quo.mainItemsTotal !== undefined ? quo.mainItemsTotal : (quo.items ? quo.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0);
   const servicesTotalVal = quo.servicesTotal !== undefined ? quo.servicesTotal : (quo.additionalServices ? quo.additionalServices.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0);
   const itemsTotalVal = quo.itemsTotal || (mainItemsTotalVal + servicesTotalVal) || quo.subtotal;
-  const warrantyFeeVal = quo.warrantyFee !== undefined ? quo.warrantyFee : Math.round(itemsTotalVal * 0.05);
+  const warrantyFeeVal = isJasa ? 0 : (quo.warrantyFee !== undefined ? quo.warrantyFee : Math.round(itemsTotalVal * 0.05));
 
   const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
     companyName: 'UNIT BISNIS MANDIRI (UBM)',
@@ -855,22 +895,30 @@ function buildQuotationPrintableHtml(quo) {
       <!-- TABEL DAFTAR BARANG / JASA (STRICTLY NO HORIZONTAL SCROLL) -->
       <table class="doc-table" style="width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; margin-bottom: 16px;">
         <colgroup>
-          <col style="width: 5%;">
-          <col style="width: 36%;">
-          <col style="width: 14%;">
-          <col style="width: 8%;">
-          <col style="width: 9%;">
-          <col style="width: 13%;">
-          <col style="width: 15%;">
+          ${isJasa ? `
+            <col style="width: 6%;">
+            <col style="width: 52%;">
+            <col style="width: 10%;">
+            <col style="width: 16%;">
+            <col style="width: 16%;">
+          ` : `
+            <col style="width: 5%;">
+            <col style="width: 36%;">
+            <col style="width: 14%;">
+            <col style="width: 8%;">
+            <col style="width: 9%;">
+            <col style="width: 13%;">
+            <col style="width: 15%;">
+          `}
         </colgroup>
         <thead>
           <tr style="background: #f1f5f9;">
             <th style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">No</th>
             <th style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;">${isJasa ? 'Uraian Pekerjaan / Layanan Jasa' : 'Deskripsi Produk / Layanan Teknik'}</th>
-            <th style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Garansi</th>
+            ${!isJasa ? `<th style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Garansi</th>` : ''}
             <th style="text-align: center; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">Qty</th>
-            <th style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Satuan</th>
-            <th style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${isJasa ? 'Tarif Satuan' : 'Harga Satuan'}</th>
+            ${!isJasa ? `<th style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Satuan</th>` : ''}
+            <th style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${isJasa ? 'Tarif / Biaya' : 'Harga Satuan'}</th>
             <th style="text-align: right; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;">Total (Rp)</th>
           </tr>
         </thead>
@@ -882,29 +930,33 @@ function buildQuotationPrintableHtml(quo) {
                 <div class="font-bold">${escapeHtml(it.itemName)}</div>
                 ${it.sku ? `<div class="font-sm text-muted font-mono font-xs" style="font-size: 10px;">${isJasa ? 'Kode' : 'SKU'}: ${escapeHtml(it.sku)}</div>` : ''}
               </td>
-              <td style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1; word-break: break-word;">
-                <span class="badge badge-secondary font-xs" style="font-size: 9.5px; padding: 2px 4px;">${escapeHtml(it.warranty || quo.warranty || (isJasa ? '30 Hari' : '12 Bulan'))}</span>
-              </td>
+              ${!isJasa ? `
+                <td style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1; word-break: break-word;">
+                  <span class="badge badge-secondary font-xs" style="font-size: 9.5px; padding: 2px 4px;">${escapeHtml(it.warranty || quo.warranty || '12 Bulan')}</span>
+                </td>
+              ` : ''}
               <td style="text-align: center; font-weight: 700; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">${it.qty}</td>
-              <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(it.unit || (isJasa ? 'Lot' : 'Unit'))}</td>
+              ${!isJasa ? `
+                <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(it.unit || 'Unit')}</td>
+              ` : ''}
               <td style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.unitPrice)}</td>
               <td style="text-align: right; font-weight: 700; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.total || (it.qty * it.unitPrice))}</td>
             </tr>
           `).join('')}
           ${(quo.additionalServices && quo.additionalServices.length > 0) ? `
             <tr style="background: #f8fafc;">
-              <td colspan="7" style="padding: 6px 8px; font-weight: 700; font-size: 10.5px; color: #4338ca; border: 1px solid #cbd5e1; text-transform: uppercase;">
+              <td colspan="${isJasa ? '5' : '7'}" style="padding: 6px 8px; font-weight: 700; font-size: 10.5px; color: #4338ca; border: 1px solid #cbd5e1; text-transform: uppercase;">
                 Rincian Jasa, Instalasi & Layanan Tambahan (Keterangan Non-BOM)
               </td>
             </tr>
             ${quo.additionalServices.map((svc, sIdx) => `
               <tr>
                 <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${(quo.items?.length || 0) + sIdx + 1}</td>
-                <td colspan="2" style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; color: #4338ca; word-break: break-word;">
+                <td style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; color: #4338ca; word-break: break-word;">
                   <div class="font-bold">${escapeHtml(svc.serviceName)}</div>
                 </td>
                 <td style="text-align: center; font-weight: 700; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">${svc.qty}</td>
-                <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(svc.unit || 'Lot')}</td>
+                ${!isJasa ? `<td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(svc.unit || 'Lot')}</td>` : ''}
                 <td style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(svc.unitPrice)}</td>
                 <td style="text-align: right; font-weight: 700; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; color: #4338ca;" class="font-mono">${formatRupiah(svc.total || (svc.qty * svc.unitPrice))}</td>
               </tr>
@@ -927,7 +979,7 @@ function buildQuotationPrintableHtml(quo) {
             </div>
           ` : ''}
           <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; font-weight: 600;">
-            <span>Total Produk & Jasa:</span>
+            <span>${isJasa ? 'Total Jasa:' : 'Total Produk & Jasa:'}</span>
             <span class="font-mono">${formatRupiah(itemsTotalVal)}</span>
           </div>
           ${warrantyFeeVal > 0 ? `
@@ -937,7 +989,7 @@ function buildQuotationPrintableHtml(quo) {
             </div>
           ` : ''}
           <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; font-weight: 700; border-top: 1px dashed #cbd5e1;">
-            <span>Subtotal (Item + Garansi):</span>
+            <span>${isJasa ? 'Subtotal:' : 'Subtotal (Item + Garansi):'}</span>
             <span class="font-mono">${formatRupiah(quo.subtotal)}</span>
           </div>
           ${discountRow}
@@ -956,7 +1008,7 @@ function buildQuotationPrintableHtml(quo) {
       <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 14px; margin-bottom: 24px; font-size: 11px; line-height: 1.55;">
         <div class="font-bold text-main" style="margin-bottom: 5px; font-size: 11.5px;">Syarat & Ketentuan Penawaran (Terms & Conditions):</div>
         <ol style="margin: 0; padding-left: 18px;">
-          <li><strong>Garansi ${isJasa ? 'Pengerjaan / Layanan' : 'Produk / Pengerjaan'}:</strong> ${escapeHtml(quo.warranty || (isJasa ? 'Garansi pengerjaan 30 hari kalender.' : 'Garansi 12 bulan untuk servis dan suku cadang.'))}</li>
+          ${!isJasa && quo.warranty && quo.warranty !== '-' ? `<li><strong>Garansi Produk:</strong> ${escapeHtml(quo.warranty)}</li>` : ''}
           <li><strong>Waktu Penyerahan (Lead Time):</strong> ${escapeHtml(quo.leadTime || (isJasa ? 'Sesuai kesepakatan target milestone.' : 'Sesuai kesepakatan setelah PO diterima.'))}</li>
           <li><strong>Ketentuan Pembayaran:</strong> ${escapeHtml(quo.paymentTerms || 'DP 50%, Pelunasan sebelum barang diserahterimakan.')}</li>
           <li><strong>Masa Berlaku Penawaran:</strong> Penawaran harga ini berlaku hingga tanggal <strong>${quo.validUntil || '-'}</strong>.</li>
