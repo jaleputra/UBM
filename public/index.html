@@ -3594,15 +3594,14 @@
   </div>
 
   <!-- MODAL UPDATE STATUS PEMBAYARAN HAK KERJASAMA (TAKUMI DARI AYUMI) -->
-  <div class="modal" id="modal-update-partnership-payment">
-    <div class="modal-backdrop" onclick="closeModal('modal-update-partnership-payment')"></div>
+  <div class="modal-overlay" id="modal-update-partnership-payment" onclick="if(event.target === this) closeModal('modal-update-partnership-payment')">
     <div class="modal-container" style="max-width: 520px; width: 92vw;">
       <div class="modal-header">
         <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
           <i data-lucide="credit-card" style="width: 20px; height: 20px; color: #4338ca;"></i>
           <span>Update Status Pembayaran Hak Takumi</span>
         </h3>
-        <button type="button" class="btn-close" onclick="closeModal('modal-update-partnership-payment')">&times;</button>
+        <button type="button" class="btn-close" onclick="closeModal('modal-update-partnership-payment')"><i data-lucide="x"></i></button>
       </div>
       <form id="form-update-partnership-payment" onsubmit="event.preventDefault(); savePartnershipPaymentStatus();">
         <input type="hidden" id="paystatus-partnership-id">
