@@ -1728,11 +1728,11 @@ function renderDashboardProjectGantt() {
     return;
   }
 
-  // 3. Compute dynamic date bounds for timeline (fokus pada periode aktif agar tidak gepeng)
+  // 3. Compute dynamic date bounds for weekly timeline (Format MINGGU bukan hari)
   const todayDate = new Date(todayStr);
-  const activeDates = [];
-  activeDates.push(todayDate);
+  todayDate.setHours(0, 0, 0, 0);
 
+  const activeDates = [todayDate];
   displayProjects.forEach(p => {
     if (p.startDate && p.startDate !== '-') activeDates.push(new Date(p.startDate));
     if (p.dueDate && p.dueDate !== '-') activeDates.push(new Date(p.dueDate));
@@ -1745,128 +1745,165 @@ function renderDashboardProjectGantt() {
   const minTimeRaw = Math.min(...activeDates.map(d => d.getTime()));
   const maxTimeRaw = Math.max(...activeDates.map(d => d.getTime()));
 
-  // Batasi agar tanggal mulai tidak mundur terlalu jauh ke masa lalu (maksimal 7 hari sebelum hari ini)
-  const minDateLimit = new Date(todayDate);
-  minDateLimit.setDate(minDateLimit.getDate() - 7);
-
-  const effectiveMinTime = Math.max(minTimeRaw, minDateLimit.getTime());
-  const minDate = new Date(effectiveMinTime);
-  minDate.setDate(minDate.getDate() - 2);
-
-  const maxDate = new Date(maxTimeRaw);
-  maxDate.setDate(maxDate.getDate() + 4);
-
-  // Pastikan minimal rentang 18 hari untuk layout proporsional
-  const diffTimeMs = maxDate.getTime() - minDate.getTime();
-  const diffDaysCount = Math.round(diffTimeMs / (1000 * 60 * 60 * 24));
-  if (diffDaysCount < 18) {
-    maxDate.setDate(maxDate.getDate() + (18 - diffDaysCount));
+  // Helper untuk mendapatkan awal minggu (Senin) & akhir minggu (Minggu)
+  function getMondayOfWeek(d) {
+    const dt = new Date(d);
+    const day = dt.getDay();
+    const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+    dt.setDate(diff);
+    dt.setHours(0, 0, 0, 0);
+    return dt;
   }
 
-  // Generate sequence of days
-  const days = [];
-  const dayNamesShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  function getSundayOfWeek(d) {
+    const mon = getMondayOfWeek(d);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+    sun.setHours(23, 59, 59, 999);
+    return sun;
+  }
+
+  // Batasi rentang awal maksimal 2 minggu sebelum hari ini agar timeline tidak melar ke masa lalu
+  const maxPastLimit = new Date(todayDate);
+  maxPastLimit.setDate(maxPastLimit.getDate() - 14);
+
+  const effectiveMinTime = Math.max(minTimeRaw, maxPastLimit.getTime());
+  const startMonday = getMondayOfWeek(effectiveMinTime);
+
+  // Pastikan rentang akhir minimal 4 minggu ke depan dari hari ini
+  const minFutureLimit = new Date(todayDate);
+  minFutureLimit.setDate(minFutureLimit.getDate() + 28);
+  const effectiveMaxTime = Math.max(maxTimeRaw, minFutureLimit.getTime());
+  const endSunday = getSundayOfWeek(effectiveMaxTime);
+
+  // Generate Array Minggu (Weeks)
+  const weeks = [];
+  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const monthNamesIndo = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
-  let iterDate = new Date(minDate);
-  while (iterDate <= maxDate) {
-    const dStr = iterDate.toISOString().split('T')[0];
-    const dayOfWeek = iterDate.getDay();
-    const dayNum = iterDate.getDate();
-    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-    const isToday = (dStr === todayStr);
+  let iterMon = new Date(startMonday);
+  let weekIndex = 1;
 
-    days.push({
-      dateStr: dStr,
-      dayNum,
-      dayName: dayNamesShort[dayOfWeek],
-      monthName: monthNamesIndo[iterDate.getMonth()],
-      monthIdx: iterDate.getMonth(),
-      year: iterDate.getFullYear(),
-      isWeekend,
-      isToday,
-      time: iterDate.getTime()
+  while (iterMon <= endSunday) {
+    const iterSun = new Date(iterMon);
+    iterSun.setDate(iterSun.getDate() + 6);
+    iterSun.setHours(23, 59, 59, 999);
+
+    const sDay = iterMon.getDate();
+    const eDay = iterSun.getDate();
+    const sMonth = monthNamesShort[iterMon.getMonth()];
+    const eMonth = monthNamesShort[iterSun.getMonth()];
+
+    // Label rentang minggu sangat ringkas: misal "20-26 Okt" atau "27 Okt-2 Nov"
+    const rangeLabel = (sMonth === eMonth) ? `${sDay}-${eDay} ${sMonth}` : `${sDay} ${sMonth}-${eDay} ${eMonth}`;
+    const isCurrentWeek = (todayDate >= iterMon && todayDate <= iterSun);
+
+    weeks.push({
+      index: weekIndex++,
+      startDate: new Date(iterMon),
+      endDate: new Date(iterSun),
+      startTime: iterMon.getTime(),
+      endTime: iterSun.getTime(),
+      label: `M${weekIndex - 1}`,
+      rangeLabel,
+      monthName: monthNamesIndo[iterMon.getMonth()],
+      monthIdx: iterMon.getMonth(),
+      year: iterMon.getFullYear(),
+      isCurrentWeek
     });
 
-    iterDate.setDate(iterDate.getDate() + 1);
+    iterMon.setDate(iterMon.getDate() + 7);
   }
 
-  // Calculate layout widths based on Fit-Screen mode (No Horizontal Scroll)
-  const scrollContainer = document.querySelector('.gantt-scroll-container');
-  const isFitScreen = state.ganttFitScreen !== false; // Default: true (fit to screen)
-  if (scrollContainer) {
-    if (isFitScreen) scrollContainer.classList.add('fit-screen');
-    else scrollContainer.class  // Sticky columns total width: 210 + 110 + 110 + 90 = 520px (Super Compact)
-  const stickyWidth = 520;
-  const containerClientWidth = scrollContainer ? (scrollContainer.clientWidth || window.innerWidth - 280) : 1100;
-  const availableTimelineWidth = Math.max(380, containerClientWidth - stickyWidth - 4);
-
-  const dayWidth = isFitScreen 
-    ? Math.max(22, Math.floor(availableTimelineWidth / days.length)) 
-    : 32;
-  const totalTimelineWidth = isFitScreen 
-    ? Math.max(availableTimelineWidth, days.length * dayWidth)
-    : (days.length * dayWidth);
-
-  const todayIndex = days.findIndex(d => d.isToday);
-  const todayLeftPx = todayIndex >= 0 ? (todayIndex * dayWidth + (dayWidth / 2)) : -100;
-
-  // Group consecutive days by Month for Header
+  // Grouping Minggu berdasarkan Bulan untuk Header Baris 1
   const monthGroups = [];
   let currentGroup = null;
-  days.forEach((d, idx) => {
-    const label = `${d.monthName} ${d.year}`;
+  weeks.forEach(w => {
+    const label = `${w.monthName.toUpperCase()} ${w.year}`;
     if (!currentGroup || currentGroup.label !== label) {
       if (currentGroup) monthGroups.push(currentGroup);
-      currentGroup = { label, count: 1, startIndex: idx };
+      currentGroup = { label, weekCount: 1 };
     } else {
-      currentGroup.count++;
+      currentGroup.weekCount++;
     }
   });
   if (currentGroup) monthGroups.push(currentGroup);
 
-  // Date positioning helper
+  // Hitung Lebar Layout Timeline (Fit Screen & Compact)
+  const scrollContainer = document.querySelector('.gantt-scroll-container');
+  const isFitScreen = state.ganttFitScreen !== false;
+  if (scrollContainer) {
+    if (isFitScreen) scrollContainer.classList.add('fit-screen');
+    else scrollContainer.classList.remove('fit-screen');
+  }
+
+  const stickyWidth = 515; // 220 + 110 + 100 + 85 = 515px
+  const containerClientWidth = scrollContainer ? (scrollContainer.clientWidth || window.innerWidth - 280) : 1100;
+  const availableTimelineWidth = Math.max(450, containerClientWidth - stickyWidth - 4);
+
+  const weekWidth = isFitScreen 
+    ? Math.max(75, Math.floor(availableTimelineWidth / weeks.length)) 
+    : 85;
+  const totalTimelineWidth = weeks.length * weekWidth;
+
+  const timelineStartTime = weeks[0].startTime;
+  const timelineEndTime = weeks[weeks.length - 1].endTime;
+  const totalTimelineMs = timelineEndTime - timelineStartTime;
+
+  // Posisi Garis Hari Ini (Merah)
+  const todayTime = todayDate.getTime();
+  const todayLeftPx = (todayTime >= timelineStartTime && todayTime <= timelineEndTime)
+    ? Math.round(((todayTime - timelineStartTime) / totalTimelineMs) * totalTimelineWidth)
+    : -100;
+
+  // Helper kalkulasi posisi bar proyek / task
   function calculateBarMetrics(startStr, endStr) {
     const sStr = startStr && startStr !== '-' ? startStr : todayStr;
     const eStr = endStr && endStr !== '-' ? endStr : sStr;
 
-    const sTime = new Date(sStr).getTime();
-    const eTime = new Date(eStr).getTime();
+    const sDate = new Date(sStr);
+    sDate.setHours(0, 0, 0, 0);
+    const eDate = new Date(eStr);
+    eDate.setHours(23, 59, 59, 999);
 
-    const minTime = days[0].time;
-    const sOffsetDays = Math.max(0, Math.round((sTime - minTime) / (1000 * 60 * 60 * 24)));
-    const eOffsetDays = Math.min(days.length - 1, Math.max(sOffsetDays, Math.round((eTime - minTime) / (1000 * 60 * 60 * 24))));
+    const sTime = sDate.getTime();
+    const eTime = Math.max(sTime, eDate.getTime());
 
-    const durationDays = Math.max(1, (eOffsetDays - sOffsetDays) + 1);
-    const leftPx = sOffsetDays * dayWidth + 2;
-    const widthPx = Math.max(16, durationDays * dayWidth - 4);
+    const clampedSTime = Math.max(timelineStartTime, Math.min(timelineEndTime, sTime));
+    const clampedETime = Math.max(timelineStartTime, Math.min(timelineEndTime, eTime));
+
+    const leftPx = Math.round(((clampedSTime - timelineStartTime) / totalTimelineMs) * totalTimelineWidth);
+    const rightPx = Math.round(((clampedETime - timelineStartTime) / totalTimelineMs) * totalTimelineWidth);
+    const widthPx = Math.max(18, rightPx - leftPx);
+
+    const durationDays = Math.max(1, Math.round((eTime - sTime) / (1000 * 60 * 60 * 24)) + 1);
 
     return { leftPx, widthPx, durationDays };
   }
 
-  // 4. Render Table Header with Compact Sticky Offsets (0, 210, 320, 430)
+  // 4. Render Table Header dengan Skala Mingguan
   const headerHtml = `
     <thead>
       <tr style="height: 48px;">
-        <th class="gantt-col-task" style="position: sticky; left: 0; z-index: 20; background: #f8fafc; width: 210px; min-width: 200px; max-width: 210px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+        <th class="gantt-col-task" style="position: sticky; left: 0; z-index: 20; background: #f8fafc; width: 220px; min-width: 220px; max-width: 220px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
           <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="layers" style="width: 13px; height: 13px; color: #4f46e5;"></i>
             <span style="font-weight: 700; font-size: 11px; color: #334155;">PROYEK & TAHAPAN</span>
           </div>
         </th>
-        <th class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 20; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+        <th class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 20; background: #f8fafc; width: 110px; min-width: 110px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
           <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="user-check" style="width: 13px; height: 13px; color: #0284c7;"></i>
             <span style="font-weight: 700; font-size: 11px; color: #334155;">PIC / LEAD</span>
           </div>
         </th>
-        <th class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 20; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+        <th class="gantt-col-schedule" style="position: sticky; left: 330px; z-index: 20; background: #f8fafc; width: 100px; min-width: 100px; max-width: 100px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
           <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="calendar" style="width: 13px; height: 13px; color: #16a34a;"></i>
             <span style="font-weight: 700; font-size: 11px; color: #334155;">JADWAL</span>
           </div>
         </th>
-        <th class="gantt-col-status" style="position: sticky; left: 430px; z-index: 20; background: #f8fafc; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 6px 8px;">
+        <th class="gantt-col-status" style="position: sticky; left: 430px; z-index: 20; background: #f8fafc; width: 85px; min-width: 85px; max-width: 85px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 6px 8px;">
           <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="activity" style="width: 13px; height: 13px; color: #d97706;"></i>
             <span style="font-weight: 700; font-size: 11px; color: #334155;">STATUS</span>
@@ -1874,24 +1911,24 @@ function renderDashboardProjectGantt() {
         </th>
         <th class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; min-width: ${totalTimelineWidth}px; padding: 0;">
           <div class="gantt-timeline-header-container" style="width: ${totalTimelineWidth}px;">
-            <!-- Month Row -->
+            <!-- Bulan Row -->
             <div class="gantt-month-row" style="height: 22px;">
               ${monthGroups.map(mg => `
-                <div class="gantt-month-cell" style="width: ${mg.count * dayWidth}px; font-weight: 700; font-size: 10.5px; color: #334155; border-right: 1px solid #cbd5e1; line-height: 22px;">
+                <div class="gantt-month-cell" style="width: ${mg.weekCount * weekWidth}px; font-weight: 700; font-size: 10.5px; color: #334155; border-right: 1px solid #cbd5e1; line-height: 22px;">
                   ${mg.label}
                 </div>
               `).join('')}
             </div>
-            <!-- Days Row -->
-            <div class="gantt-days-row" style="position: relative; height: 26px;">
-              ${days.map(d => `
-                <div class="gantt-day-cell ${d.isWeekend ? 'weekend' : ''} ${d.isToday ? 'today' : ''}" style="width: ${dayWidth}px; ${d.isToday ? 'background: #fee2e2; border-bottom: 2px solid #ef4444;' : ''}">
-                  <span style="font-size: 7.5px; text-transform: uppercase; ${d.isToday ? 'color: #dc2626; font-weight: 800;' : ''}">${d.dayName}</span>
-                  <span style="font-weight: 700; font-size: 9.5px; ${d.isToday ? 'color: #b91c1c; font-weight: 800;' : ''}">${d.dayNum}</span>
+            <!-- Minggu Row (Weekly Scale) -->
+            <div class="gantt-weeks-row" style="position: relative; height: 26px;">
+              ${weeks.map(w => `
+                <div class="gantt-week-cell ${w.isCurrentWeek ? 'current-week' : ''}" style="width: ${weekWidth}px;">
+                  <span style="font-size: 8px; font-weight: 700; text-transform: uppercase;">${w.label}</span>
+                  <span style="font-weight: 600; font-size: 9px;">${w.rangeLabel}</span>
                 </div>
               `).join('')}
               ${todayLeftPx >= 0 ? `
-                <div class="gantt-today-badge" style="left: ${todayLeftPx}px;">HARI INI (${days[todayIndex].dayNum} ${days[todayIndex].monthName.substring(0, 3)})</div>
+                <div class="gantt-today-badge" style="left: ${todayLeftPx}px;">HARI INI</div>
               ` : ''}
             </div>
           </div>
@@ -1899,6 +1936,9 @@ function renderDashboardProjectGantt() {
       </tr>
     </thead>
   `;
+
+  // Registry Tooltip Terpusat (Bebas Quoting Bug)
+  window._ganttTooltips = {};
 
   // 5. Render Table Body (Projects and Nested Milestones)
   let rowsHtml = '';
@@ -1913,27 +1953,25 @@ function renderDashboardProjectGantt() {
 
     // Calculate project progress
     let projProgress = proj.progressPercent;
-    if (totalMs > 0 && projProgress === 0) {
-      projProgress = Math.min(100, Math.round(((completedMs + inProgressMs * 0.5) / totalMs) * 100));
+    if (typeof projProgress !== 'number') {
+      if (proj.status === 'Completed') projProgress = 100;
+      else if (totalMs > 0) projProgress = Math.round((completedMs / totalMs) * 100);
+      else projProgress = 0;
     }
 
     // Determine status badge
     let statusBadgeClass = 'badge-secondary';
     let statusLabel = proj.status || 'Planning';
-    let statusIcon = 'clock';
 
     if (projProgress >= 100 || proj.status === 'Completed') {
       statusBadgeClass = 'badge-success';
-      statusLabel = 'Completed';
-      statusIcon = 'check-circle';
+      statusLabel = 'Done';
     } else if (overdueMs > 0 || (proj.dueDate && proj.dueDate < todayStr && proj.status !== 'Completed')) {
       statusBadgeClass = 'badge-danger';
       statusLabel = 'Overdue';
-      statusIcon = 'alert-triangle';
     } else if (inProgressMs > 0 || proj.status === 'In Progress') {
       statusBadgeClass = proj.isService ? 'badge-warning' : (proj.isInternal ? 'badge-info' : 'badge-purple');
-      statusLabel = 'In Progress';
-      statusIcon = 'play-circle';
+      statusLabel = 'Progress';
     }
 
     const projMetrics = calculateBarMetrics(proj.startDate, proj.dueDate);
@@ -1957,35 +1995,36 @@ function renderDashboardProjectGantt() {
 
     if (proj.isService) {
       actionBtnHtml = `
-        <button type="button" class="btn btn-xs btn-outline" onclick="if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${proj.orderId || proj.id}');" title="Pengajuan Biaya Operasional Jasa" style="font-size: 8.5px; padding: 1px 4px; color: #ea580c; border-color: #fed7aa; background: #fff7ed; flex-shrink: 0; white-space: nowrap;">
+        <button type="button" class="btn btn-xs btn-outline" onclick="if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${proj.orderId || proj.id}');" title="Pengajuan Biaya Operasional Jasa" style="font-size: 8px; padding: 1px 4px; color: #ea580c; border-color: #fed7aa; background: #fff7ed; flex-shrink: 0; white-space: nowrap;">
           <i data-lucide="car" style="width: 10px; height: 10px;"></i> Biaya Ops
         </button>
       `;
       barOnClickAttr = `if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${proj.orderId || proj.id}');`;
     } else if (proj.isInternal) {
       actionBtnHtml = `
-        <button type="button" class="btn btn-xs btn-outline" onclick="navigateTo('logs')" title="Lihat Aktivitas Log UBM" style="font-size: 8.5px; padding: 1px 4px; color: #0d9488; border-color: #99f6e4; background: #f0fdfa; flex-shrink: 0; white-space: nowrap;">
+        <button type="button" class="btn btn-xs btn-outline" onclick="navigateTo('logs')" title="Lihat Aktivitas Log UBM" style="font-size: 8px; padding: 1px 4px; color: #0d9488; border-color: #99f6e4; background: #f0fdfa; flex-shrink: 0; white-space: nowrap;">
           <i data-lucide="list" style="width: 10px; height: 10px;"></i> Log
         </button>
       `;
       barOnClickAttr = `navigateTo('logs');`;
     } else {
       actionBtnHtml = `
-        <button type="button" class="btn btn-xs btn-outline" onclick="openProjectTimelinePage('${proj.orderId || proj.id}')" title="Detail Timeline Gantt" style="font-size: 8.5px; padding: 1px 4px; flex-shrink: 0; white-space: nowrap;">
+        <button type="button" class="btn btn-xs btn-outline" onclick="openProjectTimelinePage('${proj.orderId || proj.id}')" title="Detail Timeline Gantt" style="font-size: 8px; padding: 1px 4px; flex-shrink: 0; white-space: nowrap;">
           <i data-lucide="external-link" style="width: 10px; height: 10px;"></i> Timeline
         </button>
       `;
       barOnClickAttr = `openProjectTimelinePage('${proj.orderId || proj.id}');`;
     }
 
-    // Tooltip data for project bar
-    const projTooltipHtml = `
+    // Registrasi Tooltip Project ke Registry
+    const projTipKey = `tip_proj_${proj.id}`;
+    window._ganttTooltips[projTipKey] = `
       <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : (proj.isInternal ? '#5eead4' : '#a5b4fc')}; font-size: 11px; margin-bottom: 2px;">
         ${proj.isService ? '🛠️ PROYEK JASA' : (proj.isInternal ? '🏢 PROYEK MANDIRI UBM' : '📦 PROYEK MANUFAKTUR')}
       </div>
       <div style="font-weight: 700; font-size: 12.5px; margin-bottom: 5px;">${escapeHtml(proj.projectName)}</div>
-      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">🏢 Klien / Instansi: <strong style="color: #fff;">${escapeHtml(proj.customerName)}</strong></div>
-      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC / Lead: <strong style="color: #fff;">${escapeHtml(proj.projectLead)}</strong> (${escapeHtml(proj.department)})</div>
+      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">🏢 Klien: <strong style="color: #fff;">${escapeHtml(proj.customerName)}</strong></div>
+      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC: <strong style="color: #fff;">${escapeHtml(proj.projectLead)}</strong> (${escapeHtml(proj.department)})</div>
       <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📅 Jadwal: <strong style="color: #fff;">${formatGanttDate(proj.startDate)} &rarr; ${formatGanttDate(proj.dueDate)}</strong> (${projMetrics.durationDays} hari)</div>
       <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📊 Progress: <strong style="color: #4ade80;">${projProgress}%</strong> (${completedMs}/${totalMs} Task Selesai)</div>
       <div style="font-size: 11px; color: #cbd5e1;">⚡ Status: <strong style="color: #facc15;">${statusLabel}</strong></div>
@@ -1994,57 +2033,57 @@ function renderDashboardProjectGantt() {
     // A. Project Parent Row (Compact: height 32px)
     rowsHtml += `
       <tr class="gantt-project-header-row ${proj.isService ? 'is-service-project' : ''}" style="height: 32px;">
-        <!-- Col 1: Project Info (Width: 210px, Left: 0) -->
-        <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 10; background: #f8fafc; width: 210px; min-width: 200px; max-width: 210px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+        <!-- Col 1: Project Info (Width: 220px, Left: 0) -->
+        <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 10; background: #f8fafc; width: 220px; min-width: 220px; max-width: 220px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
           <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
             <button type="button" class="btn-ghost btn-xs" onclick="toggleGanttProjectCollapse('${proj.id}')" title="${isCollapsed ? 'Buka Task' : 'Tutup Task'}" style="padding: 1px; display: inline-flex; align-items: center; justify-content: center; color: #475569; flex-shrink: 0;">
               <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" style="width: 13px; height: 13px;"></i>
             </button>
             <div style="min-width: 0; flex: 1; overflow: hidden;">
-              <div class="font-bold text-main" style="font-size: 11.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;" title="${escapeAttr(proj.projectName)}">
+              <div class="font-bold text-main" style="font-size: 11px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;" title="${escapeAttr(proj.projectName)}">
                 ${escapeHtml(proj.projectName)}
               </div>
               <div style="display: flex; align-items: center; gap: 4px; margin-top: 1px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
                 ${typeTag}
-                <span class="mono-id font-bold ${codeClass}" style="font-size: 9px; background: rgba(0,0,0,0.04); padding: 0 3px; border-radius: 3px;">${codeBadge}</span>
-                <span style="font-size: 9.5px; color: #64748b; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(proj.customerName)}</span>
+                <span class="mono-id font-bold ${codeClass}" style="font-size: 8.5px; background: rgba(0,0,0,0.04); padding: 0 3px; border-radius: 3px;">${codeBadge}</span>
+                <span style="font-size: 9px; color: #64748b; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(proj.customerName)}</span>
               </div>
             </div>
             ${actionBtnHtml}
           </div>
         </td>
 
-        <!-- Col 2: PIC Lead (Width: 110px, Left: 210px) -->
-        <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 10; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+        <!-- Col 2: PIC Lead (Width: 110px, Left: 220px) -->
+        <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 10; background: #f8fafc; width: 110px; min-width: 110px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
           <div style="display: flex; align-items: center; gap: 5px; overflow: hidden;">
             <div style="width: 18px; height: 18px; border-radius: 50%; background: ${proj.isService ? '#ea580c' : (proj.isInternal ? '#0f766e' : '#4f46e5')}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 700; flex-shrink: 0;">
               ${getPicAvatar(proj.projectLead)}
             </div>
             <div style="min-width: 0; overflow: hidden;">
-              <div class="font-bold text-main" style="font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(proj.projectLead)}">${escapeHtml(proj.projectLead)}</div>
+              <div class="font-bold text-main" style="font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(proj.projectLead)}">${escapeHtml(proj.projectLead)}</div>
             </div>
           </div>
         </td>
 
-        <!-- Col 3: Schedule (Width: 110px, Left: 320px) -->
-        <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 10; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
-          <div style="font-size: 10px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <!-- Col 3: Schedule (Width: 100px, Left: 330px) -->
+        <td class="gantt-col-schedule" style="position: sticky; left: 330px; z-index: 10; background: #f8fafc; width: 100px; min-width: 100px; max-width: 100px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+          <div style="font-size: 9.5px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             ${formatGanttDate(proj.startDate)} &rarr; ${formatGanttDate(proj.dueDate)}
           </div>
           <div style="margin-top: 1px;">
-            <span class="badge badge-secondary" style="font-size: 8.5px; padding: 0 4px; font-weight: 600;">
+            <span class="badge badge-secondary" style="font-size: 8px; padding: 0 4px; font-weight: 600;">
               ${projMetrics.durationDays}h
             </span>
           </div>
         </td>
 
-        <!-- Col 4: Status & Progress (Width: 90px, Left: 430px) -->
-        <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 10; background: #f8fafc; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 4px 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; margin-bottom: 2px;">
-            <span class="badge ${statusBadgeClass}" style="font-size: 8.5px; padding: 1px 4px;">
+        <!-- Col 4: Status & Progress (Width: 85px, Left: 430px) -->
+        <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 10; background: #f8fafc; width: 85px; min-width: 85px; max-width: 85px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 4px 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9px; margin-bottom: 2px;">
+            <span class="badge ${statusBadgeClass}" style="font-size: 8px; padding: 1px 3px;">
               ${statusLabel}
             </span>
-            <span class="font-bold font-mono" style="font-size: 9px; color: #1e293b;">${projProgress}%</span>
+            <span class="font-bold font-mono" style="font-size: 8.5px; color: #1e293b;">${projProgress}%</span>
           </div>
           <div style="height: 3px; background: #e2e8f0; border-radius: 99px; overflow: hidden;">
             <div style="width: ${projProgress}%; height: 100%; background: ${projProgress >= 100 ? '#10b981' : (proj.isService ? '#ea580c' : (proj.isInternal ? '#0f766e' : '#4f46e5'))};"></div>
@@ -2054,24 +2093,23 @@ function renderDashboardProjectGantt() {
         <!-- Col 5: Gantt Bar Track Canvas -->
         <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
           <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 32px;">
-            <!-- Grid lines -->
-            ${days.map((d, dIdx) => `
-              <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
+            <!-- Grid lines per week -->
+            ${weeks.map((w, wIdx) => `
+              <div class="gantt-grid-line ${w.isCurrentWeek ? 'current-week-grid' : ''}" style="left: ${wIdx * weekWidth}px; width: ${weekWidth}px;"></div>
             `).join('')}
 
             <!-- Today marker line -->
             ${todayLeftPx >= 0 ? `<div class="gantt-today-line" style="left: ${todayLeftPx}px;"></div>` : ''}
 
-            <!-- Project Summary Bar (Compact & Clean: No floating external label) -->
-            <div class="gantt-bar-item ${barClass}" style="left: ${projMetrics.leftPx}px; width: ${projMetrics.widthPx}px; height: 18px; border-radius: 4px;"
-                 onmouseenter="showGanttTooltip(event, \`${projTooltipHtml.replace(/`/g, '\\`')}\`)"
-                 onmousemove="moveGanttTooltip(event)"
-                 onmouseleave="hideGanttTooltip()"
+            <!-- Project Summary Bar -->
+            <div class="gantt-bar-item ${barClass}" 
+                 style="left: ${projMetrics.leftPx}px; width: ${projMetrics.widthPx}px; height: 18px; border-radius: 4px;"
+                 data-gantt-tip="${projTipKey}"
                  onclick="${barOnClickAttr}">
               <div class="gantt-bar-progress-fill" style="width: ${projProgress}%;"></div>
-              <span class="gantt-bar-text" style="font-size: 9.5px; padding: 0 4px;">
+              <span class="gantt-bar-text" style="font-size: 9px; padding: 0 4px;">
                 <i data-lucide="${proj.isService ? 'wrench' : (proj.isInternal ? 'briefcase' : 'folder')}" style="width: 10px; height: 10px; flex-shrink: 0;"></i>
-                ${projMetrics.widthPx >= 50 ? `<strong>${escapeHtml(proj.projectName)}</strong> (${projProgress}%)` : ''}
+                ${projMetrics.widthPx >= 45 ? `<strong>${escapeHtml(proj.projectName)}</strong> (${projProgress}%)` : ''}
               </span>
             </div>
           </div>
@@ -2084,24 +2122,24 @@ function renderDashboardProjectGantt() {
       if (milestones.length === 0) {
         rowsHtml += `
           <tr class="gantt-task-row" style="height: 24px;">
-            <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 210px; min-width: 200px; max-width: 210px; padding-left: 20px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
+            <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 220px; min-width: 220px; max-width: 220px; padding-left: 20px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
               <div style="font-size: 10px; color: #94a3b8; font-style: italic;">
                 Belum ada rincian tugas.
               </div>
             </td>
-            <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 5; background: #ffffff; width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
+            <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 5; background: #ffffff; width: 110px; min-width: 110px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
               <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
-            <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 5; background: #ffffff; width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
+            <td class="gantt-col-schedule" style="position: sticky; left: 330px; z-index: 5; background: #ffffff; width: 100px; min-width: 100px; max-width: 100px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
               <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
-            <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1;">
+            <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 85px; min-width: 85px; max-width: 85px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1;">
               <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
             <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
               <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 24px;">
-                ${days.map((d, dIdx) => `
-                  <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
+                ${weeks.map((w, wIdx) => `
+                  <div class="gantt-grid-line ${w.isCurrentWeek ? 'current-week-grid' : ''}" style="left: ${wIdx * weekWidth}px; width: ${weekWidth}px;"></div>
                 `).join('')}
                 ${todayLeftPx >= 0 ? `<div class="gantt-today-line" style="left: ${todayLeftPx}px;"></div>` : ''}
               </div>
@@ -2135,7 +2173,9 @@ function renderDashboardProjectGantt() {
           const msMetrics = calculateBarMetrics(ms.startDate || proj.startDate, ms.dueDate || proj.dueDate);
           const msPic = ms.pic || proj.projectLead || '-';
 
-          const msTooltipHtml = `
+          // Registrasi Tooltip Milestone ke Registry
+          const msTipKey = `tip_ms_${proj.id}_${ms.id || mIdx}`;
+          window._ganttTooltips[msTipKey] = `
             <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : (proj.isInternal ? '#5eead4' : '#93c5fd')}; font-size: 11px; margin-bottom: 2px;">
               ${proj.isService ? '🛠️ TAHAPAN JASA' : 'TASK'} ${mIdx + 1} &bull; ${escapeHtml(proj.projectName)}
             </div>
@@ -2151,38 +2191,38 @@ function renderDashboardProjectGantt() {
 
           rowsHtml += `
             <tr class="gantt-task-row" style="height: 24px;">
-              <!-- Col 1: Task Title (Width: 210px, Left: 0) -->
-              <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 210px; min-width: 200px; max-width: 210px; padding-left: 14px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
+              <!-- Col 1: Task Title (Width: 220px, Left: 0) -->
+              <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 220px; min-width: 220px; max-width: 220px; padding-left: 14px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
                 <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
                   <span style="color: #94a3b8; font-family: monospace; font-size: 10px; user-select: none; flex-shrink: 0;">${branchChar}</span>
-                  <div class="font-medium text-main" style="font-size: 10.5px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;" title="${escapeAttr(ms.title)}">
+                  <div class="font-medium text-main" style="font-size: 10px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;" title="${escapeAttr(ms.title)}">
                     ${escapeHtml(ms.title)}
                   </div>
                 </div>
               </td>
 
-              <!-- Col 2: Task PIC (Width: 110px, Left: 210px) -->
-              <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 5; background: #ffffff; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
+              <!-- Col 2: Task PIC (Width: 110px, Left: 220px) -->
+              <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 5; background: #ffffff; width: 110px; min-width: 110px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
                 <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
                   <div style="width: 16px; height: 16px; border-radius: 50%; background: ${proj.isService ? '#f97316' : (proj.isInternal ? '#14b8a6' : '#0284c7')}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; flex-shrink: 0;">
                     ${getPicAvatar(msPic)}
                   </div>
-                  <div class="font-medium text-main" style="font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(msPic)}">
+                  <div class="font-medium text-main" style="font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(msPic)}">
                     ${escapeHtml(msPic)}
                   </div>
                 </div>
               </td>
 
-              <!-- Col 3: Task Schedule (Width: 110px, Left: 320px) -->
-              <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 5; background: #ffffff; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
-                <div style="font-size: 9.5px; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              <!-- Col 3: Task Schedule (Width: 100px, Left: 330px) -->
+              <td class="gantt-col-schedule" style="position: sticky; left: 330px; z-index: 5; background: #ffffff; width: 100px; min-width: 100px; max-width: 100px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
+                <div style="font-size: 9px; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   ${formatGanttDate(ms.startDate || proj.startDate)} &rarr; ${formatGanttDate(ms.dueDate || proj.dueDate)}
                 </div>
               </td>
 
-              <!-- Col 4: Task Status (Width: 90px, Left: 430px) -->
-              <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 2px 6px;">
-                <span class="badge ${msBadgeClass}" style="font-size: 8.5px; padding: 0 4px;">
+              <!-- Col 4: Task Status (Width: 85px, Left: 430px) -->
+              <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 85px; min-width: 85px; max-width: 85px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 2px 6px;">
+                <span class="badge ${msBadgeClass}" style="font-size: 8px; padding: 0 4px;">
                   ${msStatusText}
                 </span>
               </td>
@@ -2190,23 +2230,22 @@ function renderDashboardProjectGantt() {
               <!-- Col 5: Milestone Gantt Bar Track Canvas -->
               <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
                 <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 24px;">
-                  <!-- Grid lines -->
-                  ${days.map((d, dIdx) => `
-                    <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
+                  <!-- Grid lines per week -->
+                  ${weeks.map((w, wIdx) => `
+                    <div class="gantt-grid-line ${w.isCurrentWeek ? 'current-week-grid' : ''}" style="left: ${wIdx * weekWidth}px; width: ${weekWidth}px;"></div>
                   `).join('')}
 
                   <!-- Today line -->
                   ${todayLeftPx >= 0 ? `<div class="gantt-today-line" style="left: ${todayLeftPx}px;"></div>` : ''}
 
-                  <!-- Milestone Bar (Compact & Clean: No floating external label) -->
-                  <div class="gantt-bar-item ${msClass}" style="left: ${msMetrics.leftPx}px; width: ${msMetrics.widthPx}px; height: 14px; border-radius: 3px;"
-                       onmouseenter="showGanttTooltip(event, \`${msTooltipHtml.replace(/`/g, '\\`')}\`)"
-                       onmousemove="moveGanttTooltip(event)"
-                       onmouseleave="hideGanttTooltip()"
+                  <!-- Milestone Bar -->
+                  <div class="gantt-bar-item ${msClass}" 
+                       style="left: ${msMetrics.leftPx}px; width: ${msMetrics.widthPx}px; height: 14px; border-radius: 3px;"
+                       data-gantt-tip="${msTipKey}"
                        onclick="${barOnClickAttr}">
                     <span class="gantt-bar-text" style="font-size: 8.5px; padding: 0 3px;">
                       ${isComp ? '✓' : isInProg ? '⚡' : isOver ? '⚠' : ''}
-                      ${msMetrics.widthPx >= 45 ? `<strong>${escapeHtml(ms.title)}</strong>` : ''}
+                      ${msMetrics.widthPx >= 35 ? `<strong>${escapeHtml(ms.title)}</strong>` : ''}
                     </span>
                   </div>
                 </div>
@@ -2228,8 +2267,27 @@ function renderDashboardProjectGantt() {
     </table>
   `;
 
+  // Delegasi Event Tooltip Terpusat (Bebas dari bug kutip string atribut HTML)
+  container.onmouseover = function(e) {
+    const bar = e.target.closest('[data-gantt-tip]');
+    if (bar) {
+      const key = bar.getAttribute('data-gantt-tip');
+      if (window._ganttTooltips && window._ganttTooltips[key]) {
+        showGanttTooltip(e, window._ganttTooltips[key]);
+      }
+    }
+  };
+  container.onmousemove = function(e) {
+    if (e.target.closest('[data-gantt-tip]')) {
+      moveGanttTooltip(e);
+    }
+  };
+  container.onmouseout = function(e) {
+    if (e.target.closest('[data-gantt-tip]')) {
+      hideGanttTooltip();
+    }
+  };
+
   if (window.lucide) lucide.createIcons();
 }
-}
-
 

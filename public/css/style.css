@@ -3815,8 +3815,8 @@ textarea.form-control {
   z-index: 10;
   background: #ffffff;
   width: 220px;
-  min-width: 190px;
-  max-width: 240px;
+  min-width: 220px;
+  max-width: 220px;
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.08);
 }
 
@@ -3825,31 +3825,33 @@ textarea.form-control {
   left: 220px;
   z-index: 10;
   background: #ffffff;
-  width: 120px;
-  min-width: 105px;
-  max-width: 130px;
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
   white-space: nowrap;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.08);
 }
 
 .gantt-col-schedule {
   position: sticky;
-  left: 340px;
+  left: 330px;
   z-index: 10;
   background: #ffffff;
-  width: 120px;
-  min-width: 105px;
-  max-width: 130px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
   white-space: nowrap;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.08);
 }
 
 .gantt-col-status {
   position: sticky;
-  left: 460px;
+  left: 430px;
   z-index: 10;
   background: #ffffff;
-  width: 110px;
-  min-width: 100px;
-  max-width: 120px;
+  width: 85px;
+  min-width: 85px;
+  max-width: 85px;
   white-space: nowrap;
   box-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.12);
   border-right: 2px solid #cbd5e1;
@@ -3887,35 +3889,42 @@ textarea.form-control {
   color: #334155;
   border-right: 1px solid #cbd5e1;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Weekly Scale (Compact & Clean) */
+.gantt-weeks-row,
 .gantt-days-row {
   display: flex;
   background: #f8fafc;
+  height: 28px;
 }
 
+.gantt-week-cell,
 .gantt-day-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 0;
-  font-size: 10px;
-  color: #64748b;
-  border-right: 1px solid #f1f5f9;
+  padding: 2px 2px;
+  font-size: 9.5px;
+  color: #475569;
+  border-right: 1px solid #e2e8f0;
   flex-shrink: 0;
   user-select: none;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.gantt-day-cell.weekend {
-  background: #f1f5f9;
-  color: #94a3b8;
-}
-
+.gantt-week-cell.current-week,
 .gantt-day-cell.today {
   background: #eff6ff;
-  color: #2563eb;
+  border-bottom: 2px solid #3b82f6;
   font-weight: 700;
+  color: #1d4ed8;
 }
 
 /* Timeline Track Canvas for Rows */
@@ -3935,8 +3944,9 @@ textarea.form-control {
   pointer-events: none;
 }
 
-.gantt-grid-line.weekend {
-  background: rgba(241, 245, 249, 0.6);
+.gantt-grid-line.current-week-grid {
+  background: rgba(239, 246, 255, 0.4);
+  border-right: 1px solid #e2e8f0;
 }
 
 .gantt-today-line {
@@ -3982,29 +3992,9 @@ textarea.form-control {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   z-index: 3;
-  overflow: hidden;
+  overflow: hidden !important;
   white-space: nowrap;
-}
-
-.gantt-bar-item.has-external-label {
-  overflow: visible !important;
-}
-
-.gantt-bar-external-label {
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  color: #1e293b;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.95);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  z-index: 5;
+  text-overflow: ellipsis;
 }
 
 .gantt-bar-item:hover {
