@@ -1579,53 +1579,151 @@
 
         <!-- ==================== INVOICE VIEW ==================== -->
         <section class="view-section" id="view-invoices">
-          <div class="module-action-bar">
-            <div class="filter-group">
-              <select id="invoice-status-filter" class="form-control-sm" onchange="filterInvoices()">
-                <option value="ALL">Semua Status Bayar</option>
-                <option value="Paid">Paid (Lunas)</option>
-                <option value="Partial">Partial (DP / Sebagian)</option>
-                <option value="Unpaid">Unpaid (Belum Lunas)</option>
-                <option value="Overdue">Overdue</option>
-              </select>
+          <!-- NAVIGATION SUB-TABS INVOICE -->
+          <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color, #e2e8f0); padding-bottom: 8px; flex-wrap: wrap;">
+            <button type="button" id="tab-btn-invoice-customer" onclick="switchInvoiceTab('customer')" class="btn" style="display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #2563eb; color: #ffffff; box-shadow: 0 2px 4px rgba(37,99,235,0.2); transition: all 0.2s ease;">
+              <i data-lucide="receipt" style="width: 18px; height: 18px;"></i>
+              <span>1. Faktur Penjualan (Customer Invoices)</span>
+              <span id="badge-tab-invoice-customer-count" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.25); color: #fff; border-radius: 9999px; padding: 2px 8px; font-size: 11px; margin-left: 4px;">0</span>
+            </button>
+            <button type="button" id="tab-btn-invoice-partnership" onclick="switchInvoiceTab('partnership')" class="btn" style="display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #f1f5f9; color: #475569; transition: all 0.2s ease;">
+              <i data-lucide="handshake" style="width: 18px; height: 18px;"></i>
+              <span>2. Penagihan Kerjasama (Hak Takumi dari Ayumi)</span>
+              <span id="badge-tab-invoice-partnership-count" style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: #fff; border-radius: 9999px; padding: 2px 8px; font-size: 11px; margin-left: 4px;">0</span>
+            </button>
+          </div>
+
+          <!-- SUB-TAB 1: FAKTUR PENJUALAN CUSTOMER (EXISTING) -->
+          <div id="invoice-tab-content-customer">
+            <div class="module-action-bar">
+              <div class="filter-group">
+                <select id="invoice-status-filter" class="form-control-sm" onchange="filterInvoices()">
+                  <option value="ALL">Semua Status Bayar</option>
+                  <option value="Paid">Paid (Lunas)</option>
+                  <option value="Partial">Partial (DP / Sebagian)</option>
+                  <option value="Unpaid">Unpaid (Belum Lunas)</option>
+                  <option value="Overdue">Overdue</option>
+                </select>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" style="color: #4338ca; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; background: #eef2ff;" onclick="openPrintInvoiceSelector()"><i data-lucide="printer"></i> Cetak Invoice</button>
+                <button class="btn btn-outline" onclick="exportDataToCSV('invoices')"><i data-lucide="download"></i> Export CSV</button>
+              </div>
             </div>
-            <div class="btn-group">
-              <button class="btn btn-outline" style="color: #4338ca; border-color: #c7d2fe; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; background: #eef2ff;" onclick="openPrintInvoiceSelector()"><i data-lucide="printer"></i> Cetak Invoice</button>
-              <button class="btn btn-outline" onclick="exportDataToCSV('invoices')"><i data-lucide="download"></i> Export CSV</button>
+
+            <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+              <div class="table-invoices-container">
+                <table class="data-table table-invoices" id="table-invoices-main">
+                  <colgroup>
+                    <col style="width: 11%;">    <!-- No. Faktur -->
+                    <col style="width: 10%;">    <!-- Ref Order -->
+                    <col style="width: 18%;">    <!-- Pelanggan & Kontak -->
+                    <col style="width: 9%;">     <!-- Tgl Faktur -->
+                    <col style="width: 9%;">     <!-- Jatuh Tempo -->
+                    <col style="width: 13%;">    <!-- Total Tagihan -->
+                    <col style="width: 13%;">    <!-- Sisa Bayar -->
+                    <col style="width: 7%;">     <!-- Status -->
+                    <col style="width: 10%;">    <!-- Aksi -->
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>No. Faktur</th>
+                      <th>Ref Order</th>
+                      <th>Pelanggan</th>
+                      <th>Tgl Faktur</th>
+                      <th>Jatuh Tempo</th>
+                      <th>Total Tagihan</th>
+                      <th>Sisa Bayar</th>
+                      <th style="text-align: center;">Status</th>
+                      <th class="text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-invoices-body">
+                    <!-- Data loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
-            <div class="table-invoices-container">
-              <table class="data-table table-invoices" id="table-invoices-main">
-                <colgroup>
-                  <col style="width: 11%;">    <!-- No. Faktur -->
-                  <col style="width: 10%;">    <!-- Ref Order -->
-                  <col style="width: 18%;">    <!-- Pelanggan & Kontak -->
-                  <col style="width: 9%;">     <!-- Tgl Faktur -->
-                  <col style="width: 9%;">     <!-- Jatuh Tempo -->
-                  <col style="width: 13%;">    <!-- Total Tagihan -->
-                  <col style="width: 13%;">    <!-- Sisa Bayar -->
-                  <col style="width: 7%;">     <!-- Status -->
-                  <col style="width: 10%;">    <!-- Aksi -->
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>No. Faktur</th>
-                    <th>Ref Order</th>
-                    <th>Pelanggan</th>
-                    <th>Tgl Faktur</th>
-                    <th>Jatuh Tempo</th>
-                    <th>Total Tagihan</th>
-                    <th>Sisa Bayar</th>
-                    <th style="text-align: center;">Status</th>
-                    <th class="text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody id="table-invoices-body">
-                  <!-- Data loaded dynamically -->
-                </tbody>
-              </table>
+          <!-- SUB-TAB 2: PENAGIHAN KERJASAMA (HAK TAKUMI DARI PT AYUMI) -->
+          <div id="invoice-tab-content-partnership" style="display: none;">
+            <!-- INFO BANNER -->
+            <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #2563eb; margin-bottom: 16px;">
+              <i data-lucide="info" style="width: 22px; height: 22px; color: #2563eb; flex-shrink: 0;"></i>
+              <div>
+                <strong>Penagihan Hak Bagi Hasil Politeknik Takumi dari PT Ayumi</strong>: Seluruh transaksi yang diinput pada <strong>Tab Kerjasama (Halaman Keuangan)</strong> otomatis tampil di sini sebagai faktur penagihan hak Takumi kepada Ayumi (karena pembayaran proyek dilakukan oleh klien kepada Ayumi). Anda dapat memantau serta memperbarui status pembayaran dan mencetak faktur penagihan resmi.
+              </div>
+            </div>
+
+            <!-- KPI SUMMARY CARDS FOR TAKUMI CLAIMS -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px;">
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #4338ca; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; color: #4338ca; font-weight: 700; text-transform: uppercase;">Total Hak Takumi Ditagihkan</div>
+                <div id="kpi-invoice-partnership-takumi-total" class="font-mono" style="font-size: 18px; font-weight: 800; color: #4338ca; margin-top: 4px;">Rp 0</div>
+                <div style="font-size: 11px; color: #6366f1; margin-top: 2px;">Akumulasi hak Takumi dari semua kerjasama</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #059669; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; color: #065f46; font-weight: 700; text-transform: uppercase;">Sudah Dibayar Ayumi (Lunas)</div>
+                <div id="kpi-invoice-partnership-takumi-paid" class="font-mono" style="font-size: 18px; font-weight: 800; color: #059669; margin-top: 4px;">Rp 0</div>
+                <div style="font-size: 11px; color: #10b981; margin-top: 2px;">Hak Takumi yang telah diselesaikan Ayumi</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #dc2626; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Sisa Menunggu Pembayaran</div>
+                <div id="kpi-invoice-partnership-takumi-unpaid" class="font-mono" style="font-size: 18px; font-weight: 800; color: #dc2626; margin-top: 4px;">Rp 0</div>
+                <div style="font-size: 11px; color: #ef4444; margin-top: 2px;">Outstanding hak Takumi yang belum lunas</div>
+              </div>
+              <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #0284c7; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="font-size: 11px; color: #0369a1; font-weight: 700; text-transform: uppercase;">Total Transaksi Kerjasama</div>
+                <div id="kpi-invoice-partnership-count" class="font-mono" style="font-size: 18px; font-weight: 800; color: #0284c7; margin-top: 4px;">0 Proyek</div>
+                <div style="font-size: 11px; color: #0ea5e9; margin-top: 2px;">Total kontrak kerjasama terdaftar</div>
+              </div>
+            </div>
+
+            <!-- ACTION & FILTER BAR FOR INVOICE PARTNERSHIP -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <select id="filter-invoice-partnership-status" class="form-control-sm" onchange="renderInvoicePartnershipsTable()" style="height: 36px;">
+                  <option value="ALL">Semua Status Pembayaran Ayumi</option>
+                  <option value="Lunas">💵 Lunas (Paid by Ayumi)</option>
+                  <option value="Sebagian">💳 Sebagian (Partial Paid)</option>
+                  <option value="Menunggu">⏳ Menunggu Pembayaran (Unpaid)</option>
+                </select>
+                <input type="text" id="filter-invoice-partnership-search" class="form-control-sm" placeholder="Cari No. Penagihan, Layanan, Klien..." oninput="renderInvoicePartnershipsTable()" style="height: 36px; min-width: 230px;">
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn btn-primary btn-sm" onclick="openPartnershipModal()" style="height: 36px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700;">
+                  <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+                  <span>+ Tambah Data Kerjasama</span>
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="exportTakumiInvoiceCSV()" style="height: 36px; display: inline-flex; align-items: center; gap: 6px;">
+                  <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+                  <span>Export CSV Penagihan</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- TABEL PENAGIHAN KERJASAMA TAKUMI KE AYUMI -->
+            <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+                <table class="data-table" id="table-invoice-partnerships-main" style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+                      <th style="width: 130px; font-size: 11px; text-transform: uppercase;">No. Faktur Penagihan</th>
+                      <th style="width: 100px; font-size: 11px; text-transform: uppercase;">Tanggal</th>
+                      <th style="font-size: 11px; text-transform: uppercase;">Layanan & Klien (Sumber Proyek)</th>
+                      <th style="width: 145px; text-align: right; font-size: 11px; text-transform: uppercase;">Tagihan Klien (Ayumi)</th>
+                      <th style="width: 160px; text-align: right; font-size: 11px; text-transform: uppercase; color: #4338ca; background: #eef2ff;">Hak Takumi (Ditagihkan)</th>
+                      <th style="width: 135px; text-align: right; font-size: 11px; text-transform: uppercase; color: #065f46;">Hak Ayumi</th>
+                      <th style="width: 160px; text-align: center; font-size: 11px; text-transform: uppercase;">Status Bayar Ayumi</th>
+                      <th style="width: 145px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-invoice-partnerships-body">
+                    <!-- Populated dynamically via invoices.js -->
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -3287,6 +3385,74 @@
     </div>
   </div>
 
+  <!-- MODAL UPDATE STATUS PEMBAYARAN HAK KERJASAMA (TAKUMI DARI AYUMI) -->
+  <div class="modal" id="modal-update-partnership-payment">
+    <div class="modal-backdrop" onclick="closeModal('modal-update-partnership-payment')"></div>
+    <div class="modal-container" style="max-width: 520px; width: 92vw;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="credit-card" style="width: 20px; height: 20px; color: #4338ca;"></i>
+          <span>Update Status Pembayaran Hak Takumi</span>
+        </h3>
+        <button type="button" class="btn-close" onclick="closeModal('modal-update-partnership-payment')">&times;</button>
+      </div>
+      <form id="form-update-partnership-payment" onsubmit="event.preventDefault(); savePartnershipPaymentStatus();">
+        <input type="hidden" id="paystatus-partnership-id">
+        <div class="modal-body" style="padding: 20px;">
+          <!-- Detail Singkat -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
+            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Proyek / Layanan:</div>
+            <div id="paystatus-service-name" style="font-weight: 800; font-size: 14px; color: #0f172a; margin-top: 2px;">-</div>
+            <div id="paystatus-client-name" style="font-size: 12px; color: #475569;">Klien: -</div>
+            <div style="display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 12.5px;">
+              <span>Total Tagihan Klien (Ayumi):</span>
+              <strong id="paystatus-billed-amount" class="font-mono">Rp 0</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 13.5px; color: #4338ca;">
+              <span style="font-weight: 700;">Hak Politeknik Takumi (Ditagihkan):</span>
+              <strong id="paystatus-takumi-amount" class="font-mono" style="font-weight: 800;">Rp 0</strong>
+            </div>
+          </div>
+
+          <!-- Status Pembayaran -->
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-size: 12.5px; font-weight: 700;">Status Pembayaran oleh PT Ayumi <span style="color: #dc2626;">*</span></label>
+            <select id="paystatus-status" class="form-control" required style="height: 40px; font-weight: 700;">
+              <option value="Lunas">💵 Lunas (Paid - Seluruh Hak Takumi Telah Diterima)</option>
+              <option value="Sebagian">💳 Sebagian (Partial - Diterima DP / Sebagian)</option>
+              <option value="Menunggu">⏳ Menunggu Pembayaran (Unpaid / Outstanding)</option>
+            </select>
+          </div>
+
+          <!-- Tanggal Pembayaran & No. Referensi -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 12px; font-weight: 600;">Tanggal Pembayaran</label>
+              <input type="date" id="paystatus-date" class="form-control" style="height: 38px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 12px; font-weight: 600;">No. Bukti / Ref Transfer</label>
+              <input type="text" id="paystatus-ref" class="form-control font-mono" placeholder="Contoh: TRF-AYM-2026" style="height: 38px;">
+            </div>
+          </div>
+
+          <!-- Catatan Pembayaran -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" style="font-size: 12px; font-weight: 600;">Catatan / Keterangan Transfer</label>
+            <textarea id="paystatus-notes" class="form-control" rows="2" placeholder="Catatan tambahan pelunasan atau termin transfer..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-update-partnership-payment')">Batal</button>
+          <button type="submit" class="btn btn-primary" style="font-weight: 700; padding: 8px 20px;">
+            Simpan Perubahan Status
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- 6. TOAST CONTAINER -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -3322,24 +3488,24 @@
   </script>
 
   <!-- Application Logic Modular Scripts -->
-  <script src="js/modules/utils.js?v=20261023_1"></script>
-  <script src="js/modules/auth.js?v=20261023_1"></script>
-  <script src="js/modules/dashboard.js?v=20261023_1"></script>
-  <script src="js/modules/logs.js?v=20261023_1"></script>
-  <script src="js/modules/quotations.js?v=20261023_1"></script>
-  <script src="js/modules/orders.js?v=20261023_1"></script>
-  <script src="js/modules/projects.js?v=20261023_1"></script>
-  <script src="js/modules/bom.js?v=20261023_1"></script>
-  <script src="js/modules/purchasing.js?v=20261023_1"></script>
-  <script src="js/modules/po.js?v=20261023_1"></script>
-  <script src="js/modules/delivery.js?v=20261023_1"></script>
-  <script src="js/modules/invoices.js?v=20261023_1"></script>
-  <script src="js/modules/bast.js?v=20261023_1"></script>
-  <script src="js/modules/project_reports.js?v=20261023_1"></script>
-  <script src="js/modules/service.js?v=20261023_1"></script>
-  <script src="js/modules/maintenance.js?v=20261023_1"></script>
-  <script src="js/modules/finance.js?v=20261023_1"></script>
-  <script src="js/modules/settings.js?v=20261023_1"></script>
-  <script src="js/app.js?v=20261023_1"></script>
+  <script src="js/modules/utils.js?v=20261023_2"></script>
+  <script src="js/modules/auth.js?v=20261023_2"></script>
+  <script src="js/modules/dashboard.js?v=20261023_2"></script>
+  <script src="js/modules/logs.js?v=20261023_2"></script>
+  <script src="js/modules/quotations.js?v=20261023_2"></script>
+  <script src="js/modules/orders.js?v=20261023_2"></script>
+  <script src="js/modules/projects.js?v=20261023_2"></script>
+  <script src="js/modules/bom.js?v=20261023_2"></script>
+  <script src="js/modules/purchasing.js?v=20261023_2"></script>
+  <script src="js/modules/po.js?v=20261023_2"></script>
+  <script src="js/modules/delivery.js?v=20261023_2"></script>
+  <script src="js/modules/invoices.js?v=20261023_2"></script>
+  <script src="js/modules/bast.js?v=20261023_2"></script>
+  <script src="js/modules/project_reports.js?v=20261023_2"></script>
+  <script src="js/modules/service.js?v=20261023_2"></script>
+  <script src="js/modules/maintenance.js?v=20261023_2"></script>
+  <script src="js/modules/finance.js?v=20261023_2"></script>
+  <script src="js/modules/settings.js?v=20261023_2"></script>
+  <script src="js/app.js?v=20261023_2"></script>
 </body>
 </html>

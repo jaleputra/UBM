@@ -126,6 +126,12 @@ function renderInvoicesTable() {
   const tbody = document.getElementById('table-invoices-body');
   if (!tbody) return;
 
+  // Pastikan badge sub-tab selalu terupdate
+  const badgeCustomer = document.getElementById('badge-tab-invoice-customer-count');
+  if (badgeCustomer) badgeCustomer.textContent = (state.invoices || []).length;
+  const badgePartnership = document.getElementById('badge-tab-invoice-partnership-count');
+  if (badgePartnership) badgePartnership.textContent = (state.partnerships || []).length;
+
   // Pastikan order accepted tersinkronisasi
   syncAcceptedOrdersToInvoices();
 
@@ -1105,3 +1111,643 @@ function editInvoice(invId) {
   if (inv) openInvoiceModal(inv);
 }
 
+// =========================================================
+// SUB-TAB: PENAGIHAN KERJASAMA (HAK TAKUMI DARI PT AYUMI)
+// =========================================================
+
+/**
+ * Navigasi Sub-Tab pada Halaman Invoice
+ * @param {'customer' | 'partnership'} tabName
+ */
+function switchInvoiceTab(tabName) {
+  const btnCustomer = document.getElementById('tab-btn-invoice-customer');
+  const btnPartnership = document.getElementById('tab-btn-invoice-partnership');
+  const contentCustomer = document.getElementById('invoice-tab-content-customer');
+  const contentPartnership = document.getElementById('invoice-tab-content-partnership');
+
+  const activeStyle = 'display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #2563eb; color: #ffffff; box-shadow: 0 2px 4px rgba(37,99,235,0.2); transition: all 0.2s ease;';
+  const inactiveStyle = 'display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #f1f5f9; color: #475569; transition: all 0.2s ease;';
+
+  if (tabName === 'partnership') {
+    if (btnCustomer) btnCustomer.style.cssText = inactiveStyle;
+    if (btnPartnership) btnPartnership.style.cssText = activeStyle;
+    if (contentCustomer) contentCustomer.style.display = 'none';
+    if (contentPartnership) contentPartnership.style.display = 'block';
+    sessionStorage.setItem('ubm_active_invoice_tab', 'partnership');
+    renderInvoicePartnershipsTable();
+  } else {
+    if (btnCustomer) btnCustomer.style.cssText = activeStyle;
+    if (btnPartnership) btnPartnership.style.cssText = inactiveStyle;
+    if (contentCustomer) contentCustomer.style.display = 'block';
+    if (contentPartnership) contentPartnership.style.display = 'none';
+    sessionStorage.setItem('ubm_active_invoice_tab', 'customer');
+    renderInvoicesTable();
+  }
+
+  // Refresh lucide icons
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+}
+
+/**
+ * Helper kalkulasi aman bagi hasil kerjasama
+ */
+function getSafePartnershipSplit(entry) {
+  if (typeof calculatePartnershipSplit === 'function') {
+    const pct = (typeof getPartnershipPercentages === 'function')
+      ? getPartnershipPercentages()
+      : (entry.percentages || { takumi: 20, sales: 20, adminTax: 15, freelance: 45 });
+    return calculatePartnershipSplit(entry, entry.percentages || pct);
+  }
+
+  const billedAmount = parseFloat(entry.billedAmount || 0) || 0;
+  const pct = entry.percentages || { takumi: 20, sales: 20, adminTax: 15, freelance: 45 };
+  const contrib = entry.contributions || {};
+
+  function split(catNominal, takumi, ayumi) {
+    if (takumi && !ayumi) return { takumi: catNominal, ayumi: 0 };
+    if (!takumi && ayumi) return { takumi: 0, ayumi: catNominal };
+    const half = Math.round(catNominal / 2);
+    return { takumi: half, ayumi: catNominal - half };
+  }
+
+  const tCat = split(Math.round(billedAmount * (pct.takumi / 100)), contrib.takumi ? contrib.takumi.takumi : true, contrib.takumi ? contrib.takumi.ayumi : false);
+  const sSplit = split(Math.round(billedAmount * (pct.sales / 100)), contrib.sales?.takumi, contrib.sales?.ayumi);
+  const aSplit = split(Math.round(billedAmount * (pct.adminTax / 100)), contrib.adminTax?.takumi, contrib.adminTax?.ayumi);
+  const fSplit = split(Math.round(billedAmount * (pct.freelance / 100)), contrib.freelance?.takumi, contrib.freelance?.ayumi);
+
+  const totalTakumi = tCat.takumi + sSplit.takumi + aSplit.takumi + fSplit.takumi;
+  const totalAyumi = tCat.ayumi + sSplit.ayumi + aSplit.ayumi + fSplit.ayumi;
+
+  return {
+    billedAmount,
+    percentages: pct,
+    takumiNominal: Math.round(billedAmount * (pct.takumi / 100)),
+    salesNominal: Math.round(billedAmount * (pct.sales / 100)),
+    adminTaxNominal: Math.round(billedAmount * (pct.adminTax / 100)),
+    freelanceNominal: Math.round(billedAmount * (pct.freelance / 100)),
+    takumiCatSplit: tCat,
+    salesSplit: sSplit,
+    adminTaxSplit: aSplit,
+    freelanceSplit: fSplit,
+    totalTakumi,
+    totalAyumi,
+    takumiPercent: billedAmount > 0 ? (totalTakumi / billedAmount) * 100 : 0,
+    ayumiPercent: billedAmount > 0 ? (totalAyumi / billedAmount) * 100 : 0
+  };
+}
+
+/**
+ * Render Tabel Penagihan Kerjasama (Hak Takumi ke Ayumi)
+ */
+function renderInvoicePartnershipsTable() {
+  const tbody = document.getElementById('table-invoice-partnerships-body');
+  if (!tbody) return;
+
+  const allItems = Array.isArray(state.partnerships) ? state.partnerships : [];
+
+  // Update badge counts pada sub-tab
+  const badgeCustomer = document.getElementById('badge-tab-invoice-customer-count');
+  if (badgeCustomer) badgeCustomer.textContent = (state.invoices || []).length;
+  const badgePartnership = document.getElementById('badge-tab-invoice-partnership-count');
+  if (badgePartnership) badgePartnership.textContent = allItems.length;
+
+  // Hitung akumulasi metrik finansial penagihan Takumi
+  let totalTakumiSum = 0;
+  let paidTakumiSum = 0;
+
+  const calculatedItems = allItems.map(item => {
+    const calc = getSafePartnershipSplit(item);
+    totalTakumiSum += calc.totalTakumi;
+    if (item.paymentStatus === 'Lunas') {
+      paidTakumiSum += calc.totalTakumi;
+    } else if (item.paymentStatus === 'Sebagian') {
+      paidTakumiSum += Math.round(calc.totalTakumi / 2); // Estimasi 50% untuk Sebagian jika belum ada nominal parsial
+    }
+    return { ...item, calc };
+  });
+
+  const unpaidTakumiSum = Math.max(0, totalTakumiSum - paidTakumiSum);
+
+  // Update KPI Cards di Sub-tab Penagihan Kerjasama
+  const kpiTotal = document.getElementById('kpi-invoice-partnership-takumi-total');
+  const kpiPaid = document.getElementById('kpi-invoice-partnership-takumi-paid');
+  const kpiUnpaid = document.getElementById('kpi-invoice-partnership-takumi-unpaid');
+  const kpiCount = document.getElementById('kpi-invoice-partnership-count');
+
+  if (kpiTotal) kpiTotal.textContent = formatRupiah(totalTakumiSum);
+  if (kpiPaid) kpiPaid.textContent = formatRupiah(paidTakumiSum);
+  if (kpiUnpaid) kpiUnpaid.textContent = formatRupiah(unpaidTakumiSum);
+  if (kpiCount) kpiCount.textContent = `${allItems.length} Proyek`;
+
+  // Filter Status & Pencarian
+  const statusFilter = document.getElementById('filter-invoice-partnership-status')?.value || 'ALL';
+  const searchQuery = (document.getElementById('filter-invoice-partnership-search')?.value || '').toLowerCase().trim();
+
+  let filtered = calculatedItems.filter(item => {
+    if (statusFilter !== 'ALL' && item.paymentStatus !== statusFilter) return false;
+    if (searchQuery) {
+      const invNum = (item.invoiceRef || `INV-TKM-${item.id}`).toLowerCase();
+      const ksmId = (item.id || '').toLowerCase();
+      const sName = (item.serviceName || '').toLowerCase();
+      const cName = (item.clientName || '').toLowerCase();
+      if (!invNum.includes(searchQuery) && !ksmId.includes(searchQuery) && !sName.includes(searchQuery) && !cName.includes(searchQuery)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center text-muted" style="padding: 36px 16px;">
+          <div style="font-size: 32px; margin-bottom: 8px;">📑</div>
+          <div style="font-weight: 700; color: #475569; font-size: 14px;">Tidak Ada Faktur Penagihan Kerjasama</div>
+          <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+            ${allItems.length === 0 
+              ? 'Belum ada data kerjasama yang diinput. Klik "+ Tambah Data Kerjasama" untuk membuat penagihan baru.' 
+              : 'Tidak ada data kerjasama yang sesuai dengan filter pencarian.'}
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(item => {
+    const calc = item.calc;
+    const invoiceNumber = item.invoiceRef || `INV-TKM-${item.id}`;
+    const isPaid = item.paymentStatus === 'Lunas';
+    const isPartial = item.paymentStatus === 'Sebagian';
+
+    const statusBadge = isPaid
+      ? `<span class="badge" style="background: #dcfce7; color: #166534; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">💵 Lunas</span>`
+      : isPartial
+      ? `<span class="badge" style="background: #fef3c7; color: #92400e; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">💳 Sebagian</span>`
+      : `<span class="badge" style="background: #fee2e2; color: #991b1b; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">⏳ Menunggu</span>`;
+
+    return `
+      <tr style="${isPaid ? 'background-color: #f0fdf4;' : ''}">
+        <!-- 1. No Faktur Penagihan -->
+        <td style="font-size: 11.5px; padding: 10px 8px;">
+          <span class="mono-id font-bold text-primary" style="font-size: 11.5px; padding: 3px 6px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px;">
+            ${escapeHtml(invoiceNumber)}
+          </span>
+          <div style="font-size: 10.5px; color: #64748b; margin-top: 3px;">
+            Ref: <strong style="color: #475569;">${escapeHtml(item.id)}</strong>
+          </div>
+        </td>
+
+        <!-- 2. Tanggal -->
+        <td style="font-size: 12px; color: #475569; padding: 10px 8px; white-space: nowrap;">
+          ${escapeHtml(item.date || '-')}
+        </td>
+
+        <!-- 3. Layanan & Klien (Sumber Proyek) -->
+        <td style="padding: 10px 8px;">
+          <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${escapeHtml(item.serviceName)}</div>
+          <div style="font-size: 11.5px; color: #64748b; margin-top: 2px; display: flex; align-items: center; gap: 4px;">
+            <span>Mitra / Klien:</span>
+            <strong style="color: #334155;">${escapeHtml(item.clientName)}</strong>
+          </div>
+        </td>
+
+        <!-- 4. Tagihan Customer (Diterima Ayumi) -->
+        <td style="text-align: right; padding: 10px 8px; font-weight: 700; font-size: 13px; color: #0f172a;" class="font-mono">
+          ${formatRupiah(calc.billedAmount)}
+        </td>
+
+        <!-- 5. Hak Takumi (Ditagihkan) -->
+        <td style="text-align: right; padding: 10px 8px; background: #f5f3ff;" class="font-mono">
+          <div style="font-size: 14px; font-weight: 800; color: #4338ca;">
+            ${formatRupiah(calc.totalTakumi)}
+          </div>
+          <div style="font-size: 10.5px; color: #6366f1; font-weight: 700;">
+            ${calc.takumiPercent.toFixed(1)}% dari Tagihan
+          </div>
+        </td>
+
+        <!-- 6. Hak Ayumi -->
+        <td style="text-align: right; padding: 10px 8px;" class="font-mono">
+          <div style="font-size: 13px; font-weight: 700; color: #065f46;">
+            ${formatRupiah(calc.totalAyumi)}
+          </div>
+          <div style="font-size: 10.5px; color: #059669; font-weight: 600;">
+            ${calc.ayumiPercent.toFixed(1)}%
+          </div>
+        </td>
+
+        <!-- 7. Status Pembayaran Ayumi -->
+        <td style="text-align: center; padding: 10px 8px;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+            ${statusBadge}
+            <button type="button" class="btn btn-outline btn-xs" onclick="openUpdatePartnershipPaymentModal('${item.id}')" style="font-size: 10px; padding: 2px 7px; color: #4338ca; border-color: #c7d2fe; background: #ffffff; border-radius: 4px; font-weight: 600; cursor: pointer;" title="Perbarui status pembayaran dari PT Ayumi">
+              Ubah Status
+            </button>
+          </div>
+        </td>
+
+        <!-- 8. Aksi -->
+        <td style="text-align: right; padding: 10px 8px; white-space: nowrap;">
+          <div style="display: inline-flex; gap: 4px; align-items: center;">
+            <button type="button" class="btn-icon" onclick="printTakumiInvoice('${item.id}')" title="Cetak Faktur Penagihan Takumi ke PT Ayumi (PDF / Print)" style="color: #4338ca; width: 30px; height: 30px; border-radius: 6px; background: #eef2ff; border: 1px solid #c7d2fe; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+              <i data-lucide="printer" style="width: 15px; height: 15px;"></i>
+            </button>
+            <button type="button" class="btn-icon" onclick="if (typeof previewPartnershipSlip === 'function') previewPartnershipSlip('${item.id}');" title="Lihat Slip Perhitungan Bagi Hasil" style="color: #0284c7; width: 30px; height: 30px; border-radius: 6px; background: #f0f9ff; border: 1px solid #bae6fd; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+              <i data-lucide="file-text" style="width: 15px; height: 15px;"></i>
+            </button>
+            <button type="button" class="btn-icon" onclick="if (typeof openPartnershipModal === 'function') openPartnershipModal('${item.id}');" title="Edit Data Kerjasama" style="color: #475569; width: 30px; height: 30px; border-radius: 6px; background: #f8fafc; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+              <i data-lucide="edit-3" style="width: 15px; height: 15px;"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+}
+
+/**
+ * Membuka Modal Update Status Pembayaran Hak Takumi
+ */
+function openUpdatePartnershipPaymentModal(partnershipId) {
+  const item = (state.partnerships || []).find(p => p.id === partnershipId);
+  if (!item) {
+    showToast('Data kerjasama tidak ditemukan', 'warning');
+    return;
+  }
+
+  const calc = getSafePartnershipSplit(item);
+
+  const hiddenId = document.getElementById('paystatus-partnership-id');
+  const serviceEl = document.getElementById('paystatus-service-name');
+  const clientEl = document.getElementById('paystatus-client-name');
+  const billedEl = document.getElementById('paystatus-billed-amount');
+  const takumiEl = document.getElementById('paystatus-takumi-amount');
+  const statusEl = document.getElementById('paystatus-status');
+  const dateEl = document.getElementById('paystatus-date');
+  const refEl = document.getElementById('paystatus-ref');
+  const notesEl = document.getElementById('paystatus-notes');
+
+  if (hiddenId) hiddenId.value = item.id;
+  if (serviceEl) serviceEl.textContent = item.serviceName || '-';
+  if (clientEl) clientEl.textContent = `Klien: ${item.clientName || '-'}`;
+  if (billedEl) billedEl.textContent = formatRupiah(calc.billedAmount);
+  if (takumiEl) takumiEl.textContent = formatRupiah(calc.totalTakumi);
+  if (statusEl) statusEl.value = item.paymentStatus || 'Menunggu';
+  if (dateEl) dateEl.value = item.paymentDate || new Date().toISOString().split('T')[0];
+  if (refEl) refEl.value = item.paymentRef || '';
+  if (notesEl) notesEl.value = item.paymentNotes || '';
+
+  openModal('modal-update-partnership-payment');
+}
+
+/**
+ * Menyimpan Perubahan Status Pembayaran Hak Takumi ke Database & Supabase
+ */
+async function savePartnershipPaymentStatus() {
+  const id = document.getElementById('paystatus-partnership-id')?.value;
+  if (!id) return;
+
+  const item = (state.partnerships || []).find(p => p.id === id);
+  if (!item) {
+    showToast('Data kerjasama tidak ditemukan', 'error');
+    return;
+  }
+
+  const newStatus = document.getElementById('paystatus-status')?.value || 'Menunggu';
+  const payDate = document.getElementById('paystatus-date')?.value || '';
+  const payRef = (document.getElementById('paystatus-ref')?.value || '').trim();
+  const payNotes = (document.getElementById('paystatus-notes')?.value || '').trim();
+
+  const updatedItem = {
+    ...item,
+    paymentStatus: newStatus,
+    paymentDate: payDate,
+    paymentRef: payRef,
+    paymentNotes: payNotes,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch(`/api/partnerships/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedItem)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const saved = await res.json();
+
+    const idx = (state.partnerships || []).findIndex(p => p.id === id);
+    if (idx !== -1) {
+      state.partnerships[idx] = saved;
+    }
+
+    if (typeof directSupabaseSyncPartnerships === 'function') {
+      directSupabaseSyncPartnerships(state.partnerships).catch(e => console.warn(e));
+    }
+    try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(state.partnerships)); } catch (e) {}
+
+    closeModal('modal-update-partnership-payment');
+    showToast(`✅ Status pembayaran ${saved.id} berhasil diperbarui menjadi ${newStatus}!`, 'success');
+
+    // Re-render kedua modul (Invoice dan Finance)
+    renderInvoicePartnershipsTable();
+    if (typeof renderPartnershipsTable === 'function') {
+      renderPartnershipsTable();
+    }
+  } catch (err) {
+    console.warn('Fallback local save for partnership status:', err);
+    const idx = (state.partnerships || []).findIndex(p => p.id === id);
+    if (idx !== -1) {
+      state.partnerships[idx] = updatedItem;
+    }
+    if (typeof directSupabaseSyncPartnerships === 'function') {
+      directSupabaseSyncPartnerships(state.partnerships).catch(e => console.warn(e));
+    }
+    try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(state.partnerships)); } catch (e) {}
+
+    closeModal('modal-update-partnership-payment');
+    showToast(`✅ Status pembayaran disimpan secara lokal & disinkronkan ke Cloud!`, 'success');
+
+    renderInvoicePartnershipsTable();
+    if (typeof renderPartnershipsTable === 'function') {
+      renderPartnershipsTable();
+    }
+  }
+}
+
+/**
+ * Cetak Faktur Penagihan Hak Takumi kepada PT Ayumi (Official Invoice)
+ */
+function printTakumiInvoice(partnershipId) {
+  const item = (state.partnerships || []).find(p => p.id === partnershipId);
+  if (!item) {
+    showToast('Data kerjasama tidak ditemukan', 'warning');
+    return;
+  }
+
+  const calc = getSafePartnershipSplit(item);
+  const activePct = item.percentages || (typeof getPartnershipPercentages === 'function' ? getPartnershipPercentages() : { takumi: 20, sales: 20, adminTax: 15, freelance: 45 });
+  const invoiceNum = item.invoiceRef || `INV-TKM-${item.id}`;
+
+  const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
+    companyName: 'Unit Bisnis Mandiri (UBM) Politeknik Takumi',
+    tagline: 'Engineering, Manufacturing, & Automation Solutions',
+    address: 'Kawasan Industri Hyundai, Cikarang Selatan, Bekasi, Jawa Barat',
+    phone: '+62 21-8990-1234',
+    email: 'ubm@takumi.ac.id',
+    bankName: 'Bank Mandiri',
+    accountNumber: '156-00-1234567-8',
+    accountName: 'Unit Bisnis Mandiri Politeknik Takumi'
+  };
+
+  const isPaid = item.paymentStatus === 'Lunas';
+  const isPartial = item.paymentStatus === 'Sebagian';
+
+  const modalTitle = document.getElementById('preview-modal-title');
+  if (modalTitle) {
+    modalTitle.innerHTML = `<i data-lucide="printer" style="color: #2563eb;"></i> Faktur Penagihan Hak Takumi (${invoiceNum})`;
+  }
+
+  const content = document.getElementById('preview-modal-content');
+  if (!content) return;
+
+  content.innerHTML = `
+    <div class="doc-preview" style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; color: #0f172a; max-width: 820px; margin: 0 auto; background: #ffffff; padding: 24px;">
+      <!-- KOP RESMI POLITEKNIK TAKUMI / UBM -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #0f172a; margin-bottom: 20px;">
+        <div>
+          <div style="font-size: 18px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px;">POLITEKNIK TAKUMI</div>
+          <div style="font-size: 14px; font-weight: 700; color: #2563eb; margin-top: 2px;">UNIT BISNIS MANDIRI (UBM)</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px; max-width: 380px; line-height: 1.4;">
+            ${escapeHtml(compSettings.address || 'Kawasan Industri Hyundai, Cikarang Selatan, Bekasi, Jawa Barat')}<br>
+            Telp: ${escapeHtml(compSettings.phone || '+62 21-8990-1234')} &bull; Email: ${escapeHtml(compSettings.email || 'ubm@takumi.ac.id')}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="display: inline-block; background: #eef2ff; color: #4338ca; border: 1.5px solid #c7d2fe; border-radius: 6px; padding: 4px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px;">
+            Faktur Penagihan Kerjasama
+          </div>
+          <div class="font-mono" style="font-size: 16px; font-weight: 800; color: #0f172a;">${escapeHtml(invoiceNum)}</div>
+          <div style="font-size: 11.5px; color: #64748b; margin-top: 3px;">Tanggal Faktur: <strong>${escapeHtml(item.date || '-')}</strong></div>
+          <div style="font-size: 11px; color: #64748b;">Ref Kerjasama: <span class="font-mono" style="font-weight: 700;">${escapeHtml(item.id)}</span></div>
+        </div>
+      </div>
+
+      <!-- KEPADA / DITAGIHKAN KEPADA PT AYUMI -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; padding: 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+        <div>
+          <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Ditagihkan Kepada (Mitra Kerjasama):</div>
+          <div style="font-size: 15px; font-weight: 800; color: #065f46; margin-top: 3px;">PT AYUMI</div>
+          <div style="font-size: 11.5px; color: #475569; margin-top: 2px;">Jl. Raya Industri No. 88, Cikarang, Bekasi, Jawa Barat</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Perihal: <strong>Penagihan Hak Politeknik Takumi atas Kerjasama Proyek</strong></div>
+        </div>
+        <div>
+          <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">Informasi Pelaksanaan & Proyek:</div>
+          <div style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin-top: 3px;">${escapeHtml(item.serviceName)}</div>
+          <div style="font-size: 11.5px; color: #475569; margin-top: 2px;">Mitra / Klien Asal Proyek: <strong>${escapeHtml(item.clientName)}</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+            Status Pembayaran: 
+            <strong style="color: ${isPaid ? '#166534' : isPartial ? '#92400e' : '#991b1b'};">
+              ${isPaid ? '💵 Lunas (Paid)' : isPartial ? '💳 Sebagian (Partial)' : '⏳ Menunggu Pembayaran'}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- DASAR PERHITUNGAN KONTRAK & PENERIMAAN DANA DI AYUMI -->
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 14px; margin-bottom: 18px; font-size: 12px; color: #1e3a8a; line-height: 1.5;">
+        Berdasarkan kesepakatan kerjasama, seluruh tagihan pekerjaan telah ditagihkan dan diterima oleh <strong>PT Ayumi</strong> dari klien <strong>${escapeHtml(item.clientName)}</strong> sebesar <strong>${formatRupiah(calc.billedAmount)}</strong>. Berikut adalah rincian hak bagi hasil yang menjadi hak <strong>Politeknik Takumi</strong>:
+      </div>
+
+      <!-- TABEL RINCIAN TAGIHAN & BAGI HASIL -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px;">
+        <thead>
+          <tr style="background: #0f172a; color: #ffffff;">
+            <th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase;">Komponen Bagi Hasil</th>
+            <th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase;">Persentase</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 11px; text-transform: uppercase;">Nilai Alokasi</th>
+            <th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase;">Pihak Berhak</th>
+            <th style="padding: 10px 12px; text-align: right; font-size: 11px; text-transform: uppercase; background: #312e81;">Hak Takumi (Ditagihkan)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 1. Takumi -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #1e3a8a;">1. Alokasi Takumi</td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${activePct.takumi}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.takumiNominal)}</td>
+            <td style="padding: 10px 12px; text-align: center;">${calc.takumiCatSplit.recipient || (item.contributions?.takumi?.ayumi ? 'Takumi & Ayumi' : 'Takumi')}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca; background: #f5f3ff;" class="font-mono">${formatRupiah(calc.takumiCatSplit.takumi)}</td>
+          </tr>
+          <!-- 2. Sales -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">2. Sales & Pemasaran</td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${activePct.sales}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.salesNominal)}</td>
+            <td style="padding: 10px 12px; text-align: center;">${calc.salesSplit.recipient || (item.contributions?.sales?.takumi ? 'Takumi' : 'Ayumi')}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca; background: #f5f3ff;" class="font-mono">${formatRupiah(calc.salesSplit.takumi)}</td>
+          </tr>
+          <!-- 3. Administrasi & Pajak -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">3. Administrasi & Pajak</td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${activePct.adminTax}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.adminTaxNominal)}</td>
+            <td style="padding: 10px 12px; text-align: center;">${calc.adminTaxSplit.recipient || (item.contributions?.adminTax?.takumi ? 'Takumi' : 'Ayumi')}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca; background: #f5f3ff;" class="font-mono">${formatRupiah(calc.adminTaxSplit.takumi)}</td>
+          </tr>
+          <!-- 4. Freelance -->
+          <tr style="border-bottom: 2px solid #0f172a;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">4. Freelance (Tenaga Ahli)</td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${activePct.freelance}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.freelanceNominal)}</td>
+            <td style="padding: 10px 12px; text-align: center;">${calc.freelanceSplit.recipient || (item.contributions?.freelance?.takumi ? 'Takumi' : 'Ayumi')}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca; background: #f5f3ff;" class="font-mono">${formatRupiah(calc.freelanceSplit.takumi)}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr style="background: #f8fafc; font-size: 13px;">
+            <td colspan="4" style="padding: 12px; text-align: right; font-weight: 800; color: #0f172a;">
+              TOTAL HAK POLITEKNIK TAKUMI YANG DITAGIHKAN:
+            </td>
+            <td style="padding: 12px; text-align: right; font-weight: 900; font-size: 16px; color: #4338ca; background: #ede9fe;" class="font-mono">
+              ${formatRupiah(calc.totalTakumi)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <!-- INSTRUKSI REKENING PEMBAYARAN -->
+      <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 26px;">
+        <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 11.5px; font-weight: 800; color: #1e3a8a; text-transform: uppercase;">Instruksi Pembayaran Transfer:</div>
+          <div style="font-size: 12px; color: #475569; margin-top: 4px; line-height: 1.5;">
+            Mohon pembayaran hak kerjasama ditransfer ke rekening resmi Politeknik Takumi:
+          </div>
+          <div style="margin-top: 8px; padding: 8px 12px; background: #ffffff; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <div style="font-size: 11px; color: #64748b;">Bank Tujuan:</div>
+            <div style="font-size: 13.5px; font-weight: 800; color: #0f172a;">${escapeHtml(compSettings.bankName || 'Bank Mandiri')} Cabang Cikarang</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Nomor Rekening:</div>
+            <div class="font-mono" style="font-size: 15px; font-weight: 800; color: #2563eb;">${escapeHtml(compSettings.accountNumber || '156-00-1234567-8')}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Atas Nama:</div>
+            <div style="font-size: 12.5px; font-weight: 700; color: #0f172a;">${escapeHtml(compSettings.accountName || compSettings.companyName || 'Unit Bisnis Mandiri Politeknik Takumi')}</div>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; background: #ffffff;">
+          <div style="font-size: 11.5px; font-weight: 700; color: #64748b;">Ringkasan Pembayaran PT Ayumi:</div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; padding-bottom: 6px; border-bottom: 1px dashed #cbd5e1;">
+            <span>Hak PT Ayumi:</span>
+            <strong class="font-mono" style="color: #065f46;">${formatRupiah(calc.totalAyumi)}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; padding-bottom: 6px; border-bottom: 1px dashed #cbd5e1;">
+            <span>Hak Politeknik Takumi:</span>
+            <strong class="font-mono" style="color: #4338ca;">${formatRupiah(calc.totalTakumi)}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; font-weight: 800;">
+            <span>Total Tagihan Proyek:</span>
+            <strong class="font-mono">${formatRupiah(calc.billedAmount)}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- TANDA TANGAN KEDUA BELAH PIHAK -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center; margin-top: 24px; padding-top: 14px;">
+        <div>
+          <div style="font-size: 12px; font-weight: 700; color: #475569;">Diterima & Disetujui Oleh,</div>
+          <div style="font-size: 13px; font-weight: 800; color: #065f46; margin-top: 2px;">PT AYUMI</div>
+          <div style="height: 65px;"></div>
+          <div style="font-size: 13px; font-weight: 800; text-decoration: underline; color: #0f172a;">( Direksi / Keuangan PT Ayumi )</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Pihak Pembayar</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; font-weight: 700; color: #475569;">Cikarang, ${escapeHtml(item.date || '-')}</div>
+          <div style="font-size: 13px; font-weight: 800; color: #1e3a8a; margin-top: 2px;">POLITEKNIK TAKUMI - UBM</div>
+          <div style="height: 65px;"></div>
+          <div style="font-size: 13px; font-weight: 800; text-decoration: underline; color: #0f172a;">( ${escapeHtml(compSettings.headFinance || 'Bagian Keuangan & UBM')} )</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Pihak Penagih</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('preview-modal');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+}
+
+/**
+ * Ekspor CSV Khusus Penagihan Hak Takumi ke Ayumi
+ */
+function exportTakumiInvoiceCSV() {
+  const list = state.partnerships || [];
+  if (list.length === 0) {
+    showToast('Belum ada data penagihan kerjasama untuk diekspor', 'warning');
+    return;
+  }
+
+  const headers = [
+    'No. Faktur Penagihan',
+    'No. Kerjasama',
+    'Tanggal Faktur',
+    'Layanan / Proyek',
+    'Mitra / Klien Asal',
+    'Nilai Tagihan Proyek (Ayumi)',
+    'Hak Takumi (Ditagihkan)',
+    'Hak Ayumi',
+    '% Hak Takumi',
+    'Status Pembayaran Ayumi',
+    'Tanggal Pembayaran',
+    'No. Bukti Transfer',
+    'Catatan Transfer'
+  ];
+
+  const rows = list.map(item => {
+    const calc = getSafePartnershipSplit(item);
+    const invoiceNum = item.invoiceRef || `INV-TKM-${item.id}`;
+    return [
+      `"${invoiceNum}"`,
+      `"${item.id || ''}"`,
+      `"${item.date || ''}"`,
+      `"${(item.serviceName || '').replace(/"/g, '""')}"`,
+      `"${(item.clientName || '').replace(/"/g, '""')}"`,
+      calc.billedAmount || 0,
+      calc.totalTakumi || 0,
+      calc.totalAyumi || 0,
+      `"${calc.takumiPercent.toFixed(1)}%"`,
+      `"${item.paymentStatus || 'Menunggu'}"`,
+      `"${item.paymentDate || ''}"`,
+      `"${(item.paymentRef || '').replace(/"/g, '""')}"`,
+      `"${(item.paymentNotes || item.notes || '').replace(/"/g, '""')}"`
+    ].join(',');
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `UBM_PENAGIHAN_TAKUMI_AYUMI_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('✅ CSV Penagihan Hak Takumi berhasil diunduh!', 'success');
+}
+
+// Window Exposures
+window.switchInvoiceTab = switchInvoiceTab;
+window.renderInvoicePartnershipsTable = renderInvoicePartnershipsTable;
+window.openUpdatePartnershipPaymentModal = openUpdatePartnershipPaymentModal;
+window.savePartnershipPaymentStatus = savePartnershipPaymentStatus;
+window.printTakumiInvoice = printTakumiInvoice;
+window.exportTakumiInvoiceCSV = exportTakumiInvoiceCSV;
+window.getSafePartnershipSplit = getSafePartnershipSplit;

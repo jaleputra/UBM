@@ -518,8 +518,8 @@
     "testKey": "cloud_sync_test_1792489447270",
     "updatedAt": "2026-10-23T06:29:41.516Z",
     "partnershipPercentages": {
-      "takumi": 40,
       "sales": 10,
+      "takumi": 40,
       "adminTax": 20,
       "freelance": 30
     }

@@ -398,7 +398,14 @@ function updateSidebarBadges() {
   if (badgeDelivery) badgeDelivery.textContent = state.delivery?.length || 0;
 
   const badgeInvoice = document.getElementById('badge-invoice-count');
-  if (badgeInvoice) badgeInvoice.textContent = state.invoices?.length || 0;
+  if (badgeInvoice) {
+    const invCount = (state.invoices?.length || 0) + (state.partnerships?.length || 0);
+    badgeInvoice.textContent = invCount;
+  }
+  const badgeSubCustomer = document.getElementById('badge-tab-invoice-customer-count');
+  if (badgeSubCustomer) badgeSubCustomer.textContent = state.invoices?.length || 0;
+  const badgeSubPartnership = document.getElementById('badge-tab-invoice-partnership-count');
+  if (badgeSubPartnership) badgeSubPartnership.textContent = state.partnerships?.length || 0;
 
   const badgePurchasing = document.getElementById('badge-purchasing-count');
   if (badgePurchasing) badgePurchasing.textContent = state.purchasing?.length || 0;
@@ -484,7 +491,18 @@ function renderCurrentView() {
       }
       break;
     case 'po': renderPOTable(); break;
-    case 'invoices': renderInvoicesTable(); break;
+    case 'invoices':
+      const savedInvoiceTab = sessionStorage.getItem('ubm_active_invoice_tab');
+      if (savedInvoiceTab === 'partnership' && typeof switchInvoiceTab === 'function') {
+        switchInvoiceTab('partnership');
+      } else {
+        if (typeof switchInvoiceTab === 'function') {
+          switchInvoiceTab('customer');
+        } else {
+          renderInvoicesTable();
+        }
+      }
+      break;
     case 'purchasing': renderPurchasingTable(); break;
     case 'project-reports': if (typeof renderProjectReportsTable === 'function') renderProjectReportsTable(); break;
     case 'service':
