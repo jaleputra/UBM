@@ -39,6 +39,7 @@ const DEFAULT_SCHEMA = {
   warranty_claims: [],
   activity_logs: [],
   users: [],
+  partnerships: [],
   settings: {}
 };
 

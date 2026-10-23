@@ -1,80 +1,199 @@
 <!-- ==================== KEUANGAN & PROFITABILITAS VIEW ==================== -->
 <section class="view-section" id="view-finance">
-  <!-- INFO BANNER -->
-  <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #3b82f6; margin-bottom: 16px;">
-    <i data-lucide="calculator" style="width: 18px; height: 18px; color: #2563eb; flex-shrink: 0;"></i>
-    <div>
-      <strong>Keuangan & Analisis Profitabilitas Project</strong>: Menampilkan ringkasan finansial proyek meliputi <strong>Harga Modal (HPP / Biaya Bahan & Operasional)</strong>, <strong>Harga Jual Proyek</strong>, <strong>Alokasi & Realisasi Garansi</strong>, serta <strong>Keuntungan Bersih (Net Profit)</strong> dan <strong>Margin Laba (%)</strong>.
+  <!-- NAVIGATION SUB-TABS KEUANGAN -->
+  <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color, #e2e8f0); padding-bottom: 8px; flex-wrap: wrap;">
+    <button type="button" id="tab-btn-finance-profit" onclick="switchFinanceTab('profit')" class="btn" style="display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #2563eb; color: #ffffff; box-shadow: 0 2px 4px rgba(37,99,235,0.2); transition: all 0.2s ease;">
+      <i data-lucide="bar-chart-3" style="width: 18px; height: 18px;"></i>
+      <span>1. Profitabilitas Proyek UBM</span>
+    </button>
+    <button type="button" id="tab-btn-finance-partnership" onclick="switchFinanceTab('partnership')" class="btn" style="display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; background: #f1f5f9; color: #475569; transition: all 0.2s ease;">
+      <i data-lucide="handshake" style="width: 18px; height: 18px;"></i>
+      <span>2. Kerjasama (Bagi Hasil Takumi & Ayumi)</span>
+      <span id="badge-partnership-count" style="display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; color: #fff; border-radius: 9999px; padding: 2px 8px; font-size: 11px; margin-left: 4px;">0</span>
+    </button>
+  </div>
+
+  <!-- TAB 1: PROFITABILITAS PROYEK UBM (EXISTING) -->
+  <div id="finance-tab-content-profit">
+    <!-- INFO BANNER -->
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1e3a8a; background: #eff6ff; padding: 10px 16px; border-radius: 6px; border-left: 3px solid #3b82f6; margin-bottom: 16px;">
+      <i data-lucide="calculator" style="width: 18px; height: 18px; color: #2563eb; flex-shrink: 0;"></i>
+      <div>
+        <strong>Keuangan & Analisis Profitabilitas Project</strong>: Menampilkan ringkasan finansial proyek meliputi <strong>Harga Modal (HPP / Biaya Bahan & Operasional)</strong>, <strong>Harga Jual Proyek</strong>, <strong>Alokasi & Realisasi Garansi</strong>, serta <strong>Keuntungan Bersih (Net Profit)</strong> dan <strong>Margin Laba (%)</strong>.
+      </div>
+    </div>
+
+    <!-- STAT SUMMARY CARDS -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Jual (Omzet)</div>
+        <div id="kpi-finance-total-revenue" class="font-mono" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Modal (HPP)</div>
+        <div id="kpi-finance-total-cogs" class="font-mono" style="font-size: 17px; font-weight: 800; color: #b45309; margin-top: 4px;">Rp 0</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Alokasi Garansi (5%)</div>
+        <div id="kpi-finance-total-warranty" class="font-mono" style="font-size: 17px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #e11d48;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Klaim Garansi Terpakai</div>
+        <div id="kpi-finance-total-claims" class="font-mono" style="font-size: 17px; font-weight: 800; color: #e11d48; margin-top: 4px;">Rp 0</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Keuntungan Bersih (Net Profit)</div>
+        <div id="kpi-finance-total-net-profit" class="font-mono" style="font-size: 18px; font-weight: 800; color: #15803d; margin-top: 4px;">Rp 0</div>
+        <div id="kpi-finance-avg-margin" style="font-size: 11px; color: #15803d; font-weight: 700; margin-top: 2px;">Avg. Margin: 0%</div>
+      </div>
+    </div>
+
+    <!-- ACTION & FILTER BAR -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
+          <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
+          <option value="PAID">💵 Lunas (Invoice Paid)</option>
+          <option value="PARTIAL">💳 Sebagian (Invoice Partial)</option>
+          <option value="UNPAID">⏳ Belum Dibayar (Invoice Unpaid)</option>
+          <option value="HIGH">🟢 Sangat Menguntungkan (&gt; 30%)</option>
+          <option value="GOOD">🔵 Menguntungkan (10% - 30%)</option>
+          <option value="LOW">🟡 Margin Tipis (0% - 10%)</option>
+          <option value="LOSS">🔴 Defisit / Rugi (&lt; 0%)</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportFinanceToCSV()" style="height: 36px;">
+          <i data-lucide="download"></i> Export CSV Keuangan
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="clearAllProjectFinanceData()" style="height: 36px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 600;" title="Hapus semua data keuangan project">
+          <i data-lucide="trash-2"></i> Hapus Semua Data Keuangan
+        </button>
+      </div>
+    </div>
+
+    <!-- TABEL DATA KEUANGAN PROJECT -->
+    <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+        <table class="data-table" id="table-finance-main" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+              <th style="width: 125px; font-size: 11px; text-transform: uppercase;">No. Project</th>
+              <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
+              <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Modal (HPP)</th>
+              <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Jual</th>
+              <th style="width: 165px; font-size: 11px; text-transform: uppercase;">Garansi (Plafon / Klaim)</th>
+              <th style="width: 165px; text-align: right; font-size: 11px; text-transform: uppercase;">Keuntungan Bersih</th>
+              <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Margin (%)</th>
+              <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-finance-body">
+            <!-- Populated dynamically via finance.js -->
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- STAT SUMMARY CARDS -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
-    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb;">
-      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Jual (Omzet)</div>
-      <div id="kpi-finance-total-revenue" class="font-mono" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+  <!-- TAB 2: KERJASAMA (BAGI HASIL TAKUMI & AYUMI) -->
+  <div id="finance-tab-content-partnership" style="display: none;">
+    <!-- INFO BANNER KERJASAMA -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: #064e3b; background: #ecfdf5; padding: 12px 18px; border-radius: 8px; border-left: 4px solid #10b981; margin-bottom: 18px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <i data-lucide="handshake" style="width: 22px; height: 22px; color: #059669; flex-shrink: 0;"></i>
+        <div>
+          <strong>Bagi Hasil Kerjasama Strategis (Politeknik Takumi & PT Ayumi)</strong>: Perhitungan proporsional bagi hasil berdasarkan kontribusi nyata (Sales/Pemasaran, Administrasi & Pajak, dan Freelance/Tenaga Ahli) terhadap tagihan perusahaan.
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" class="btn btn-sm btn-outline" onclick="openPartnershipSettingsModal()" style="background: #ffffff; border-color: #a7f3d0; color: #065f46; font-weight: 700; height: 34px;">
+          <i data-lucide="sliders" style="width: 15px; height: 15px;"></i> Atur Persentase Pembagian
+        </button>
+      </div>
     </div>
-    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b;">
-      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Harga Modal (HPP)</div>
-      <div id="kpi-finance-total-cogs" class="font-mono" style="font-size: 17px; font-weight: 800; color: #b45309; margin-top: 4px;">Rp 0</div>
-    </div>
-    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #7c3aed;">
-      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Alokasi Garansi (5%)</div>
-      <div id="kpi-finance-total-warranty" class="font-mono" style="font-size: 17px; font-weight: 800; color: #7c3aed; margin-top: 4px;">Rp 0</div>
-    </div>
-    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #e11d48;">
-      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Klaim Garansi Terpakai</div>
-      <div id="kpi-finance-total-claims" class="font-mono" style="font-size: 17px; font-weight: 800; color: #e11d48; margin-top: 4px;">Rp 0</div>
-    </div>
-    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #10b981;">
-      <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Keuntungan Bersih (Net Profit)</div>
-      <div id="kpi-finance-total-net-profit" class="font-mono" style="font-size: 18px; font-weight: 800; color: #15803d; margin-top: 4px;">Rp 0</div>
-      <div id="kpi-finance-avg-margin" style="font-size: 11px; color: #15803d; font-weight: 700; margin-top: 2px;">Avg. Margin: 0%</div>
-    </div>
-  </div>
 
-  <!-- ACTION & FILTER BAR -->
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
-        <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
-        <option value="PAID">💵 Lunas (Invoice Paid)</option>
-        <option value="PARTIAL">💳 Sebagian (Invoice Partial)</option>
-        <option value="UNPAID">⏳ Belum Dibayar (Invoice Unpaid)</option>
-        <option value="HIGH">🟢 Sangat Menguntungkan (&gt; 30%)</option>
-        <option value="GOOD">🔵 Menguntungkan (10% - 30%)</option>
-        <option value="LOW">🟡 Margin Tipis (0% - 10%)</option>
-        <option value="LOSS">🔴 Defisit / Rugi (&lt; 0%)</option>
-      </select>
-      <button class="btn btn-outline btn-sm" onclick="exportFinanceToCSV()" style="height: 36px;">
-        <i data-lucide="download"></i> Export CSV Keuangan
-      </button>
-      <button class="btn btn-outline-danger btn-sm" onclick="clearAllProjectFinanceData()" style="height: 36px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 600;" title="Hapus semua data keuangan project">
-        <i data-lucide="trash-2"></i> Hapus Semua Data Keuangan
-      </button>
+    <!-- STAT SUMMARY CARDS KERJASAMA -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px;">
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Total Tagihan Kerjasama (Omzet)</div>
+        <div id="kpi-partnership-total-billed" class="font-mono" style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">Rp 0</div>
+        <div id="kpi-partnership-total-count" style="font-size: 11px; color: #64748b; margin-top: 2px;">0 Kontrak Layanan</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #4f46e5; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #4338ca; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+          <span>Hak Politeknik Takumi</span>
+          <span id="kpi-partnership-takumi-pct" class="badge" style="background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 800;">0%</span>
+        </div>
+        <div id="kpi-partnership-takumi-total" class="font-mono" style="font-size: 18px; font-weight: 800; color: #4338ca; margin-top: 4px;">Rp 0</div>
+        <div style="font-size: 11px; color: #6366f1; margin-top: 2px;">Total hak kontribusi Takumi</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #059669; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #065f46; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+          <span>Hak PT Ayumi</span>
+          <span id="kpi-partnership-ayumi-pct" class="badge" style="background: #d1fae5; color: #065f46; font-size: 10px; font-weight: 800;">0%</span>
+        </div>
+        <div id="kpi-partnership-ayumi-total" class="font-mono" style="font-size: 18px; font-weight: 800; color: #059669; margin-top: 4px;">Rp 0</div>
+        <div style="font-size: 11px; color: #10b981; margin-top: 2px;">Total hak kontribusi Ayumi</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; border-left: 4px solid #f59e0b; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="font-size: 11px; color: #92400e; font-weight: 700; text-transform: uppercase;">Setting Persentase Aktif (100%)</div>
+        <div id="kpi-partnership-current-percentages" style="font-size: 12px; font-weight: 700; color: #78350f; margin-top: 4px; line-height: 1.5;">
+          Takumi: <span id="kpi-pct-takumi-badge" style="color: #4338ca;">20%</span> &bull; Sales: <span id="kpi-pct-sales-badge">20%</span> &bull; Admin & Pajak: <span id="kpi-pct-admin-badge">15%</span> &bull; Freelance: <span id="kpi-pct-freelance-badge">45%</span>
+        </div>
+        <div style="font-size: 11px; color: #059669; font-weight: 700; margin-top: 2px;">Total Pembagian: 100%</div>
+      </div>
     </div>
-  </div>
 
-  <!-- TABEL DATA KEUANGAN PROJECT -->
-  <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-    <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
-      <table class="data-table" id="table-finance-main" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
-            <th style="width: 125px; font-size: 11px; text-transform: uppercase;">No. Project</th>
-            <th style="font-size: 11px; text-transform: uppercase;">Nama Project & Customer</th>
-            <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Modal (HPP)</th>
-            <th style="width: 155px; text-align: right; font-size: 11px; text-transform: uppercase;">Harga Jual</th>
-            <th style="width: 165px; font-size: 11px; text-transform: uppercase;">Garansi (Plafon / Klaim)</th>
-            <th style="width: 165px; text-align: right; font-size: 11px; text-transform: uppercase;">Keuntungan Bersih</th>
-            <th style="width: 120px; text-align: center; font-size: 11px; text-transform: uppercase;">Margin (%)</th>
-            <th style="width: 140px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
-          </tr>
-        </thead>
-        <tbody id="table-finance-body">
-          <!-- Populated dynamically via finance.js -->
-        </tbody>
-      </table>
+    <!-- ACTION & FILTER BAR KERJASAMA -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary btn-sm" onclick="openPartnershipModal()" style="height: 36px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700;">
+          <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+          <span>+ Tambah Data Kerjasama</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="openPartnershipSettingsModal()" style="height: 36px; display: inline-flex; align-items: center; gap: 6px;">
+          <i data-lucide="sliders" style="width: 16px; height: 16px;"></i>
+          <span>Pengaturan Persentase</span>
+        </button>
+        <select id="filter-partnership-status" class="form-control-sm" onchange="filterPartnershipTable()" style="height: 36px;">
+          <option value="ALL">Semua Status Pembayaran</option>
+          <option value="Lunas">💵 Lunas (Paid)</option>
+          <option value="Sebagian">💳 Sebagian (Partial)</option>
+          <option value="Menunggu">⏳ Menunggu Pembayaran</option>
+        </select>
+        <input type="text" id="filter-partnership-search" class="form-control-sm" placeholder="Cari layanan, klien, ref..." oninput="filterPartnershipTable()" style="height: 36px; min-width: 200px;">
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="exportPartnershipCSV()" style="height: 36px;">
+          <i data-lucide="download"></i> Export CSV Kerjasama
+        </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearAllPartnershipData()" style="height: 36px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 600;" title="Hapus semua data kerjasama">
+          <i data-lucide="trash-2"></i> Hapus Semua Data
+        </button>
+      </div>
+    </div>
+
+    <!-- TABEL DATA KERJASAMA -->
+    <div class="table-card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div class="table-responsive" style="max-height: calc(100vh - 310px); overflow-y: auto;">
+        <table class="data-table" id="table-partnerships-main" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 1px solid var(--border-color);">
+              <th style="width: 120px; font-size: 11px; text-transform: uppercase;">No. Kerjasama</th>
+              <th style="width: 100px; font-size: 11px; text-transform: uppercase;">Tanggal</th>
+              <th style="font-size: 11px; text-transform: uppercase;">Layanan & Perusahaan (Klien)</th>
+              <th style="width: 145px; text-align: right; font-size: 11px; text-transform: uppercase;">Tagihan Perusahaan</th>
+              <th style="width: 280px; font-size: 11px; text-transform: uppercase;">Kontribusi (Takumi / Sales / Admin / Freelance)</th>
+              <th style="width: 145px; text-align: right; font-size: 11px; text-transform: uppercase; color: #4338ca;">Hak Takumi</th>
+              <th style="width: 145px; text-align: right; font-size: 11px; text-transform: uppercase; color: #065f46;">Hak Ayumi</th>
+              <th style="width: 110px; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+              <th style="width: 130px; text-align: right; font-size: 11px; text-transform: uppercase;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-partnerships-body">
+            <!-- Populated dynamically via finance.js -->
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>

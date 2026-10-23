@@ -1206,6 +1206,1049 @@ async function clearAllProjectFinanceData() {
   }
 }
 
+// =========================================================================
+// BAGI HASIL KERJASAMA STRATEGIS (POLITEKNIK TAKUMI & PT AYUMI)
+// =========================================================================
+
+const DEFAULT_PARTNERSHIP_PERCENTAGES = {
+  takumi: 20,      // 20%
+  sales: 20,       // 20%
+  adminTax: 15,    // 15%
+  freelance: 45    // 45% (Total 100%)
+};
+
+/**
+ * Mengambil setting persentase pembagian aktif (Total 100%)
+ */
+function getPartnershipPercentages() {
+  if (state.settings && state.settings.partnershipPercentages) {
+    const s = state.settings.partnershipPercentages;
+    const takumi = typeof s.takumi === 'number' ? s.takumi : DEFAULT_PARTNERSHIP_PERCENTAGES.takumi;
+    const sales = typeof s.sales === 'number' ? s.sales : DEFAULT_PARTNERSHIP_PERCENTAGES.sales;
+    const adminTax = typeof s.adminTax === 'number' ? s.adminTax : DEFAULT_PARTNERSHIP_PERCENTAGES.adminTax;
+    const freelance = typeof s.freelance === 'number' ? s.freelance : DEFAULT_PARTNERSHIP_PERCENTAGES.freelance;
+    return { takumi, sales, adminTax, freelance };
+  }
+  try {
+    const cached = localStorage.getItem('ubm_partnership_percentages');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const takumi = typeof parsed.takumi === 'number' ? parsed.takumi : DEFAULT_PARTNERSHIP_PERCENTAGES.takumi;
+      const sales = typeof parsed.sales === 'number' ? parsed.sales : DEFAULT_PARTNERSHIP_PERCENTAGES.sales;
+      const adminTax = typeof parsed.adminTax === 'number' ? parsed.adminTax : DEFAULT_PARTNERSHIP_PERCENTAGES.adminTax;
+      const freelance = typeof parsed.freelance === 'number' ? parsed.freelance : DEFAULT_PARTNERSHIP_PERCENTAGES.freelance;
+      return { takumi, sales, adminTax, freelance };
+    }
+  } catch (e) {}
+  return { ...DEFAULT_PARTNERSHIP_PERCENTAGES };
+}
+
+/**
+ * Switch Sub-Tabs pada Halaman Keuangan (Profitabilitas Proyek vs Kerjasama)
+ */
+function switchFinanceTab(tabKey) {
+  const profitContent = document.getElementById('finance-tab-content-profit');
+  const partnershipContent = document.getElementById('finance-tab-content-partnership');
+  const btnProfit = document.getElementById('tab-btn-finance-profit');
+  const btnPartnership = document.getElementById('tab-btn-finance-partnership');
+
+  if (tabKey === 'partnership') {
+    if (profitContent) profitContent.style.display = 'none';
+    if (partnershipContent) partnershipContent.style.display = 'block';
+
+    if (btnProfit) {
+      btnProfit.style.background = '#f1f5f9';
+      btnProfit.style.color = '#475569';
+      btnProfit.style.boxShadow = 'none';
+    }
+    if (btnPartnership) {
+      btnPartnership.style.background = '#2563eb';
+      btnPartnership.style.color = '#ffffff';
+      btnPartnership.style.boxShadow = '0 2px 4px rgba(37,99,235,0.2)';
+    }
+    try { sessionStorage.setItem('ubm_active_finance_tab', 'partnership'); } catch (e) {}
+    renderPartnershipsTable();
+  } else {
+    if (profitContent) profitContent.style.display = 'block';
+    if (partnershipContent) partnershipContent.style.display = 'none';
+
+    if (btnProfit) {
+      btnProfit.style.background = '#2563eb';
+      btnProfit.style.color = '#ffffff';
+      btnProfit.style.boxShadow = '0 2px 4px rgba(37,99,235,0.2)';
+    }
+    if (btnPartnership) {
+      btnPartnership.style.background = '#f1f5f9';
+      btnPartnership.style.color = '#475569';
+      btnPartnership.style.boxShadow = 'none';
+    }
+    try { sessionStorage.setItem('ubm_active_finance_tab', 'profit'); } catch (e) {}
+    renderFinanceTable();
+  }
+
+  if (typeof lucide !== 'undefined') {
+    try { lucide.createIcons(); } catch (e) {}
+  }
+}
+
+/**
+ * Mesin kalkulasi bagi hasil kontribusi kerjasama (Takumi + Sales + Admin/Tax + Freelance = 100%)
+ */
+function calculatePartnershipSplit(entry, customPercentages) {
+  const billedAmount = parseFloat(entry.billedAmount || 0) || 0;
+  const pct = customPercentages || entry.percentages || getPartnershipPercentages();
+
+  const takumiNominal = Math.round(billedAmount * ((pct.takumi || 0) / 100));
+  const salesNominal = Math.round(billedAmount * ((pct.sales || 0) / 100));
+  const adminTaxNominal = Math.round(billedAmount * ((pct.adminTax || 0) / 100));
+  const freelanceNominal = Math.round(billedAmount * ((pct.freelance || 0) / 100));
+
+  const contrib = entry.contributions || {
+    takumi: { takumi: true, ayumi: false },
+    sales: { takumi: true, ayumi: false },
+    adminTax: { takumi: false, ayumi: true },
+    freelance: { takumi: true, ayumi: false }
+  };
+
+  function splitCategory(catNominal, takumiChecked, ayumiChecked) {
+    const takumi = !!takumiChecked;
+    const ayumi = !!ayumiChecked;
+    if (takumi && !ayumi) {
+      return { takumi: catNominal, ayumi: 0, recipient: 'Takumi' };
+    }
+    if (!takumi && ayumi) {
+      return { takumi: 0, ayumi: catNominal, recipient: 'Ayumi' };
+    }
+    if (takumi && ayumi) {
+      const half = Math.round(catNominal / 2);
+      return { takumi: half, ayumi: catNominal - half, recipient: 'Keduanya (50:50)' };
+    }
+    // Jika tidak dicentang keduanya, default 50:50
+    const half = Math.round(catNominal / 2);
+    return { takumi: half, ayumi: catNominal - half, recipient: 'Bersama (50:50)' };
+  }
+
+  const takumiCatSplit = splitCategory(
+    takumiNominal,
+    contrib.takumi ? contrib.takumi.takumi : true,
+    contrib.takumi ? contrib.takumi.ayumi : false
+  );
+  const salesSplit = splitCategory(salesNominal, contrib.sales?.takumi, contrib.sales?.ayumi);
+  const adminTaxSplit = splitCategory(adminTaxNominal, contrib.adminTax?.takumi, contrib.adminTax?.ayumi);
+  const freelanceSplit = splitCategory(freelanceNominal, contrib.freelance?.takumi, contrib.freelance?.ayumi);
+
+  const totalTakumi = takumiCatSplit.takumi + salesSplit.takumi + adminTaxSplit.takumi + freelanceSplit.takumi;
+  const totalAyumi = takumiCatSplit.ayumi + salesSplit.ayumi + adminTaxSplit.ayumi + freelanceSplit.ayumi;
+
+  const takumiPercent = billedAmount > 0 ? ((totalTakumi / billedAmount) * 100) : 0;
+  const ayumiPercent = billedAmount > 0 ? ((totalAyumi / billedAmount) * 100) : 0;
+
+  return {
+    billedAmount,
+    percentages: pct,
+    takumiNominal,
+    salesNominal,
+    adminTaxNominal,
+    freelanceNominal,
+    takumiCatSplit,
+    salesSplit,
+    adminTaxSplit,
+    freelanceSplit,
+    totalTakumi,
+    totalAyumi,
+    takumiPercent,
+    ayumiPercent
+  };
+}
+
+/**
+ * Render Tabel Kerjasama & KPI Metrics
+ */
+function renderPartnershipsTable() {
+  const tbody = document.getElementById('table-partnerships-body');
+  if (!tbody) return;
+
+  const allItems = Array.isArray(state.partnerships) ? state.partnerships : [];
+  const activePct = getPartnershipPercentages();
+
+  // Update KPI card badges for percentages
+  const pctTakumiBadge = document.getElementById('kpi-pct-takumi-badge');
+  const pctSalesBadge = document.getElementById('kpi-pct-sales-badge');
+  const pctAdminBadge = document.getElementById('kpi-pct-admin-badge');
+  const pctFreelanceBadge = document.getElementById('kpi-pct-freelance-badge');
+  const badgeCount = document.getElementById('badge-partnership-count');
+
+  if (pctTakumiBadge) pctTakumiBadge.textContent = `${activePct.takumi}%`;
+  if (pctSalesBadge) pctSalesBadge.textContent = `${activePct.sales}%`;
+  if (pctAdminBadge) pctAdminBadge.textContent = `${activePct.adminTax}%`;
+  if (pctFreelanceBadge) pctFreelanceBadge.textContent = `${activePct.freelance}%`;
+  if (badgeCount) badgeCount.textContent = allItems.length;
+
+  // Calculate Overall Totals
+  let totalBilledAll = 0;
+  let totalTakumiAll = 0;
+  let totalAyumiAll = 0;
+
+  const calculatedItems = allItems.map(item => {
+    const calc = calculatePartnershipSplit(item, item.percentages || activePct);
+    totalBilledAll += calc.billedAmount;
+    totalTakumiAll += calc.totalTakumi;
+    totalAyumiAll += calc.totalAyumi;
+    return { ...item, calc };
+  });
+
+  const overallTakumiPct = totalBilledAll > 0 ? ((totalTakumiAll / totalBilledAll) * 100) : 0;
+  const overallAyumiPct = totalBilledAll > 0 ? ((totalAyumiAll / totalBilledAll) * 100) : 0;
+
+  // Update KPI cards
+  const kpiBilled = document.getElementById('kpi-partnership-total-billed');
+  const kpiCount = document.getElementById('kpi-partnership-total-count');
+  const kpiTakumiTotal = document.getElementById('kpi-partnership-takumi-total');
+  const kpiTakumiPct = document.getElementById('kpi-partnership-takumi-pct');
+  const kpiAyumiTotal = document.getElementById('kpi-partnership-ayumi-total');
+  const kpiAyumiPct = document.getElementById('kpi-partnership-ayumi-pct');
+
+  if (kpiBilled) kpiBilled.textContent = formatRupiah(totalBilledAll);
+  if (kpiCount) kpiCount.textContent = `${allItems.length} Kontrak / Layanan`;
+  if (kpiTakumiTotal) kpiTakumiTotal.textContent = formatRupiah(totalTakumiAll);
+  if (kpiTakumiPct) kpiTakumiPct.textContent = `${overallTakumiPct.toFixed(1)}%`;
+  if (kpiAyumiTotal) kpiAyumiTotal.textContent = formatRupiah(totalAyumiAll);
+  if (kpiAyumiPct) kpiAyumiPct.textContent = `${overallAyumiPct.toFixed(1)}%`;
+
+  // Filter items
+  const statusFilter = (document.getElementById('filter-partnership-status')?.value || 'ALL').trim();
+  const searchFilter = (document.getElementById('filter-partnership-search')?.value || '').trim().toLowerCase();
+
+  let filtered = calculatedItems.filter(item => {
+    if (statusFilter !== 'ALL' && item.paymentStatus !== statusFilter) {
+      return false;
+    }
+    if (searchFilter) {
+      const match = (
+        (item.id || '').toLowerCase().includes(searchFilter) ||
+        (item.serviceName || '').toLowerCase().includes(searchFilter) ||
+        (item.clientName || '').toLowerCase().includes(searchFilter) ||
+        (item.invoiceRef || '').toLowerCase().includes(searchFilter)
+      );
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align: center; padding: 48px 20px; color: var(--text-muted);">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+            <div style="width: 50px; height: 50px; border-radius: 50%; background: #ecfdf5; display: flex; align-items: center; justify-content: center; color: #059669;">
+              <i data-lucide="handshake" style="width: 26px; height: 26px;"></i>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #0f172a;">Belum Ada Data Kerjasama</div>
+            <div style="font-size: 12px; max-width: 420px; line-height: 1.5; color: #64748b;">
+              Mulai catat transaksi layanan kerjasama dan hitung bagi hasil proporsional antara Takumi dan Ayumi dengan mudah.
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openPartnershipModal()" style="margin-top: 6px;">
+              <i data-lucide="plus-circle"></i> Tambah Kerjasama Pertama
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(item => {
+    const calc = item.calc;
+    const c = item.contributions || {};
+
+    // Helper badge for party
+    function renderPartyBadge(takumi, ayumi) {
+      if (takumi && !ayumi) {
+        return `<span class="badge" style="background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 700; padding: 2px 6px;">Takumi</span>`;
+      }
+      if (!takumi && ayumi) {
+        return `<span class="badge" style="background: #d1fae5; color: #065f46; font-size: 10px; font-weight: 700; padding: 2px 6px;">Ayumi</span>`;
+      }
+      if (takumi && ayumi) {
+        return `<span class="badge" style="background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 6px;">50:50</span>`;
+      }
+      return `<span class="badge badge-secondary" style="font-size: 10px;">-</span>`;
+    }
+
+    let statusBadge = '<span class="badge badge-secondary">Menunggu</span>';
+    if (item.paymentStatus === 'Lunas') {
+      statusBadge = '<span class="badge badge-success">Lunas</span>';
+    } else if (item.paymentStatus === 'Sebagian') {
+      statusBadge = '<span class="badge badge-amber">Sebagian</span>';
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.15s ease;">
+        <td class="font-mono font-bold" style="font-size: 12px; color: #2563eb;">
+          ${escapeHtml(item.id || '-')}
+          ${item.invoiceRef ? `<div class="text-muted" style="font-size: 10.5px; font-weight: normal;">Ref: ${escapeHtml(item.invoiceRef)}</div>` : ''}
+        </td>
+        <td style="font-size: 12px; color: #475569;">
+          ${escapeHtml(item.date || '-')}
+        </td>
+        <td>
+          <div style="font-weight: 700; font-size: 13px; color: #0f172a;">${escapeHtml(item.serviceName || '-')}</div>
+          <div style="font-size: 11.5px; color: #64748b; margin-top: 1px;">
+            Klien: <strong>${escapeHtml(item.clientName || '-')}</strong>
+          </div>
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 13px; color: #0f172a;">${formatRupiah(calc.billedAmount)}</div>
+        </td>
+        <td>
+          <div style="display: flex; flex-direction: column; gap: 3px; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #4338ca; font-weight: 600;">Takumi (${calc.percentages.takumi}%):</span>
+              ${renderPartyBadge(c.takumi ? c.takumi.takumi : true, c.takumi ? c.takumi.ayumi : false)}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #64748b;">Sales (${calc.percentages.sales}%):</span>
+              ${renderPartyBadge(c.sales?.takumi, c.sales?.ayumi)}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #64748b;">Admin & Pajak (${calc.percentages.adminTax}%):</span>
+              ${renderPartyBadge(c.adminTax?.takumi, c.adminTax?.ayumi)}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #64748b;">Freelance (${calc.percentages.freelance}%):</span>
+              ${renderPartyBadge(c.freelance?.takumi, c.freelance?.ayumi)}
+            </div>
+          </div>
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 13px; color: #4338ca;">${formatRupiah(calc.totalTakumi)}</div>
+          <div style="font-size: 10.5px; color: #6366f1; font-weight: 700;">${calc.takumiPercent.toFixed(1)}%</div>
+        </td>
+        <td style="text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 13px; color: #065f46;">${formatRupiah(calc.totalAyumi)}</div>
+          <div style="font-size: 10.5px; color: #10b981; font-weight: 700;">${calc.ayumiPercent.toFixed(1)}%</div>
+        </td>
+        <td style="text-align: center;">
+          ${statusBadge}
+        </td>
+        <td style="text-align: right;">
+          <div style="display: inline-flex; gap: 4px;">
+            <button type="button" class="btn btn-sm btn-outline" style="padding: 4px 7px; color: #0284c7; border-color: #bae6fd; background: #f0f9ff;" onclick="previewPartnershipSlip('${item.id}')" title="Cetak Slip Bagi Hasil Resmi">
+              <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline" style="padding: 4px 7px; color: #2563eb; border-color: #bfdbfe; background: #eff6ff;" onclick="openPartnershipModal('${item.id}')" title="Edit Data Kerjasama">
+              <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" style="padding: 4px 7px;" onclick="deletePartnership('${item.id}')" title="Hapus Data">
+              <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Filter handler
+ */
+function filterPartnershipTable() {
+  renderPartnershipsTable();
+}
+
+/**
+ * Buka modal tambah / edit kerjasama
+ */
+function openPartnershipModal(id) {
+  const modal = document.getElementById('modal-partnership-form');
+  if (!modal) return;
+
+  const activePct = getPartnershipPercentages();
+  const titleEl = document.getElementById('partnership-modal-title');
+  const idInput = document.getElementById('partnership-id');
+  const dateInput = document.getElementById('partnership-date');
+  const statusSelect = document.getElementById('partnership-payment-status');
+  const serviceInput = document.getElementById('partnership-service-name');
+  const clientInput = document.getElementById('partnership-client-name');
+  const billedInput = document.getElementById('partnership-billed-amount');
+  const invRefInput = document.getElementById('partnership-invoice-ref');
+  const notesInput = document.getElementById('partnership-notes');
+
+  // Checkboxes
+  const cbTakumiTakumi = document.getElementById('cb-takumi-takumi');
+  const cbTakumiAyumi = document.getElementById('cb-takumi-ayumi');
+  const cbSalesTakumi = document.getElementById('cb-sales-takumi');
+  const cbSalesAyumi = document.getElementById('cb-sales-ayumi');
+  const cbAdminTakumi = document.getElementById('cb-admin-takumi');
+  const cbAdminAyumi = document.getElementById('cb-admin-ayumi');
+  const cbFreelanceTakumi = document.getElementById('cb-freelance-takumi');
+  const cbFreelanceAyumi = document.getElementById('cb-freelance-ayumi');
+
+  if (id) {
+    const item = (state.partnerships || []).find(p => p.id === id);
+    if (!item) {
+      showToast('Data kerjasama tidak ditemukan', 'error');
+      return;
+    }
+    if (titleEl) titleEl.textContent = `Edit Data Kerjasama (${item.id})`;
+    idInput.value = item.id;
+    dateInput.value = item.date || new Date().toISOString().split('T')[0];
+    statusSelect.value = item.paymentStatus || 'Lunas';
+    serviceInput.value = item.serviceName || '';
+    clientInput.value = item.clientName || '';
+    billedInput.value = item.billedAmount || '';
+    invRefInput.value = item.invoiceRef || '';
+    notesInput.value = item.notes || '';
+
+    const c = item.contributions || {};
+    if (cbTakumiTakumi) cbTakumiTakumi.checked = c.takumi ? !!c.takumi.takumi : true;
+    if (cbTakumiAyumi) cbTakumiAyumi.checked = c.takumi ? !!c.takumi.ayumi : false;
+    if (cbSalesTakumi) cbSalesTakumi.checked = c.sales ? !!c.sales.takumi : true;
+    if (cbSalesAyumi) cbSalesAyumi.checked = c.sales ? !!c.sales.ayumi : false;
+    if (cbAdminTakumi) cbAdminTakumi.checked = c.adminTax ? !!c.adminTax.takumi : false;
+    if (cbAdminAyumi) cbAdminAyumi.checked = c.adminTax ? !!c.adminTax.ayumi : true;
+    if (cbFreelanceTakumi) cbFreelanceTakumi.checked = c.freelance ? !!c.freelance.takumi : true;
+    if (cbFreelanceAyumi) cbFreelanceAyumi.checked = c.freelance ? !!c.freelance.ayumi : false;
+  } else {
+    if (titleEl) titleEl.textContent = 'Tambah Data Kerjasama & Bagi Hasil';
+    idInput.value = '';
+    dateInput.value = new Date().toISOString().split('T')[0];
+    statusSelect.value = 'Lunas';
+    serviceInput.value = '';
+    clientInput.value = '';
+    billedInput.value = '';
+    invRefInput.value = '';
+    notesInput.value = '';
+
+    // Standard initial defaults: Takumi (Takumi), Sales (Takumi), Admin (Ayumi), Freelance (Takumi)
+    if (cbTakumiTakumi) cbTakumiTakumi.checked = true;
+    if (cbTakumiAyumi) cbTakumiAyumi.checked = false;
+    if (cbSalesTakumi) cbSalesTakumi.checked = true;
+    if (cbSalesAyumi) cbSalesAyumi.checked = false;
+    if (cbAdminTakumi) cbAdminTakumi.checked = false;
+    if (cbAdminAyumi) cbAdminAyumi.checked = true;
+    if (cbFreelanceTakumi) cbFreelanceTakumi.checked = true;
+    if (cbFreelanceAyumi) cbFreelanceAyumi.checked = false;
+  }
+
+  // Update % badges in modal
+  const pctTakumiBadge = document.getElementById('modal-pct-takumi');
+  const pctSalesBadge = document.getElementById('modal-pct-sales');
+  const pctAdminBadge = document.getElementById('modal-pct-admin');
+  const pctFreelanceBadge = document.getElementById('modal-pct-freelance');
+
+  if (pctTakumiBadge) pctTakumiBadge.textContent = `${activePct.takumi}%`;
+  if (pctSalesBadge) pctSalesBadge.textContent = `${activePct.sales}%`;
+  if (pctAdminBadge) pctAdminBadge.textContent = `${activePct.adminTax}%`;
+  if (pctFreelanceBadge) pctFreelanceBadge.textContent = `${activePct.freelance}%`;
+
+  updatePartnershipModalPreview();
+  openModal('modal-partnership-form');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Update perhitungan real-time di dalam formulir modal (Takumi + Sales + Admin + Freelance = 100%)
+ */
+function updatePartnershipModalPreview() {
+  const billedInput = document.getElementById('partnership-billed-amount');
+  const billedVal = parseFloat(billedInput?.value || 0) || 0;
+  const activePct = getPartnershipPercentages();
+
+  const formattedBilled = document.getElementById('partnership-billed-formatted');
+  if (formattedBilled) formattedBilled.textContent = formatRupiah(billedVal);
+
+  const amtTakumiEl = document.getElementById('modal-amt-takumi');
+  const amtSalesEl = document.getElementById('modal-amt-sales');
+  const amtAdminEl = document.getElementById('modal-amt-admin');
+  const amtFreelanceEl = document.getElementById('modal-amt-freelance');
+
+  const takumiNominal = Math.round(billedVal * (activePct.takumi / 100));
+  const salesNominal = Math.round(billedVal * (activePct.sales / 100));
+  const adminNominal = Math.round(billedVal * (activePct.adminTax / 100));
+  const freelanceNominal = Math.round(billedVal * (activePct.freelance / 100));
+
+  if (amtTakumiEl) amtTakumiEl.textContent = formatRupiah(takumiNominal);
+  if (amtSalesEl) amtSalesEl.textContent = formatRupiah(salesNominal);
+  if (amtAdminEl) amtAdminEl.textContent = formatRupiah(adminNominal);
+  if (amtFreelanceEl) amtFreelanceEl.textContent = formatRupiah(freelanceNominal);
+
+  const mockEntry = {
+    billedAmount: billedVal,
+    percentages: activePct,
+    contributions: {
+      takumi: {
+        takumi: document.getElementById('cb-takumi-takumi')?.checked,
+        ayumi: document.getElementById('cb-takumi-ayumi')?.checked
+      },
+      sales: {
+        takumi: document.getElementById('cb-sales-takumi')?.checked,
+        ayumi: document.getElementById('cb-sales-ayumi')?.checked
+      },
+      adminTax: {
+        takumi: document.getElementById('cb-admin-takumi')?.checked,
+        ayumi: document.getElementById('cb-admin-ayumi')?.checked
+      },
+      freelance: {
+        takumi: document.getElementById('cb-freelance-takumi')?.checked,
+        ayumi: document.getElementById('cb-freelance-ayumi')?.checked
+      }
+    }
+  };
+
+  const calc = calculatePartnershipSplit(mockEntry, activePct);
+
+  const valTakumiEl = document.getElementById('preview-val-takumi');
+  const pctTakumiEl = document.getElementById('preview-pct-takumi');
+  const valAyumiEl = document.getElementById('preview-val-ayumi');
+  const pctAyumiEl = document.getElementById('preview-pct-ayumi');
+
+  if (valTakumiEl) valTakumiEl.textContent = formatRupiah(calc.totalTakumi);
+  if (pctTakumiEl) pctTakumiEl.textContent = `${calc.takumiPercent.toFixed(1)}% dari Tagihan`;
+  if (valAyumiEl) valAyumiEl.textContent = formatRupiah(calc.totalAyumi);
+  if (pctAyumiEl) pctAyumiEl.textContent = `${calc.ayumiPercent.toFixed(1)}% dari Tagihan`;
+}
+
+/**
+ * Menyimpan data kerjasama ke database lokal dan Supabase
+ */
+async function savePartnership(event) {
+  if (event) event.preventDefault();
+
+  const id = (document.getElementById('partnership-id')?.value || '').trim();
+  const date = (document.getElementById('partnership-date')?.value || '').trim();
+  const paymentStatus = document.getElementById('partnership-payment-status')?.value || 'Lunas';
+  const serviceName = (document.getElementById('partnership-service-name')?.value || '').trim();
+  const clientName = (document.getElementById('partnership-client-name')?.value || '').trim();
+  const billedAmount = parseFloat(document.getElementById('partnership-billed-amount')?.value || 0) || 0;
+  const invoiceRef = (document.getElementById('partnership-invoice-ref')?.value || '').trim();
+  const notes = (document.getElementById('partnership-notes')?.value || '').trim();
+
+  if (!serviceName || !clientName) {
+    showToast('Nama layanan dan perusahaan mitra wajib diisi', 'error');
+    return;
+  }
+  if (billedAmount <= 0) {
+    showToast('Nilai tagihan perusahaan harus lebih dari 0', 'error');
+    return;
+  }
+
+  const activePct = getPartnershipPercentages();
+  const contributions = {
+    takumi: {
+      takumi: !!document.getElementById('cb-takumi-takumi')?.checked,
+      ayumi: !!document.getElementById('cb-takumi-ayumi')?.checked
+    },
+    sales: {
+      takumi: !!document.getElementById('cb-sales-takumi')?.checked,
+      ayumi: !!document.getElementById('cb-sales-ayumi')?.checked
+    },
+    adminTax: {
+      takumi: !!document.getElementById('cb-admin-takumi')?.checked,
+      ayumi: !!document.getElementById('cb-admin-ayumi')?.checked
+    },
+    freelance: {
+      takumi: !!document.getElementById('cb-freelance-takumi')?.checked,
+      ayumi: !!document.getElementById('cb-freelance-ayumi')?.checked
+    }
+  };
+
+  const payload = {
+    date,
+    paymentStatus,
+    serviceName,
+    clientName,
+    billedAmount,
+    invoiceRef,
+    percentages: activePct,
+    contributions,
+    notes,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    let savedItem = null;
+    if (id) {
+      payload.id = id;
+      const res = await fetch(`/api/partnerships/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      savedItem = await res.json();
+    } else {
+      const res = await fetch('/api/partnerships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      savedItem = await res.json();
+    }
+
+    // Update state.partnerships locally
+    state.partnerships = state.partnerships || [];
+    const idx = state.partnerships.findIndex(p => p.id === savedItem.id);
+    if (idx !== -1) {
+      state.partnerships[idx] = savedItem;
+    } else {
+      state.partnerships.unshift(savedItem);
+    }
+
+    // Persist to direct Supabase Cloud Store for instant multi-device & Netlify sync
+    if (typeof directSupabaseSyncPartnerships === 'function') {
+      directSupabaseSyncPartnerships(state.partnerships).catch(e => console.warn(e));
+    }
+    try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(state.partnerships)); } catch (e) {}
+
+    closeModal('modal-partnership-form');
+    showToast(`✅ Data kerjasama ${savedItem.id} berhasil disimpan!`, 'success');
+    renderPartnershipsTable();
+  } catch (err) {
+    console.error('Error saving partnership:', err);
+    // Fallback: save to state locally and sync directly to Supabase
+    const fallbackId = id || `KSM-${Date.now().toString().slice(-6)}`;
+    payload.id = fallbackId;
+    state.partnerships = state.partnerships || [];
+    const idx = state.partnerships.findIndex(p => p.id === fallbackId);
+    if (idx !== -1) {
+      state.partnerships[idx] = payload;
+    } else {
+      state.partnerships.unshift(payload);
+    }
+    if (typeof directSupabaseSyncPartnerships === 'function') {
+      directSupabaseSyncPartnerships(state.partnerships).catch(() => {});
+    }
+    try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(state.partnerships)); } catch (e) {}
+    closeModal('modal-partnership-form');
+    showToast(`✅ Data kerjasama disimpan (Direct Cloud Store)`, 'success');
+    renderPartnershipsTable();
+  }
+}
+
+/**
+ * Menghapus data kerjasama
+ */
+async function deletePartnership(id) {
+  if (!confirm(`Hapus data kerjasama dengan nomor: ${id}?`)) return;
+
+  try {
+    await fetch(`/api/partnerships/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('API delete notice:', err.message);
+  }
+
+  state.partnerships = (state.partnerships || []).filter(p => p.id !== id);
+  if (typeof directSupabaseSyncPartnerships === 'function') {
+    directSupabaseSyncPartnerships(state.partnerships).catch(() => {});
+  }
+  try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(state.partnerships)); } catch (e) {}
+
+  showToast('Data kerjasama berhasil dihapus', 'info');
+  renderPartnershipsTable();
+}
+
+/**
+ * Hapus semua data kerjasama
+ */
+async function clearAllPartnershipData() {
+  if (!confirm('PERINGATAN: Apakah Anda yakin ingin MENGHAPUS SEMUA data kerjasama dan bagi hasil?')) return;
+  if (!confirm('Konfirmasi terakhir: Seluruh riwayat perhitungan bagi hasil akan dihapus permanen. Lanjutkan?')) return;
+
+  const currentList = [...(state.partnerships || [])];
+  for (const item of currentList) {
+    try {
+      await fetch(`/api/partnerships/${item.id}`, { method: 'DELETE' });
+    } catch (e) {}
+  }
+
+  state.partnerships = [];
+  if (typeof directSupabaseSyncPartnerships === 'function') {
+    directSupabaseSyncPartnerships([]).catch(() => {});
+  }
+  try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify([])); } catch (e) {}
+
+  showToast('Semua data kerjasama berhasil dibersihkan', 'success');
+  renderPartnershipsTable();
+}
+
+/**
+ * Modal Pengaturan Persentase Pembagian (Takumi, Sales, Admin & Pajak, Freelance)
+ */
+function openPartnershipSettingsModal() {
+  const currentPct = getPartnershipPercentages();
+  const tInput = document.getElementById('setting-pct-takumi');
+  const sInput = document.getElementById('setting-pct-sales');
+  const aInput = document.getElementById('setting-pct-admin');
+  const fInput = document.getElementById('setting-pct-freelance');
+
+  if (tInput) tInput.value = currentPct.takumi;
+  if (sInput) sInput.value = currentPct.sales;
+  if (aInput) aInput.value = currentPct.adminTax;
+  if (fInput) fInput.value = currentPct.freelance;
+
+  recalculateSettingPercentages();
+  openModal('modal-partnership-settings');
+}
+
+/**
+ * Hitung live total persentase pada formulir pengaturan (Harus tepat 100%)
+ */
+function recalculateSettingPercentages() {
+  const takumi = parseInt(document.getElementById('setting-pct-takumi')?.value || 0, 10) || 0;
+  const sales = parseInt(document.getElementById('setting-pct-sales')?.value || 0, 10) || 0;
+  const admin = parseInt(document.getElementById('setting-pct-admin')?.value || 0, 10) || 0;
+  const freelance = parseInt(document.getElementById('setting-pct-freelance')?.value || 0, 10) || 0;
+
+  const bTakumi = document.getElementById('badge-setting-pct-takumi');
+  const bSales = document.getElementById('badge-setting-pct-sales');
+  const bAdmin = document.getElementById('badge-setting-pct-admin');
+  const bFreelance = document.getElementById('badge-setting-pct-freelance');
+
+  if (bTakumi) bTakumi.textContent = `${takumi}%`;
+  if (bSales) bSales.textContent = `${sales}%`;
+  if (bAdmin) bAdmin.textContent = `${admin}%`;
+  if (bFreelance) bFreelance.textContent = `${freelance}%`;
+
+  const total = takumi + sales + admin + freelance;
+
+  const totalEl = document.getElementById('setting-pct-total');
+  const statusEl = document.getElementById('setting-pct-status-badge');
+  const errEl = document.getElementById('setting-pct-error');
+  const btnSave = document.getElementById('btn-save-partnership-settings');
+
+  if (totalEl) totalEl.textContent = `${total}%`;
+
+  if (total === 100) {
+    if (totalEl) totalEl.style.color = '#059669';
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.textContent = '✅ Total pembagian tepat 100%';
+      statusEl.style.color = '#059669';
+    }
+    if (errEl) errEl.style.display = 'none';
+    if (btnSave) btnSave.disabled = false;
+  } else {
+    if (totalEl) totalEl.style.color = '#dc2626';
+    if (statusEl) statusEl.style.display = 'none';
+    if (errEl) {
+      errEl.style.display = 'block';
+      const diff = total > 100 ? `Kelebihan ${total - 100}%` : `Kekurangan ${100 - total}%`;
+      errEl.textContent = `⚠️ Total persentase harus tepat 100%! (Saat ini: ${total}%, ${diff})`;
+    }
+    if (btnSave) btnSave.disabled = true;
+  }
+}
+
+/**
+ * Menyimpan pengaturan persentase ke database & local store
+ */
+async function savePartnershipSettings(event) {
+  if (event) event.preventDefault();
+
+  const takumi = parseInt(document.getElementById('setting-pct-takumi')?.value || 0, 10) || 0;
+  const sales = parseInt(document.getElementById('setting-pct-sales')?.value || 0, 10) || 0;
+  const adminTax = parseInt(document.getElementById('setting-pct-admin')?.value || 0, 10) || 0;
+  const freelance = parseInt(document.getElementById('setting-pct-freelance')?.value || 0, 10) || 0;
+
+  const total = takumi + sales + adminTax + freelance;
+  if (total !== 100) {
+    showToast(`Total persentase harus tepat 100% (saat ini: ${total}%)`, 'error');
+    return;
+  }
+
+  const newPercentages = { takumi, sales, adminTax, freelance };
+
+  state.settings = state.settings || {};
+  state.settings.partnershipPercentages = newPercentages;
+
+  try {
+    localStorage.setItem('ubm_partnership_percentages', JSON.stringify(newPercentages));
+  } catch (e) {}
+
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.settings)
+    });
+  } catch (e) {
+    console.warn('API settings save notice:', e.message);
+  }
+
+  closeModal('modal-partnership-settings');
+  showToast('✅ Pengaturan persentase bagi hasil (100%) berhasil disimpan!', 'success');
+  renderPartnershipsTable();
+}
+
+/**
+ * Reset persentase ke nilai default (Takumi: 20%, Sales: 20%, Admin: 15%, Freelance: 45% = 100%)
+ */
+function resetPartnershipPercentagesToDefault() {
+  if (!confirm('Kembalikan persentase bagi hasil ke pengaturan default (Takumi: 20%, Sales: 20%, Admin & Pajak: 15%, Freelance: 45% = Total 100%)?')) return;
+
+  const tInput = document.getElementById('setting-pct-takumi');
+  const sInput = document.getElementById('setting-pct-sales');
+  const aInput = document.getElementById('setting-pct-admin');
+  const fInput = document.getElementById('setting-pct-freelance');
+
+  if (tInput) tInput.value = DEFAULT_PARTNERSHIP_PERCENTAGES.takumi;
+  if (sInput) sInput.value = DEFAULT_PARTNERSHIP_PERCENTAGES.sales;
+  if (aInput) aInput.value = DEFAULT_PARTNERSHIP_PERCENTAGES.adminTax;
+  if (fInput) fInput.value = DEFAULT_PARTNERSHIP_PERCENTAGES.freelance;
+
+  recalculateSettingPercentages();
+}
+
+/**
+ * Pratinjau / Cetak Slip Resmi Bagi Hasil Kerjasama (Takumi & Ayumi)
+ */
+function previewPartnershipSlip(id) {
+  const item = (state.partnerships || []).find(p => p.id === id);
+  if (!item) {
+    showToast('Data kerjasama tidak ditemukan', 'error');
+    return;
+  }
+
+  const calc = calculatePartnershipSplit(item, item.percentages);
+  const compSettings = state.settings || {};
+  const c = item.contributions || {};
+
+  const modal = document.getElementById('preview-modal');
+  const modalContent = document.getElementById('preview-modal-content') || document.getElementById('preview-modal-body');
+
+  function getPartyLabel(takumi, ayumi) {
+    if (takumi && !ayumi) return 'Politeknik Takumi (100%)';
+    if (!takumi && ayumi) return 'PT Ayumi (100%)';
+    if (takumi && ayumi) return 'Takumi (50%) & Ayumi (50%)';
+    return 'Bersama (50:50)';
+  }
+
+  modalContent.innerHTML = `
+    <div style="max-width: 820px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; font-family: 'Inter', system-ui, sans-serif; color: #0f172a;">
+      <!-- SLIP HEADER -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+        <div>
+          <div style="font-size: 11px; font-weight: 800; color: #2563eb; letter-spacing: 1px; text-transform: uppercase;">
+            UNIVERSAL BUSINESS MANAGEMENT (UBM)
+          </div>
+          <h2 style="margin: 4px 0 0 0; font-size: 20px; font-weight: 800; color: #0f172a;">
+            SLIP BUKTI BAGI HASIL KERJASAMA
+          </h2>
+          <div style="font-size: 12px; color: #475569; margin-top: 3px;">
+            Kemitraan Strategis: <strong>Politeknik Takumi</strong> & <strong>PT Ayumi</strong>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div class="font-mono font-bold" style="font-size: 15px; color: #2563eb;">${escapeHtml(item.id)}</div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Tanggal: <strong>${escapeHtml(item.date || '-')}</strong></div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+            Status: <span class="badge ${item.paymentStatus === 'Lunas' ? 'badge-success' : 'badge-amber'}" style="font-size: 10px; padding: 2px 7px;">${escapeHtml(item.paymentStatus)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROYEK / LAYANAN INFO -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div>
+          <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700;">Layanan / Proyek Kerjasama:</div>
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px;">${escapeHtml(item.serviceName)}</div>
+          ${item.invoiceRef ? `<div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">No. Invoice: <span class="font-mono text-primary">${escapeHtml(item.invoiceRef)}</span></div>` : ''}
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700;">Perusahaan Mitra / Klien:</div>
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px;">${escapeHtml(item.clientName)}</div>
+          <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">Total Tagihan Kontrak: <strong class="font-mono text-primary font-bold">${formatRupiah(calc.billedAmount)}</strong></div>
+        </div>
+      </div>
+
+      <!-- TABEL RINCIAN PEMBAGIAN KONTRIBUSI -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12.5px;">
+        <thead>
+          <tr style="background: #f1f5f9; border-top: 1px solid #cbd5e1; border-bottom: 2px solid #cbd5e1;">
+            <th style="padding: 10px 12px; text-align: left;">Kategori Kontribusi</th>
+            <th style="padding: 10px 12px; text-align: center; width: 60px;">Porsi</th>
+            <th style="padding: 10px 12px; text-align: right; width: 130px;">Nilai Alokasi</th>
+            <th style="padding: 10px 12px; text-align: left; width: 170px;">Pihak Berhak</th>
+            <th style="padding: 10px 12px; text-align: right; width: 125px; color: #4338ca;">Hak Takumi</th>
+            <th style="padding: 10px 12px; text-align: right; width: 125px; color: #065f46;">Hak Ayumi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 1. TAKUMI -->
+          <tr style="border-bottom: 1px solid #e2e8f0; background: #faf5ff;">
+            <td style="padding: 10px 12px; font-weight: 700; color: #4338ca;">
+              1. Alokasi Takumi
+            </td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${calc.percentages.takumi}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.takumiNominal)}</td>
+            <td style="padding: 10px 12px;">${getPartyLabel(c.takumi ? c.takumi.takumi : true, c.takumi ? c.takumi.ayumi : false)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca;" class="font-mono">${formatRupiah(calc.takumiCatSplit.takumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #065f46;" class="font-mono">${formatRupiah(calc.takumiCatSplit.ayumi)}</td>
+          </tr>
+          <!-- 2. SALES -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700;">
+              2. Sales / Pemasaran & Penjualan
+            </td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${calc.percentages.sales}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.salesNominal)}</td>
+            <td style="padding: 10px 12px;">${getPartyLabel(c.sales?.takumi, c.sales?.ayumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca;" class="font-mono">${formatRupiah(calc.salesSplit.takumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #065f46;" class="font-mono">${formatRupiah(calc.salesSplit.ayumi)}</td>
+          </tr>
+          <!-- 3. ADMIN & PAJAK -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700;">
+              3. Administrasi & Perpajakan
+            </td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${calc.percentages.adminTax}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.adminTaxNominal)}</td>
+            <td style="padding: 10px 12px;">${getPartyLabel(c.adminTax?.takumi, c.adminTax?.ayumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca;" class="font-mono">${formatRupiah(calc.adminTaxSplit.takumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #065f46;" class="font-mono">${formatRupiah(calc.adminTaxSplit.ayumi)}</td>
+          </tr>
+          <!-- 4. FREELANCE -->
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px 12px; font-weight: 700;">
+              4. Freelance (Tenaga Ahli & Pelaksana)
+            </td>
+            <td style="padding: 10px 12px; text-align: center;" class="font-mono">${calc.percentages.freelance}%</td>
+            <td style="padding: 10px 12px; text-align: right;" class="font-mono">${formatRupiah(calc.freelanceNominal)}</td>
+            <td style="padding: 10px 12px;">${getPartyLabel(c.freelance?.takumi, c.freelance?.ayumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #4338ca;" class="font-mono">${formatRupiah(calc.freelanceSplit.takumi)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #065f46;" class="font-mono">${formatRupiah(calc.freelanceSplit.ayumi)}</td>
+          </tr>
+          <!-- TOTAL ROW -->
+          <tr style="background: #f8fafc; border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; font-size: 13px;">
+            <td colspan="2" style="padding: 12px; font-weight: 800; text-transform: uppercase;">
+              TOTAL NILAI TAGIHAN (100%)
+            </td>
+            <td style="padding: 12px; text-align: right; font-weight: 800;" class="font-mono">
+              ${formatRupiah(calc.billedAmount)}
+            </td>
+            <td style="padding: 12px; font-weight: 700;">
+              Total Bagi Hasil
+            </td>
+            <td style="padding: 12px; text-align: right; font-weight: 800; color: #4338ca; font-size: 14px;" class="font-mono">
+              ${formatRupiah(calc.totalTakumi)}
+              <div style="font-size: 10.5px; font-weight: 600; color: #6366f1;">(${calc.takumiPercent.toFixed(1)}%)</div>
+            </td>
+            <td style="padding: 12px; text-align: right; font-weight: 800; color: #065f46; font-size: 14px;" class="font-mono">
+              ${formatRupiah(calc.totalAyumi)}
+              <div style="font-size: 10.5px; font-weight: 600; color: #10b981;">(${calc.ayumiPercent.toFixed(1)}%)</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      ${item.notes ? `
+        <div style="background: #f1f5f9; border-radius: 6px; padding: 10px 14px; font-size: 11.5px; color: #475569; margin-bottom: 24px;">
+          <strong>Catatan:</strong> ${escapeHtml(item.notes)}
+        </div>
+      ` : ''}
+
+      <!-- SIGNATURE SECTION -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 36px; padding-top: 10px;">
+        <div style="text-align: center;">
+          <div style="font-size: 12px; font-weight: 700; color: #4338ca;">PIHAK I (POLITEKNIK TAKUMI)</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Hak Bagi Hasil: ${formatRupiah(calc.totalTakumi)}</div>
+          <div style="height: 60px;"></div>
+          <div style="font-weight: 800; font-size: 13px; text-decoration: underline;">( Perwakilan Politeknik Takumi )</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Tanggal: ___________________</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 12px; font-weight: 700; color: #065f46;">PIHAK II (PT AYUMI)</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Hak Bagi Hasil: ${formatRupiah(calc.totalAyumi)}</div>
+          <div style="height: 60px;"></div>
+          <div style="font-weight: 800; font-size: 13px; text-decoration: underline;">( Perwakilan PT Ayumi )</div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Tanggal: ___________________</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('preview-modal');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Ekspor Data Kerjasama ke CSV
+ */
+function exportPartnershipCSV() {
+  const items = Array.isArray(state.partnerships) ? state.partnerships : [];
+  if (items.length === 0) {
+    showToast('Tidak ada data kerjasama untuk diekspor', 'warning');
+    return;
+  }
+
+  const activePct = getPartnershipPercentages();
+  const headers = [
+    'No. Kerjasama',
+    'Tanggal',
+    'Nama Layanan',
+    'Perusahaan Mitra (Klien)',
+    'No. Ref Invoice',
+    'Tagihan Perusahaan (Rp)',
+    'Kontribusi Takumi',
+    'Kontribusi Sales',
+    'Kontribusi Admin & Pajak',
+    'Kontribusi Freelance',
+    'Hak Takumi (Rp)',
+    'Hak Takumi (%)',
+    'Hak Ayumi (Rp)',
+    'Hak Ayumi (%)',
+    'Status Pembayaran',
+    'Catatan'
+  ];
+
+  function getPartyText(takumi, ayumi) {
+    if (takumi && !ayumi) return 'Takumi';
+    if (!takumi && ayumi) return 'Ayumi';
+    if (takumi && ayumi) return 'Takumi & Ayumi (50:50)';
+    return 'Bersama (50:50)';
+  }
+
+  const rows = items.map(it => {
+    const calc = calculatePartnershipSplit(it, it.percentages || activePct);
+    const c = it.contributions || {};
+    return [
+      it.id || '',
+      it.date || '',
+      `"${(it.serviceName || '').replace(/"/g, '""')}"`,
+      `"${(it.clientName || '').replace(/"/g, '""')}"`,
+      `"${(it.invoiceRef || '').replace(/"/g, '""')}"`,
+      calc.billedAmount,
+      getPartyText(c.takumi ? c.takumi.takumi : true, c.takumi ? c.takumi.ayumi : false),
+      getPartyText(c.sales?.takumi, c.sales?.ayumi),
+      getPartyText(c.adminTax?.takumi, c.adminTax?.ayumi),
+      getPartyText(c.freelance?.takumi, c.freelance?.ayumi),
+      calc.totalTakumi,
+      calc.takumiPercent.toFixed(1),
+      calc.totalAyumi,
+      calc.ayumiPercent.toFixed(1),
+      it.paymentStatus || 'Lunas',
+      `"${(it.notes || '').replace(/"/g, '""')}"`
+    ];
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `UBM_KERJASAMA_TAKUMI_AYUMI_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Data Kerjasama berhasil diekspor ke CSV!', 'success');
+}
+
 // Global window exposure
 window.getProjectFinancialData = getProjectFinancialData;
 window.renderFinanceTable = renderFinanceTable;
@@ -1222,3 +2265,22 @@ window.exportFinanceToCSV = exportFinanceToCSV;
 window.renderServiceFinanceTable = renderFinanceTable;
 window.filterServiceFinanceTable = filterFinanceTable;
 window.exportServiceFinanceToCSV = exportFinanceToCSV;
+
+// Kerjasama Module Exposures
+window.switchFinanceTab = switchFinanceTab;
+window.getPartnershipPercentages = getPartnershipPercentages;
+window.calculatePartnershipSplit = calculatePartnershipSplit;
+window.renderPartnershipsTable = renderPartnershipsTable;
+window.filterPartnershipTable = filterPartnershipTable;
+window.openPartnershipModal = openPartnershipModal;
+window.updatePartnershipModalPreview = updatePartnershipModalPreview;
+window.savePartnership = savePartnership;
+window.deletePartnership = deletePartnership;
+window.clearAllPartnershipData = clearAllPartnershipData;
+window.openPartnershipSettingsModal = openPartnershipSettingsModal;
+window.recalculateSettingPercentages = recalculateSettingPercentages;
+window.savePartnershipSettings = savePartnershipSettings;
+window.resetPartnershipPercentagesToDefault = resetPartnershipPercentagesToDefault;
+window.previewPartnershipSlip = previewPartnershipSlip;
+window.exportPartnershipCSV = exportPartnershipCSV;
+

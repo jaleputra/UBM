@@ -267,3 +267,61 @@ async function directSupabaseFetchUsers() {
 window.directSupabaseSyncUsers = directSupabaseSyncUsers;
 window.directSupabaseFetchUsers = directSupabaseFetchUsers;
 
+async function directSupabaseSyncPartnerships(partnershipsList) {
+  if (!Array.isArray(partnershipsList)) return false;
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
+      method: 'POST',
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: '__SYS_SYNC_partnerships__',
+        customer_name: '__UBM_SYS_STORE__',
+        items: partnershipsList,
+        notes: 'Direct universal synchronization for partnerships (Takumi & Ayumi)',
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (res.ok) {
+      try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(partnershipsList)); } catch (e) {}
+    }
+    return res.ok;
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Sync Partnerships] Notice:', err.message);
+    return false;
+  }
+}
+
+async function directSupabaseFetchPartnerships() {
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.__SYS_SYNC_partnerships__&select=items`, {
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache, no-store'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items)) {
+        try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data[0].items)); } catch (e) {}
+        return data[0].items;
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ [Direct Supabase Fetch Partnerships] Notice:', err.message);
+  }
+  try {
+    const cached = localStorage.getItem('ubm_cached_partnerships');
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+  return null;
+}
+
+window.directSupabaseSyncPartnerships = directSupabaseSyncPartnerships;
+window.directSupabaseFetchPartnerships = directSupabaseFetchPartnerships;
+

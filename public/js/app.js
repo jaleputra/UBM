@@ -22,6 +22,13 @@ Object.assign(state, {
   warranty_claims: state.warranty_claims || [],
   maintenance: state.maintenance || [],
   activity_logs: state.activity_logs || [],
+  partnerships: (function() {
+    try {
+      const c = localStorage.getItem('ubm_cached_partnerships');
+      if (c) return JSON.parse(c);
+    } catch (e) {}
+    return window.state?.partnerships || [];
+  })(),
   users: (function() {
     try {
       const c = localStorage.getItem('ubm_cached_users');
@@ -275,6 +282,7 @@ async function loadAllData() {
       fetchResource('warranty_claims'),
       fetchResource('maintenance'),
       fetchResource('activity_logs'),
+      fetchResource('partnerships'),
       fetchResource('users'),
       fetchResource('settings')
     ]);
@@ -335,6 +343,16 @@ async function fetchResource(resource) {
     } catch (e) {}
   }
 
+  if (resource === 'partnerships' && typeof directSupabaseFetchPartnerships === 'function') {
+    try {
+      const directPartnerships = await directSupabaseFetchPartnerships();
+      if (Array.isArray(directPartnerships)) {
+        state.partnerships = directPartnerships;
+        return directPartnerships;
+      }
+    } catch (e) {}
+  }
+
   try {
     const cacheBuster = `_t=${Date.now()}`;
     const url = `/api/${resource}?${cacheBuster}`;
@@ -353,6 +371,9 @@ async function fetchResource(resource) {
       state[resource] = Array.isArray(data) ? data : [];
       if (resource === 'users' && Array.isArray(data) && data.length > 0) {
         try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
+      }
+      if (resource === 'partnerships' && Array.isArray(data)) {
+        try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data)); } catch (e) {}
       }
     }
     return data;
@@ -474,7 +495,19 @@ function renderCurrentView() {
       }
       break;
     case 'maintenance': if (typeof renderMaintenanceTable === 'function') renderMaintenanceTable(); break;
-    case 'finance': if (typeof renderFinanceTable === 'function') renderFinanceTable(); break;
+    case 'finance':
+      const savedFinanceTab = sessionStorage.getItem('ubm_active_finance_tab');
+      if (savedFinanceTab === 'partnership' && typeof switchFinanceTab === 'function') {
+        switchFinanceTab('partnership');
+      } else {
+        if (typeof switchFinanceTab === 'function') {
+          switchFinanceTab('profit');
+        } else {
+          if (typeof renderFinanceTable === 'function') renderFinanceTable();
+          if (typeof renderPartnershipsTable === 'function') renderPartnershipsTable();
+        }
+      }
+      break;
     case 'bom': renderBOMTable(); break;
     case 'delivery': renderDeliveryTable(); break;
     case 'bast': if (typeof renderBastTable === 'function') renderBastTable(); break;

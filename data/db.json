@@ -384,6 +384,28 @@
   ],
   "users": [
     {
+      "id": "USR-2026-597",
+      "name": "test lagi",
+      "role": "Member",
+      "email": "testlagi@gmail.com",
+      "avatar": "TL",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-23T01:34:47.566Z",
+      "department": "BISDI"
+    },
+    {
+      "id": "USR-2026-896",
+      "name": "test",
+      "role": "Member",
+      "email": "test@gmail.com",
+      "avatar": "TE",
+      "status": "Aktif",
+      "password": "12345678",
+      "createdAt": "2026-10-22T14:06:19.458Z",
+      "department": "test"
+    },
+    {
       "id": "USR-2026-381",
       "name": "Reza Ilyasa",
       "role": "Member",
@@ -428,6 +450,45 @@
       "department": "Operations & Management"
     }
   ],
+  "partnerships": [
+    {
+      "id": "KSM-2026-9069-681",
+      "date": "2026-10-23",
+      "notes": "",
+      "createdAt": "2026-10-23T06:12:09.069Z",
+      "clientName": "PT A",
+      "invoiceRef": "001",
+      "updated_at": "2026-10-23T06:29:43.087Z",
+      "percentages": {
+        "takumi": 40,
+        "sales": 10,
+        "adminTax": 20,
+        "freelance": 30
+      },
+      "serviceName": "Pendampingan",
+      "billedAmount": 3125000,
+      "contributions": {
+        "takumi": {
+          "takumi": true,
+          "ayumi": false
+        },
+        "sales": {
+          "takumi": true,
+          "ayumi": false
+        },
+        "adminTax": {
+          "takumi": false,
+          "ayumi": true
+        },
+        "freelance": {
+          "takumi": true,
+          "ayumi": false
+        }
+      },
+      "paymentStatus": "Menunggu",
+      "updatedAt": "2026-10-23T06:29:43.095Z"
+    }
+  ],
   "settings": {
     "companyName": "Unit Bisnis Mandiri (UBM) Politeknik Takumi",
     "companyShortName": "UBM Takumi",
@@ -455,6 +516,12 @@
     "paymentInstructions": "Pembayaran ditransfer ke Bank Mandiri Cabang Cikarang No. Rek: 156-00-1234567-8 a.n. Unit Bisnis Mandiri Politeknik Takumi",
     "copyrightText": "Copyright © Bisnis Digital Takumi",
     "testKey": "cloud_sync_test_1792489447270",
-    "updatedAt": "2026-10-20T09:52:53.916Z"
+    "updatedAt": "2026-10-23T06:29:41.516Z",
+    "partnershipPercentages": {
+      "takumi": 40,
+      "sales": 10,
+      "adminTax": 20,
+      "freelance": 30
+    }
   }
 }
