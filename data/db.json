@@ -504,28 +504,6 @@
   ],
   "users": [
     {
-      "id": "USR-2026-597",
-      "name": "test lagi",
-      "role": "Member",
-      "email": "testlagi@gmail.com",
-      "avatar": "TL",
-      "status": "Aktif",
-      "password": "12345678",
-      "createdAt": "2026-10-23T01:34:47.566Z",
-      "department": "BISDI"
-    },
-    {
-      "id": "USR-2026-896",
-      "name": "test",
-      "role": "Member",
-      "email": "test@gmail.com",
-      "avatar": "TE",
-      "status": "Aktif",
-      "password": "12345678",
-      "createdAt": "2026-10-22T14:06:19.458Z",
-      "department": "test"
-    },
-    {
       "id": "USR-2026-381",
       "name": "Reza Ilyasa",
       "role": "Member",

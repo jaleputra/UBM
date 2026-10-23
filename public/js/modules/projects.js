@@ -626,6 +626,30 @@ function renderTeamAssignmentWorkspace(orderId) {
     headerOrderId.textContent = `${code} - ${activeProj.projectName || activeProj.customerName || order?.customerName || ''}`;
   }
 
+  // Tampilkan Tanggal Order dan Due Date Riil dari Order (BUKAN dari Quotation)
+  const elInfoOrderDate = document.getElementById('pm-info-order-date');
+  const elInfoDueDate = document.getElementById('pm-info-due-date');
+  const elInfoOrderType = document.getElementById('pm-info-order-type');
+  const isSvc = isServiceOrder(order) || isProjectService(activeProj);
+
+  if (elInfoOrderDate) {
+    const realOrderDate = order?.orderDate || activeProj.startDate || '-';
+    elInfoOrderDate.textContent = typeof formatDate === 'function' ? formatDate(realOrderDate) : realOrderDate;
+  }
+  if (elInfoDueDate) {
+    const realDueDate = order?.dueDate || activeProj.dueDate || '-';
+    elInfoDueDate.textContent = typeof formatDate === 'function' ? formatDate(realDueDate) : realDueDate;
+  }
+  if (elInfoOrderType) {
+    if (isSvc) {
+      elInfoOrderType.innerHTML = '<span class="badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font-size: 10px; font-weight: 700;">🛠️ Jasa / Layanan (Non-BOM)</span>';
+    } else if (activeProj.isDirect || !order) {
+      elInfoOrderType.innerHTML = '<span class="badge" style="background: #f0fdfa; color: #0f766e; border: 1px solid #ccfbf1; font-size: 10px; font-weight: 700;">🏢 Project Mandiri UBM</span>';
+    } else {
+      elInfoOrderType.innerHTML = '<span class="badge" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; font-size: 10px; font-weight: 700;">📦 Produk Manufaktur</span>';
+    }
+  }
+
   const leadInput = document.getElementById('pm-lead-name');
   const lockBadge = document.getElementById('pm-lead-lock-badge');
   const hintText = document.getElementById('pm-lead-hint');
@@ -710,21 +734,20 @@ function renderTeamAssignmentWorkspace(orderId) {
     const isService = isServiceOrder(order);
     const hasBOM = isService || (state.bom || []).some(b => b.orderId === orderId || (order?.items || []).some(item => b.productName && item.itemName && b.productName.toLowerCase().trim() === item.itemName.toLowerCase().trim()));
 
-    if (!isLeadLocked) {
-      if (isService) {
-        quickContainer.innerHTML = `
-          <button type="button" class="btn btn-outline btn-sm" style="color: #94a3b8; opacity: 0.6; cursor: not-allowed;" title="Simpan Project Lead terlebih dahulu" onclick="showToast('Simpan Penugasan Tim terlebih dahulu untuk mengaktifkan Project Management.', 'warning')">
-            <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Lanjut: Timeline Gantt &rarr;
-          </button>
-        `;
-      } else {
-        quickContainer.innerHTML = `
-          <button type="button" class="btn btn-outline btn-sm" style="color: #94a3b8; opacity: 0.6; cursor: not-allowed;" title="Simpan Project Lead terlebih dahulu" onclick="showToast('Simpan Penugasan Tim terlebih dahulu untuk mengaktifkan pengisian BOM.', 'warning')">
-            <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Lanjut: Input BOM &rarr;
-          </button>
-        `;
-      }
-    } else if (!hasBOM && !isService) {
+    if (isService) {
+      // Untuk Project Jasa / Layanan (Non-BOM): HAPUS tombol Buka Timeline Gantt
+      quickContainer.innerHTML = `
+        <button type="button" class="btn btn-outline btn-sm" style="color: #ea580c; border-color: #fed7aa; background: #fff7ed; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; font-weight: 600;" onclick="closeModal('team-assignment-modal'); if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${order?.id || orderId}');">
+          <i data-lucide="car" style="width: 13px; height: 13px; color: #ea580c;"></i> Pengajuan Biaya Ops Jasa &rarr;
+        </button>
+      `;
+    } else if (!isLeadLocked) {
+      quickContainer.innerHTML = `
+        <button type="button" class="btn btn-outline btn-sm" style="color: #94a3b8; opacity: 0.6; cursor: not-allowed;" title="Simpan Project Lead terlebih dahulu" onclick="showToast('Simpan Penugasan Tim terlebih dahulu untuk mengaktifkan pengisian BOM.', 'warning')">
+          <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Lanjut: Input BOM &rarr;
+        </button>
+      `;
+    } else if (!hasBOM) {
       quickContainer.innerHTML = `
         <button type="button" class="btn btn-primary btn-sm" style="background: #2563eb; border-color: #2563eb; font-size: 11.5px; display: inline-flex; align-items: center; gap: 5px;" onclick="closeModal('team-assignment-modal'); createBOMFromOrder('${orderId}')">
           <i data-lucide="boxes" style="width: 13px; height: 13px;"></i> Lanjut: Input BOM &rarr;

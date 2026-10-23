@@ -87,6 +87,7 @@ async function loadDashboardData() {
     if (!state.bom || state.bom.length === 0) toFetch.push(fetchResource('bom'));
     if (!state.delivery || state.delivery.length === 0) toFetch.push(fetchResource('delivery'));
     if (!state.service_expenses || state.service_expenses.length === 0) toFetch.push(fetchResource('service_expenses'));
+    if (!state.activity_logs || state.activity_logs.length === 0) toFetch.push(fetchResource('activity_logs'));
     if (toFetch.length > 0) {
       await Promise.allSettled(toFetch);
     }
@@ -1340,34 +1341,102 @@ function renderDashboardProjectGantt() {
   const container = document.getElementById('dashboard-project-gantt-view');
   if (!container) return;
 
-  // Mendukung Proyek Manufaktur & Proyek Jasa
+  // 1. Data Source Riil dari Seluruh Modul Terkait
   const allOrders = state.orders || [];
   const allProjects = state.projects || [];
+  const allExpenses = state.service_expenses || [];
+  const allLogs = state.activity_logs || [];
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Gather all projects (both direct projects and order-linked projects)
   const combinedProjects = [];
   const processedOrderIds = new Set();
+  const processedProjectNames = new Set();
 
+  // A. Proyek dari `state.projects` (Direct Project maupun Linked Order)
   allProjects.forEach(p => {
     const matchingOrder = p.orderId ? allOrders.find(o => o.id === p.orderId) : null;
     if (p.orderId) processedOrderIds.add(p.orderId);
 
     const isSvc = isProjectService(p) || (matchingOrder ? isServiceOrder(matchingOrder) : false);
-    const firstItem = matchingOrder?.items?.[0]?.itemName || '';
-    const projName = p.projectName || matchingOrder?.projectName || (firstItem ? `${firstItem} (${matchingOrder?.customerName || ''})` : (isSvc ? 'Proyek Jasa' : 'Project Mandiri'));
-    const custName = p.customerName || matchingOrder?.customerName || (p.isDirect ? 'Internal UBM' : '-');
+    const orderItems = matchingOrder?.items || [];
+    const firstItemName = orderItems[0]?.itemName || '';
+
+    // Nama Project & Customer Riil
+    const projName = p.projectName || matchingOrder?.projectName || (firstItemName ? `${firstItemName}` : (isSvc ? 'Proyek Jasa' : 'Proyek Engineering'));
+    const custName = p.customerName || matchingOrder?.customerName || (p.isDirect ? 'Internal Politeknik Takumi' : '-');
+    processedProjectNames.add(projName.toLowerCase().trim());
+
     const start = p.startDate || matchingOrder?.orderDate || todayStr;
     const due = p.dueDate || matchingOrder?.dueDate || '';
 
-    // Default milestones jika proyek belum memiliki task
-    let msList = p.milestones || [];
-    if (msList.length === 0 && isSvc) {
-      msList = [
-        { id: `${p.id}-M1`, title: 'Persiapan & Pengajuan Biaya Ops', status: 'Completed', startDate: start, dueDate: start, pic: p.projectLead || 'Operasional' },
-        { id: `${p.id}-M2`, title: 'Pelaksanaan Jasa Lapangan', status: p.status === 'Completed' ? 'Completed' : 'In Progress', startDate: start, dueDate: due || start, pic: p.projectLead || 'Teknisi' },
-        { id: `${p.id}-M3`, title: 'BAST & Laporan Penyelesaian Jasa', status: p.status === 'Completed' ? 'Completed' : 'Pending', startDate: due || start, dueDate: due || start, pic: 'Admin Proyek' }
-      ];
+    // Milestones Riil:
+    // Prioritas 1: Milestones yang sudah diinput pada Project Management
+    let msList = Array.isArray(p.milestones) && p.milestones.length > 0 ? [...p.milestones] : [];
+
+    // Prioritas 2: Jika belum ada milestones, bentuk dari Item Pesanan & Pengeluaran Riil
+    if (msList.length === 0) {
+      if (isSvc && matchingOrder) {
+        // Item jasa nyata dari penawaran / PO
+        orderItems.forEach((itm, idx) => {
+          msList.push({
+            id: `${p.id}-ITM-${idx + 1}`,
+            title: `Layanan: ${itm.itemName} (${itm.qty} ${itm.unit || 'Unit'})`,
+            status: matchingOrder.status === 'Completed' || matchingOrder.status === 'Delivered' ? 'Completed' : 'In Progress',
+            startDate: start,
+            dueDate: due || start,
+            pic: idx === 0 ? (p.projectLead || 'Tim Jasa') : ((p.team && p.team[0]?.name) || p.projectLead || 'Tim Pelaksana'),
+            notes: `Item resmi PO Pelanggan: Rp ${(itm.total || 0).toLocaleString('id-ID')}`
+          });
+        });
+
+        // Pengeluaran operasional nyata dari modul keuangan jasa
+        const relatedExpenses = allExpenses.filter(e => e.orderId === matchingOrder.id || (e.customerName && e.customerName.toLowerCase() === custName.toLowerCase()));
+        relatedExpenses.forEach((exp, eIdx) => {
+          const isDone = exp.status === 'Disetujui' || exp.status === 'Selesai';
+          msList.push({
+            id: `${p.id}-EXP-${eIdx + 1}`,
+            title: `Operasional Lapangan: ${exp.transportRoute || exp.serviceName || 'Transport & Akomodasi'} (${exp.transportType || 'Transportasi'})`,
+            status: isDone ? 'Completed' : 'In Progress',
+            startDate: exp.date || start,
+            dueDate: due || exp.date || start,
+            pic: exp.picName || p.projectLead || 'Koordinator Lapangan',
+            notes: `Biaya: Rp ${(exp.totalExpense || 0).toLocaleString('id-ID')} • Status: ${exp.status || 'Diajukan'}`
+          });
+        });
+
+        // Task BAST & Serah Terima Riil
+        msList.push({
+          id: `${p.id}-BAST`,
+          title: `Serah Terima & BAST ${projName}`,
+          status: matchingOrder.status === 'Completed' || matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending',
+          startDate: due || start,
+          dueDate: due || start,
+          pic: 'Admin Proyek & Keuangan',
+          notes: 'Penyusunan Berita Acara Serah Terima pekerjaan'
+        });
+      } else if (!isSvc && matchingOrder) {
+        // Produk manufaktur nyata
+        orderItems.forEach((itm, idx) => {
+          msList.push({
+            id: `${p.id}-PROD-${idx + 1}`,
+            title: `Fabrikasi & Produksi: ${itm.itemName} (${itm.qty} ${itm.unit || 'Pcs'})`,
+            status: matchingOrder.status === 'In Production' ? 'In Progress' : (matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending'),
+            startDate: start,
+            dueDate: due || start,
+            pic: p.projectLead || 'Tim Produksi',
+            notes: `Pesanan: ${itm.qty} unit`
+          });
+        });
+        msList.push({
+          id: `${p.id}-QC`,
+          title: `Quality Control & Testing ${projName}`,
+          status: matchingOrder.status === 'Testing & QC' ? 'In Progress' : (matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending'),
+          startDate: due || start,
+          dueDate: due || start,
+          pic: 'Tim QC & Engineering',
+          notes: 'Uji fungsi dan pengecekan kelayakan'
+        });
+      }
     }
 
     combinedProjects.push({
@@ -1377,10 +1446,10 @@ function renderDashboardProjectGantt() {
       customerName: custName,
       projectLead: p.projectLead || (isSvc ? 'Tim Jasa' : 'Belum diassign'),
       department: p.department || (isSvc ? 'Service & Ops' : 'Engineering'),
-      status: p.status || 'In Progress',
+      status: p.status || (matchingOrder ? (matchingOrder.status === 'Accepted' || matchingOrder.status === 'In Production' ? 'In Progress' : matchingOrder.status) : 'In Progress'),
       startDate: start,
       dueDate: due,
-      progressPercent: typeof p.progressPercent === 'number' ? p.progressPercent : 0,
+      progressPercent: typeof p.progressPercent === 'number' && p.progressPercent > 0 ? p.progressPercent : (msList.length > 0 ? Math.round((msList.filter(m => m.status === 'Completed').length / msList.length) * 100) : 0),
       milestones: msList,
       team: p.team || [],
       isDirect: Boolean(p.isDirect || !p.orderId),
@@ -1389,32 +1458,70 @@ function renderDashboardProjectGantt() {
     });
   });
 
-  // Include active orders that don't have an explicit projects record (both Product and Service)
+  // B. Order Penjualan Aktif yang belum memiliki record project
   allOrders.forEach(ord => {
     if (!processedOrderIds.has(ord.id) && ord.status !== 'Delivered' && ord.status !== 'Cancelled') {
       const isSvc = isServiceOrder(ord);
-      const firstItem = ord.items?.[0]?.itemName || (isSvc ? 'Layanan Jasa' : 'Produk Pesanan');
-      
-      let msList = [];
+      const items = ord.items || [];
+      const firstItemName = items[0]?.itemName || (isSvc ? 'Layanan Jasa' : 'Produk Pesanan');
+      const projName = ord.projectName || `${firstItemName}`;
+      const custName = ord.customerName || '-';
+      processedProjectNames.add(projName.toLowerCase().trim());
+
+      const start = ord.orderDate || todayStr;
+      const due = ord.dueDate || '';
+
+      const msList = [];
       if (isSvc) {
-        msList = [
-          { id: `${ord.id}-M1`, title: 'Persiapan & Pengajuan Biaya Ops', status: 'Completed', startDate: ord.orderDate || todayStr, dueDate: ord.orderDate || todayStr, pic: ord.createdBy || 'Operasional' },
-          { id: `${ord.id}-M2`, title: 'Pelaksanaan Jasa Lapangan', status: ord.status === 'Completed' || ord.status === 'Delivered' ? 'Completed' : 'In Progress', startDate: ord.orderDate || todayStr, dueDate: ord.dueDate || ord.orderDate || todayStr, pic: 'Tim Teknisi' },
-          { id: `${ord.id}-M3`, title: 'BAST & Laporan Penyelesaian Jasa', status: ord.status === 'Completed' || ord.status === 'Delivered' ? 'Completed' : 'Pending', startDate: ord.dueDate || todayStr, dueDate: ord.dueDate || todayStr, pic: 'Admin Proyek' }
-        ];
+        items.forEach((itm, idx) => {
+          msList.push({
+            id: `ORD-${ord.id}-ITM-${idx + 1}`,
+            title: `Layanan: ${itm.itemName} (${itm.qty} ${itm.unit || 'Unit'})`,
+            status: ord.status === 'Accepted' ? 'In Progress' : 'Pending',
+            startDate: start,
+            dueDate: due || start,
+            pic: ord.createdBy || 'Tim Jasa',
+            notes: `Total: Rp ${(itm.total || 0).toLocaleString('id-ID')}`
+          });
+        });
+
+        const relatedExpenses = allExpenses.filter(e => e.orderId === ord.id);
+        relatedExpenses.forEach((exp, eIdx) => {
+          msList.push({
+            id: `ORD-${ord.id}-EXP-${eIdx + 1}`,
+            title: `Operasional: ${exp.transportRoute || exp.serviceName} (${exp.transportType || 'Transport'})`,
+            status: exp.status === 'Disetujui' ? 'Completed' : 'In Progress',
+            startDate: exp.date || start,
+            dueDate: due || exp.date || start,
+            pic: exp.picName || 'Koordinator Lapangan',
+            notes: `Biaya: Rp ${(exp.totalExpense || 0).toLocaleString('id-ID')}`
+          });
+        });
+      } else {
+        items.forEach((itm, idx) => {
+          msList.push({
+            id: `ORD-${ord.id}-PROD-${idx + 1}`,
+            title: `Produksi: ${itm.itemName} (${itm.qty} ${itm.unit || 'Pcs'})`,
+            status: ord.status === 'Accepted' || ord.status === 'In Production' ? 'In Progress' : 'Pending',
+            startDate: start,
+            dueDate: due || start,
+            pic: 'Tim Produksi',
+            notes: `Pesanan Pelanggan: ${custName}`
+          });
+        });
       }
 
       combinedProjects.push({
         id: `PRJ-${ord.id}`,
         orderId: ord.id,
-        projectName: ord.projectName || `${firstItem} (${ord.customerName || ''})`,
-        customerName: ord.customerName || '-',
+        projectName: projName,
+        customerName: custName,
         projectLead: isSvc ? (ord.createdBy || 'Tim Jasa') : 'Belum diassign',
         department: isSvc ? 'Service & Ops' : 'Engineering',
-        status: ord.status === 'Accepted' || ord.status === 'In Production' ? 'In Progress' : (ord.status === 'Completed' ? 'Completed' : 'Planning'),
-        startDate: ord.orderDate || todayStr,
-        dueDate: ord.dueDate || '',
-        progressPercent: ord.status === 'Completed' ? 100 : (ord.status === 'Accepted' || ord.status === 'In Production' ? 45 : 10),
+        status: ord.status === 'Accepted' || ord.status === 'In Production' ? 'In Progress' : 'Planning',
+        startDate: start,
+        dueDate: due,
+        progressPercent: msList.length > 0 ? Math.round((msList.filter(m => m.status === 'Completed').length / msList.length) * 100) : 15,
         milestones: msList,
         team: [],
         isDirect: false,
@@ -1424,7 +1531,75 @@ function renderDashboardProjectGantt() {
     }
   });
 
-  // Calculate Running Project Status Helper
+  // C. Proyek Mandiri / Internal Riil dari `state.activity_logs`
+  // Mengelompokkan aktivitas real yang sedang berjalan di UBM (misal: "Smart Laundry", "UBM")
+  const logsByProject = {};
+  allLogs.forEach(log => {
+    const pName = (log.projectName || '').trim();
+    if (!pName) return;
+    if (!logsByProject[pName]) logsByProject[pName] = [];
+    logsByProject[pName].push(log);
+  });
+
+  Object.keys(logsByProject).forEach(pName => {
+    // Jangan duplikasi jika project name sudah terdaftar dari project resmi / order
+    if (processedProjectNames.has(pName.toLowerCase())) return;
+
+    const projLogs = logsByProject[pName];
+    // Hanya masukkan jika memiliki log berstatus 'Sedang Berjalan' atau log aktif
+    const hasRunningLogs = projLogs.some(l => l.status === 'Sedang Berjalan');
+    if (!hasRunningLogs) return;
+
+    const runningLogList = projLogs.filter(l => l.status === 'Sedang Berjalan' || l.status === 'Selesai');
+    if (runningLogList.length === 0) return;
+
+    // Ambil tanggal mulai terawal dan tanggal target
+    const dates = runningLogList.map(l => l.startDate).filter(Boolean);
+    const endDates = runningLogList.map(l => l.endDate).filter(Boolean);
+    const startStr = dates.length > 0 ? dates.sort()[0] : todayStr;
+    const dueStr = endDates.length > 0 ? endDates.sort().reverse()[0] : todayStr;
+
+    // PIC terbanyak / terdepan
+    const picCount = {};
+    runningLogList.forEach(l => {
+      if (l.pic) picCount[l.pic] = (picCount[l.pic] || 0) + 1;
+    });
+    const mainPic = Object.keys(picCount).sort((a, b) => picCount[b] - picCount[a])[0] || 'Tim UBM';
+
+    const msList = runningLogList.map((l, lIdx) => ({
+      id: `INT-${pName}-${lIdx + 1}`,
+      title: l.task || 'Aktivitas Proyek',
+      status: l.status === 'Selesai' ? 'Completed' : 'In Progress',
+      startDate: l.startDate || startStr,
+      dueDate: l.endDate || dueStr,
+      pic: l.pic || mainPic,
+      notes: l.notes || ''
+    }));
+
+    const compCount = msList.filter(m => m.status === 'Completed').length;
+    const progress = Math.round((compCount / msList.length) * 100);
+
+    combinedProjects.push({
+      id: `DIR-${pName.replace(/\s+/g, '-').toUpperCase()}`,
+      orderId: null,
+      projectName: pName,
+      customerName: 'Internal Politeknik Takumi',
+      projectLead: mainPic,
+      department: runningLogList[0]?.category || 'Operasional',
+      status: 'In Progress',
+      startDate: startStr,
+      dueDate: dueStr,
+      progressPercent: progress,
+      milestones: msList,
+      team: [],
+      isDirect: true,
+      isInternal: true,
+      isService: false,
+      order: null
+    });
+  });
+
+  // Helper Project Running
   function isProjectRunning(p) {
     if (p.status === 'Completed' || p.status === 'Cancelled') return false;
     if (p.order && (p.order.status === 'Delivered' || p.order.status === 'Cancelled')) return false;
@@ -1439,12 +1614,17 @@ function renderDashboardProjectGantt() {
   const kpiRunning = document.getElementById('kpi-gantt-running-count');
   const kpiRunningSub = document.getElementById('kpi-gantt-running-sub');
   const runningSvcCount = runningProjects.filter(p => p.isService).length;
-  const runningProdCount = runningProjects.length - runningSvcCount;
+  const runningProdCount = runningProjects.filter(p => !p.isService && !p.isInternal).length;
+  const runningIntCount = runningProjects.filter(p => p.isInternal).length;
 
   if (kpiRunning) kpiRunning.textContent = `${runningProjects.length} Project`;
-  if (kpiRunningSub) kpiRunningSub.textContent = runningProjects.length > 0 
-    ? `${runningProdCount} Produk • ${runningSvcCount} Jasa Aktif` 
-    : 'Tidak Ada Project Berjalan';
+  if (kpiRunningSub) {
+    const parts = [];
+    if (runningProdCount > 0) parts.push(`${runningProdCount} Produk`);
+    if (runningSvcCount > 0) parts.push(`${runningSvcCount} Jasa`);
+    if (runningIntCount > 0) parts.push(`${runningIntCount} Mandiri`);
+    kpiRunningSub.textContent = parts.length > 0 ? `${parts.join(' • ')} Aktif` : 'Tidak Ada Project Berjalan';
+  }
 
   // Calculate task-level stats across running projects
   let totalTasks = 0;
@@ -1488,11 +1668,13 @@ function renderDashboardProjectGantt() {
 
   let displayProjects = combinedProjects;
 
-  // Filter Type: ALL, PRODUCT, SERVICE
+  // Filter Type: ALL, PRODUCT, SERVICE, INTERNAL
   if (typeFilter === 'PRODUCT') {
-    displayProjects = displayProjects.filter(p => !p.isService);
+    displayProjects = displayProjects.filter(p => !p.isService && !p.isInternal);
   } else if (typeFilter === 'SERVICE') {
     displayProjects = displayProjects.filter(p => p.isService);
+  } else if (typeFilter === 'INTERNAL') {
+    displayProjects = displayProjects.filter(p => p.isInternal);
   }
 
   // Filter Status
@@ -1535,7 +1717,7 @@ function renderDashboardProjectGantt() {
         <i data-lucide="folder-kanban" style="width: 48px; height: 48px; color: #94a3b8; margin-bottom: 12px; stroke-width: 1.5;"></i>
         <h4 style="font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 6px 0;">Tidak Ada Project Ditemukan</h4>
         <p style="font-size: 12.5px; color: #64748b; margin: 0 0 16px 0; max-width: 440px; margin-left: auto; margin-right: auto;">
-          ${searchQuery ? `Tidak ada project atau task yang cocok dengan pencarian "<strong>${escapeHtml(searchQuery)}</strong>".` : 'Tidak ada project yang memenuhi filter yang dipilih saat ini.'}
+          ${searchQuery ? `Tidak ada project atau task yang cocok dengan kata kunci "<strong>${escapeHtml(searchQuery)}</strong>".` : 'Tidak ada project yang memenuhi filter yang dipilih.'}
         </p>
         <button type="button" class="btn btn-primary" onclick="navigateTo('projects')" style="display: inline-flex; align-items: center; gap: 6px;">
           <i data-lucide="plus"></i> Buka Project Management
@@ -1546,35 +1728,39 @@ function renderDashboardProjectGantt() {
     return;
   }
 
-  // 3. Compute dynamic date bounds for timeline
-  const allDateObjects = [];
+  // 3. Compute dynamic date bounds for timeline (fokus pada periode aktif agar tidak gepeng)
+  const todayDate = new Date(todayStr);
+  const activeDates = [];
+  activeDates.push(todayDate);
+
   displayProjects.forEach(p => {
-    if (p.startDate && p.startDate !== '-') allDateObjects.push(new Date(p.startDate));
-    if (p.dueDate && p.dueDate !== '-') allDateObjects.push(new Date(p.dueDate));
+    if (p.startDate && p.startDate !== '-') activeDates.push(new Date(p.startDate));
+    if (p.dueDate && p.dueDate !== '-') activeDates.push(new Date(p.dueDate));
     (p.milestones || []).forEach(m => {
-      if (m.startDate && m.startDate !== '-') allDateObjects.push(new Date(m.startDate));
-      if (m.dueDate && m.dueDate !== '-') allDateObjects.push(new Date(m.dueDate));
+      if (m.startDate && m.startDate !== '-') activeDates.push(new Date(m.startDate));
+      if (m.dueDate && m.dueDate !== '-') activeDates.push(new Date(m.dueDate));
     });
   });
 
-  const todayDate = new Date(todayStr);
-  allDateObjects.push(todayDate);
+  const minTimeRaw = Math.min(...activeDates.map(d => d.getTime()));
+  const maxTimeRaw = Math.max(...activeDates.map(d => d.getTime()));
 
-  let minTime = Math.min(...allDateObjects.map(d => d.getTime()));
-  let maxTime = Math.max(...allDateObjects.map(d => d.getTime()));
+  // Batasi agar tanggal mulai tidak mundur terlalu jauh ke masa lalu (maksimal 7 hari sebelum hari ini)
+  const minDateLimit = new Date(todayDate);
+  minDateLimit.setDate(minDateLimit.getDate() - 7);
 
-  // Add margin around dates
-  const minDate = new Date(minTime);
+  const effectiveMinTime = Math.max(minTimeRaw, minDateLimit.getTime());
+  const minDate = new Date(effectiveMinTime);
   minDate.setDate(minDate.getDate() - 2);
 
-  const maxDate = new Date(maxTime);
-  maxDate.setDate(maxDate.getDate() + 3);
+  const maxDate = new Date(maxTimeRaw);
+  maxDate.setDate(maxDate.getDate() + 4);
 
-  // Ensure minimum 14 days for spacing
+  // Pastikan minimal rentang 18 hari untuk layout proporsional
   const diffTimeMs = maxDate.getTime() - minDate.getTime();
   const diffDaysCount = Math.round(diffTimeMs / (1000 * 60 * 60 * 24));
-  if (diffDaysCount < 14) {
-    maxDate.setDate(maxDate.getDate() + (14 - diffDaysCount));
+  if (diffDaysCount < 18) {
+    maxDate.setDate(maxDate.getDate() + (18 - diffDaysCount));
   }
 
   // Generate sequence of days
@@ -1610,17 +1796,14 @@ function renderDashboardProjectGantt() {
   const isFitScreen = state.ganttFitScreen !== false; // Default: true (fit to screen)
   if (scrollContainer) {
     if (isFitScreen) scrollContainer.classList.add('fit-screen');
-    else scrollContainer.classList.remove('fit-screen');
-  }
-
-  // Total width of sticky columns = 220 + 120 + 120 + 110 = 570px
-  const stickyWidth = 570;
-  const containerClientWidth = scrollContainer ? (scrollContainer.clientWidth || window.innerWidth - 300) : 1100;
+    else scrollContainer.class  // Sticky columns total width: 210 + 110 + 110 + 90 = 520px (Super Compact)
+  const stickyWidth = 520;
+  const containerClientWidth = scrollContainer ? (scrollContainer.clientWidth || window.innerWidth - 280) : 1100;
   const availableTimelineWidth = Math.max(380, containerClientWidth - stickyWidth - 4);
 
   const dayWidth = isFitScreen 
-    ? Math.max(16, Math.floor(availableTimelineWidth / days.length)) 
-    : 36;
+    ? Math.max(22, Math.floor(availableTimelineWidth / days.length)) 
+    : 32;
   const totalTimelineWidth = isFitScreen 
     ? Math.max(availableTimelineWidth, days.length * dayWidth)
     : (days.length * dayWidth);
@@ -1656,59 +1839,59 @@ function renderDashboardProjectGantt() {
 
     const durationDays = Math.max(1, (eOffsetDays - sOffsetDays) + 1);
     const leftPx = sOffsetDays * dayWidth + 2;
-    const widthPx = Math.max(22, durationDays * dayWidth - 4);
+    const widthPx = Math.max(16, durationDays * dayWidth - 4);
 
     return { leftPx, widthPx, durationDays };
   }
 
-  // 4. Render Table Header with Compact Sticky Offsets (0, 220, 340, 460)
+  // 4. Render Table Header with Compact Sticky Offsets (0, 210, 320, 430)
   const headerHtml = `
     <thead>
-      <tr>
-        <th class="gantt-col-task" style="position: sticky; left: 0; z-index: 20; background: #f8fafc; width: 220px; min-width: 200px; max-width: 220px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-          <div style="display: flex; align-items: center; gap: 6px;">
+      <tr style="height: 48px;">
+        <th class="gantt-col-task" style="position: sticky; left: 0; z-index: 20; background: #f8fafc; width: 210px; min-width: 200px; max-width: 210px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="layers" style="width: 13px; height: 13px; color: #4f46e5;"></i>
-            <span>PROYEK & TAHAPAN</span>
+            <span style="font-weight: 700; font-size: 11px; color: #334155;">PROYEK & TAHAPAN</span>
           </div>
         </th>
-        <th class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 20; background: #f8fafc; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-          <div style="display: flex; align-items: center; gap: 6px;">
+        <th class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 20; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="user-check" style="width: 13px; height: 13px; color: #0284c7;"></i>
-            <span>PIC / LEAD</span>
+            <span style="font-weight: 700; font-size: 11px; color: #334155;">PIC / LEAD</span>
           </div>
         </th>
-        <th class="gantt-col-schedule" style="position: sticky; left: 340px; z-index: 20; background: #f8fafc; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-          <div style="display: flex; align-items: center; gap: 6px;">
+        <th class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 20; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="calendar" style="width: 13px; height: 13px; color: #16a34a;"></i>
-            <span>JADWAL</span>
+            <span style="font-weight: 700; font-size: 11px; color: #334155;">JADWAL</span>
           </div>
         </th>
-        <th class="gantt-col-status" style="position: sticky; left: 460px; z-index: 20; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1;">
-          <div style="display: flex; align-items: center; gap: 6px;">
+        <th class="gantt-col-status" style="position: sticky; left: 430px; z-index: 20; background: #f8fafc; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 6px 8px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
             <i data-lucide="activity" style="width: 13px; height: 13px; color: #d97706;"></i>
-            <span>STATUS</span>
+            <span style="font-weight: 700; font-size: 11px; color: #334155;">STATUS</span>
           </div>
         </th>
         <th class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; min-width: ${totalTimelineWidth}px; padding: 0;">
           <div class="gantt-timeline-header-container" style="width: ${totalTimelineWidth}px;">
             <!-- Month Row -->
-            <div class="gantt-month-row">
+            <div class="gantt-month-row" style="height: 22px;">
               ${monthGroups.map(mg => `
-                <div class="gantt-month-cell" style="width: ${mg.count * dayWidth}px;">
+                <div class="gantt-month-cell" style="width: ${mg.count * dayWidth}px; font-weight: 700; font-size: 10.5px; color: #334155; border-right: 1px solid #cbd5e1; line-height: 22px;">
                   ${mg.label}
                 </div>
               `).join('')}
             </div>
             <!-- Days Row -->
-            <div class="gantt-days-row" style="position: relative;">
+            <div class="gantt-days-row" style="position: relative; height: 26px;">
               ${days.map(d => `
-                <div class="gantt-day-cell ${d.isWeekend ? 'weekend' : ''} ${d.isToday ? 'today' : ''}" style="width: ${dayWidth}px;">
-                  <span style="font-size: 8px; text-transform: uppercase;">${d.dayName}</span>
-                  <span style="font-weight: 700; font-size: 10.5px;">${d.dayNum}</span>
+                <div class="gantt-day-cell ${d.isWeekend ? 'weekend' : ''} ${d.isToday ? 'today' : ''}" style="width: ${dayWidth}px; ${d.isToday ? 'background: #fee2e2; border-bottom: 2px solid #ef4444;' : ''}">
+                  <span style="font-size: 7.5px; text-transform: uppercase; ${d.isToday ? 'color: #dc2626; font-weight: 800;' : ''}">${d.dayName}</span>
+                  <span style="font-weight: 700; font-size: 9.5px; ${d.isToday ? 'color: #b91c1c; font-weight: 800;' : ''}">${d.dayNum}</span>
                 </div>
               `).join('')}
               ${todayLeftPx >= 0 ? `
-                <div class="gantt-today-badge" style="left: ${todayLeftPx}px;">HARI INI</div>
+                <div class="gantt-today-badge" style="left: ${todayLeftPx}px;">HARI INI (${days[todayIndex].dayNum} ${days[todayIndex].monthName.substring(0, 3)})</div>
               ` : ''}
             </div>
           </div>
@@ -1743,103 +1926,134 @@ function renderDashboardProjectGantt() {
       statusBadgeClass = 'badge-success';
       statusLabel = 'Completed';
       statusIcon = 'check-circle';
-    } else if (overdueMs > 0 || (proj.dueDate && proj.dueDate < todayStr)) {
+    } else if (overdueMs > 0 || (proj.dueDate && proj.dueDate < todayStr && proj.status !== 'Completed')) {
       statusBadgeClass = 'badge-danger';
       statusLabel = 'Overdue';
       statusIcon = 'alert-triangle';
     } else if (inProgressMs > 0 || proj.status === 'In Progress') {
-      statusBadgeClass = proj.isService ? 'badge-warning' : 'badge-purple';
+      statusBadgeClass = proj.isService ? 'badge-warning' : (proj.isInternal ? 'badge-info' : 'badge-purple');
       statusLabel = 'In Progress';
       statusIcon = 'play-circle';
     }
 
     const projMetrics = calculateBarMetrics(proj.startDate, proj.dueDate);
-    const codeBadge = proj.orderId ? escapeHtml(proj.orderId) : (proj.isDirect ? 'DIRECT' : escapeHtml(proj.id));
-    const codeClass = proj.isService ? 'text-amber-700' : (proj.orderId ? 'text-primary' : 'text-purple');
-    const barClass = proj.isService ? 'service-summary' : 'project-summary';
+    const codeBadge = proj.orderId ? escapeHtml(proj.orderId) : (proj.isDirect ? (proj.isInternal ? 'INTERNAL' : 'DIRECT') : escapeHtml(proj.id));
+    const codeClass = proj.isService ? 'text-amber-700' : (proj.isInternal ? 'text-teal-700' : 'text-primary');
+    const barClass = proj.isService ? 'service-summary' : (proj.isInternal ? 'internal-summary' : 'project-summary');
+
+    // Label kategori
+    let typeTag = '';
+    if (proj.isService) {
+      typeTag = '<span class="badge" style="font-size: 8px; padding: 1px 3px; background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; font-weight: 700; flex-shrink: 0;">🛠️ JASA</span>';
+    } else if (proj.isInternal) {
+      typeTag = '<span class="badge" style="font-size: 8px; padding: 1px 3px; background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; font-weight: 700; flex-shrink: 0;">🏢 MANDIRI</span>';
+    } else {
+      typeTag = '<span class="badge" style="font-size: 8px; padding: 1px 3px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; font-weight: 700; flex-shrink: 0;">📦 PRODUK</span>';
+    }
+
+    // Aksi tombol & klik yang aman tanpa error toast
+    let actionBtnHtml = '';
+    let barOnClickAttr = '';
+
+    if (proj.isService) {
+      actionBtnHtml = `
+        <button type="button" class="btn btn-xs btn-outline" onclick="if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${proj.orderId || proj.id}');" title="Pengajuan Biaya Operasional Jasa" style="font-size: 8.5px; padding: 1px 4px; color: #ea580c; border-color: #fed7aa; background: #fff7ed; flex-shrink: 0; white-space: nowrap;">
+          <i data-lucide="car" style="width: 10px; height: 10px;"></i> Biaya Ops
+        </button>
+      `;
+      barOnClickAttr = `if (typeof openServiceExpenseModal === 'function') openServiceExpenseModal('${proj.orderId || proj.id}');`;
+    } else if (proj.isInternal) {
+      actionBtnHtml = `
+        <button type="button" class="btn btn-xs btn-outline" onclick="navigateTo('logs')" title="Lihat Aktivitas Log UBM" style="font-size: 8.5px; padding: 1px 4px; color: #0d9488; border-color: #99f6e4; background: #f0fdfa; flex-shrink: 0; white-space: nowrap;">
+          <i data-lucide="list" style="width: 10px; height: 10px;"></i> Log
+        </button>
+      `;
+      barOnClickAttr = `navigateTo('logs');`;
+    } else {
+      actionBtnHtml = `
+        <button type="button" class="btn btn-xs btn-outline" onclick="openProjectTimelinePage('${proj.orderId || proj.id}')" title="Detail Timeline Gantt" style="font-size: 8.5px; padding: 1px 4px; flex-shrink: 0; white-space: nowrap;">
+          <i data-lucide="external-link" style="width: 10px; height: 10px;"></i> Timeline
+        </button>
+      `;
+      barOnClickAttr = `openProjectTimelinePage('${proj.orderId || proj.id}');`;
+    }
 
     // Tooltip data for project bar
     const projTooltipHtml = `
-      <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : '#a5b4fc'}; font-size: 11px; margin-bottom: 3px;">
-        ${proj.isService ? '🛠️ PROYEK JASA' : '📦 PROYEK PRODUK'}
+      <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : (proj.isInternal ? '#5eead4' : '#a5b4fc')}; font-size: 11px; margin-bottom: 2px;">
+        ${proj.isService ? '🛠️ PROYEK JASA' : (proj.isInternal ? '🏢 PROYEK MANDIRI UBM' : '📦 PROYEK MANUFAKTUR')}
       </div>
-      <div style="font-weight: 700; font-size: 13px; margin-bottom: 6px;">${escapeHtml(proj.projectName)}</div>
-      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">🏢 Pelanggan: <strong style="color: #fff;">${escapeHtml(proj.customerName)}</strong></div>
-      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC / Lead: <strong style="color: #fff;">${escapeHtml(proj.projectLead)}</strong></div>
+      <div style="font-weight: 700; font-size: 12.5px; margin-bottom: 5px;">${escapeHtml(proj.projectName)}</div>
+      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">🏢 Klien / Instansi: <strong style="color: #fff;">${escapeHtml(proj.customerName)}</strong></div>
+      <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC / Lead: <strong style="color: #fff;">${escapeHtml(proj.projectLead)}</strong> (${escapeHtml(proj.department)})</div>
       <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📅 Jadwal: <strong style="color: #fff;">${formatGanttDate(proj.startDate)} &rarr; ${formatGanttDate(proj.dueDate)}</strong> (${projMetrics.durationDays} hari)</div>
       <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📊 Progress: <strong style="color: #4ade80;">${projProgress}%</strong> (${completedMs}/${totalMs} Task Selesai)</div>
       <div style="font-size: 11px; color: #cbd5e1;">⚡ Status: <strong style="color: #facc15;">${statusLabel}</strong></div>
-      <div style="margin-top: 8px; font-size: 10px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 4px;">👉 Klik untuk buka detail project</div>
     `;
 
-    // A. Project Parent Row
+    // A. Project Parent Row (Compact: height 32px)
     rowsHtml += `
-      <tr class="gantt-project-header-row ${proj.isService ? 'is-service-project' : ''}">
-        <!-- Col 1: Project Info (Width: 220px, Left: 0) -->
-        <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 10; background: #f8fafc; width: 220px; min-width: 200px; max-width: 220px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <button type="button" class="btn-ghost btn-xs" onclick="toggleGanttProjectCollapse('${proj.id}')" title="${isCollapsed ? 'Buka Task' : 'Tutup Task'}" style="padding: 2px; display: inline-flex; align-items: center; justify-content: center; color: #475569; flex-shrink: 0;">
-              <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" style="width: 14px; height: 14px;"></i>
+      <tr class="gantt-project-header-row ${proj.isService ? 'is-service-project' : ''}" style="height: 32px;">
+        <!-- Col 1: Project Info (Width: 210px, Left: 0) -->
+        <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 10; background: #f8fafc; width: 210px; min-width: 200px; max-width: 210px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+          <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
+            <button type="button" class="btn-ghost btn-xs" onclick="toggleGanttProjectCollapse('${proj.id}')" title="${isCollapsed ? 'Buka Task' : 'Tutup Task'}" style="padding: 1px; display: inline-flex; align-items: center; justify-content: center; color: #475569; flex-shrink: 0;">
+              <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" style="width: 13px; height: 13px;"></i>
             </button>
             <div style="min-width: 0; flex: 1; overflow: hidden;">
-              <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                ${proj.isService ? '<span class="badge" style="font-size: 9px; padding: 1px 4px; background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; font-weight: 700; flex-shrink: 0;">JASA</span>' : ''}
-                <span class="mono-id font-bold ${codeClass}" style="font-size: 10px; background: rgba(79, 70, 229, 0.08); padding: 1px 4px; border-radius: 4px; flex-shrink: 0;">${codeBadge}</span>
-              </div>
-              <div class="font-bold text-main" style="font-size: 11.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;" title="${escapeAttr(proj.projectName)}">
+              <div class="font-bold text-main" style="font-size: 11.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;" title="${escapeAttr(proj.projectName)}">
                 ${escapeHtml(proj.projectName)}
               </div>
-              <div style="font-size: 10px; color: #64748b; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                <span>🏢 ${escapeHtml(proj.customerName)}</span>
+              <div style="display: flex; align-items: center; gap: 4px; margin-top: 1px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+                ${typeTag}
+                <span class="mono-id font-bold ${codeClass}" style="font-size: 9px; background: rgba(0,0,0,0.04); padding: 0 3px; border-radius: 3px;">${codeBadge}</span>
+                <span style="font-size: 9.5px; color: #64748b; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(proj.customerName)}</span>
               </div>
             </div>
-            <button type="button" class="btn btn-xs btn-outline" onclick="openProjectTimelinePage('${proj.orderId || proj.id}')" title="Detail Timeline" style="font-size: 9.5px; padding: 2px 4px; flex-shrink: 0;">
-              <i data-lucide="external-link" style="width: 11px; height: 11px;"></i>
-            </button>
+            ${actionBtnHtml}
           </div>
         </td>
 
-        <!-- Col 2: PIC Lead (Width: 120px, Left: 220px) -->
-        <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 10; background: #f8fafc; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
-          <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
-            <div style="width: 22px; height: 22px; border-radius: 50%; background: ${proj.isService ? '#ea580c' : '#4f46e5'}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; flex-shrink: 0;">
+        <!-- Col 2: PIC Lead (Width: 110px, Left: 210px) -->
+        <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 10; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+          <div style="display: flex; align-items: center; gap: 5px; overflow: hidden;">
+            <div style="width: 18px; height: 18px; border-radius: 50%; background: ${proj.isService ? '#ea580c' : (proj.isInternal ? '#0f766e' : '#4f46e5')}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 700; flex-shrink: 0;">
               ${getPicAvatar(proj.projectLead)}
             </div>
             <div style="min-width: 0; overflow: hidden;">
-              <div class="font-bold text-main" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(proj.projectLead)}">${escapeHtml(proj.projectLead)}</div>
-              <div class="text-muted" style="font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(proj.department)}</div>
+              <div class="font-bold text-main" style="font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(proj.projectLead)}">${escapeHtml(proj.projectLead)}</div>
             </div>
           </div>
         </td>
 
-        <!-- Col 3: Schedule (Width: 120px, Left: 340px) -->
-        <td class="gantt-col-schedule" style="position: sticky; left: 340px; z-index: 10; background: #f8fafc; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 6px 8px;">
-          <div style="font-size: 10.5px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <!-- Col 3: Schedule (Width: 110px, Left: 320px) -->
+        <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 10; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 4px 6px;">
+          <div style="font-size: 10px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             ${formatGanttDate(proj.startDate)} &rarr; ${formatGanttDate(proj.dueDate)}
           </div>
           <div style="margin-top: 1px;">
-            <span class="badge badge-secondary" style="font-size: 9px; padding: 1px 4px; font-weight: 600;">
-              ${projMetrics.durationDays} Hari
+            <span class="badge badge-secondary" style="font-size: 8.5px; padding: 0 4px; font-weight: 600;">
+              ${projMetrics.durationDays}h
             </span>
           </div>
         </td>
 
-        <!-- Col 4: Status & Progress (Width: 110px, Left: 460px) -->
-        <td class="gantt-col-status" style="position: sticky; left: 460px; z-index: 10; background: #f8fafc; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 6px 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; margin-bottom: 2px;">
-            <span class="badge ${statusBadgeClass}" style="font-size: 9px; padding: 1px 5px;">
+        <!-- Col 4: Status & Progress (Width: 90px, Left: 430px) -->
+        <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 10; background: #f8fafc; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 4px 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; margin-bottom: 2px;">
+            <span class="badge ${statusBadgeClass}" style="font-size: 8.5px; padding: 1px 4px;">
               ${statusLabel}
             </span>
-            <span class="font-bold text-primary font-mono" style="font-size: 10px;">${projProgress}%</span>
+            <span class="font-bold font-mono" style="font-size: 9px; color: #1e293b;">${projProgress}%</span>
           </div>
-          <div style="height: 4px; background: #e2e8f0; border-radius: 99px; overflow: hidden;">
-            <div style="width: ${projProgress}%; height: 100%; background: ${projProgress >= 100 ? '#10b981' : (proj.isService ? '#ea580c' : '#4f46e5')};"></div>
+          <div style="height: 3px; background: #e2e8f0; border-radius: 99px; overflow: hidden;">
+            <div style="width: ${projProgress}%; height: 100%; background: ${projProgress >= 100 ? '#10b981' : (proj.isService ? '#ea580c' : (proj.isInternal ? '#0f766e' : '#4f46e5'))};"></div>
           </div>
         </td>
 
         <!-- Col 5: Gantt Bar Track Canvas -->
-        <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px;">
-          <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px;">
+        <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
+          <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 32px;">
             <!-- Grid lines -->
             ${days.map((d, dIdx) => `
               <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
@@ -1848,16 +2062,16 @@ function renderDashboardProjectGantt() {
             <!-- Today marker line -->
             ${todayLeftPx >= 0 ? `<div class="gantt-today-line" style="left: ${todayLeftPx}px;"></div>` : ''}
 
-            <!-- Project Summary Bar -->
-            <div class="gantt-bar-item ${barClass}" style="left: ${projMetrics.leftPx}px; width: ${projMetrics.widthPx}px;"
+            <!-- Project Summary Bar (Compact & Clean: No floating external label) -->
+            <div class="gantt-bar-item ${barClass}" style="left: ${projMetrics.leftPx}px; width: ${projMetrics.widthPx}px; height: 18px; border-radius: 4px;"
                  onmouseenter="showGanttTooltip(event, \`${projTooltipHtml.replace(/`/g, '\\`')}\`)"
                  onmousemove="moveGanttTooltip(event)"
                  onmouseleave="hideGanttTooltip()"
-                 onclick="openProjectTimelinePage('${proj.orderId || proj.id}')">
+                 onclick="${barOnClickAttr}">
               <div class="gantt-bar-progress-fill" style="width: ${projProgress}%;"></div>
-              <span class="gantt-bar-text">
-                <i data-lucide="${proj.isService ? 'wrench' : 'folder'}" style="width: 11px; height: 11px; flex-shrink: 0;"></i>
-                <strong>${escapeHtml(proj.projectName)}</strong> (${projProgress}% • ${projMetrics.durationDays}h)
+              <span class="gantt-bar-text" style="font-size: 9.5px; padding: 0 4px;">
+                <i data-lucide="${proj.isService ? 'wrench' : (proj.isInternal ? 'briefcase' : 'folder')}" style="width: 10px; height: 10px; flex-shrink: 0;"></i>
+                ${projMetrics.widthPx >= 50 ? `<strong>${escapeHtml(proj.projectName)}</strong> (${projProgress}%)` : ''}
               </span>
             </div>
           </div>
@@ -1865,29 +2079,27 @@ function renderDashboardProjectGantt() {
       </tr>
     `;
 
-    // B. Project Tasks / Milestones Rows (when expanded)
+    // B. Project Tasks / Milestones Rows (when expanded - Compact: height 24px)
     if (!isCollapsed) {
       if (milestones.length === 0) {
         rowsHtml += `
-          <tr class="gantt-task-row">
-            <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 220px; min-width: 200px; max-width: 220px; padding-left: 24px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-              <div style="font-size: 11px; color: #94a3b8; font-style: italic;">
-                Belum ada task.
+          <tr class="gantt-task-row" style="height: 24px;">
+            <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 210px; min-width: 200px; max-width: 210px; padding-left: 20px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
+              <div style="font-size: 10px; color: #94a3b8; font-style: italic;">
+                Belum ada rincian tugas.
               </div>
             </td>
-            <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 5; background: #ffffff; width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-              <span class="text-muted" style="font-size: 10px;">-</span>
+            <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 5; background: #ffffff; width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
+              <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
-            <td class="gantt-col-schedule" style="position: sticky; left: 340px; z-index: 5; background: #ffffff; width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
-              <span class="text-muted" style="font-size: 10px;">-</span>
+            <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 5; background: #ffffff; width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06);">
+              <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
-            <td class="gantt-col-status" style="position: sticky; left: 460px; z-index: 5; background: #ffffff; width: 110px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1;">
-              <button type="button" class="btn btn-xs btn-outline" onclick="openProjectTimelinePage('${proj.orderId || proj.id}')" style="font-size: 9.5px; padding: 2px 5px;">
-                <i data-lucide="plus"></i> Atur
-              </button>
+            <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1;">
+              <span class="text-muted" style="font-size: 9px;">-</span>
             </td>
-            <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px;">
-              <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px;">
+            <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
+              <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 24px;">
                 ${days.map((d, dIdx) => `
                   <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
                 `).join('')}
@@ -1902,101 +2114,82 @@ function renderDashboardProjectGantt() {
           const isOver = !isComp && ms.dueDate && ms.dueDate < todayStr;
           const isInProg = ms.status === 'In Progress';
 
-          let msClass = proj.isService ? 'service-bar' : 'status-pending';
+          let msClass = proj.isService ? 'service-bar' : (proj.isInternal ? 'internal-bar' : 'status-pending');
           let msBadgeClass = 'badge-secondary';
           let msStatusText = ms.status || 'Pending';
-          let msIcon = 'clock';
 
           if (isComp) {
             msClass = 'status-completed';
             msBadgeClass = 'badge-success';
             msStatusText = 'Done';
-            msIcon = 'check-circle';
           } else if (isOver) {
             msClass = 'status-overdue';
             msBadgeClass = 'badge-danger';
             msStatusText = 'Overdue';
-            msIcon = 'alert-triangle';
           } else if (isInProg) {
-            msClass = proj.isService ? 'service-bar' : 'status-in-progress';
-            msBadgeClass = proj.isService ? 'badge-warning' : 'badge-purple';
+            msClass = proj.isService ? 'service-bar' : (proj.isInternal ? 'internal-bar' : 'status-in-progress');
+            msBadgeClass = proj.isService ? 'badge-warning' : (proj.isInternal ? 'badge-info' : 'badge-purple');
             msStatusText = 'Progress';
-            msIcon = 'play-circle';
           }
 
           const msMetrics = calculateBarMetrics(ms.startDate || proj.startDate, ms.dueDate || proj.dueDate);
-          const subtasks = ms.subtasks || [];
-          const subtaskDone = subtasks.filter(s => s.done).length;
-          const msPercent = isComp ? 100 : (subtasks.length > 0 ? Math.round((subtaskDone / subtasks.length) * 100) : (isInProg ? 50 : 0));
-          const msPic = ms.pic || proj.projectLead || 'Belum diassign';
+          const msPic = ms.pic || proj.projectLead || '-';
 
           const msTooltipHtml = `
-            <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : '#93c5fd'}; font-size: 11px; margin-bottom: 2px;">
+            <div style="font-weight: 700; color: ${proj.isService ? '#fdba74' : (proj.isInternal ? '#5eead4' : '#93c5fd')}; font-size: 11px; margin-bottom: 2px;">
               ${proj.isService ? '🛠️ TAHAPAN JASA' : 'TASK'} ${mIdx + 1} &bull; ${escapeHtml(proj.projectName)}
             </div>
-            <div style="font-weight: 700; font-size: 13px; margin-bottom: 6px;">${escapeHtml(ms.title)}</div>
-            <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC: <strong style="color: #fff;">${escapeHtml(msPic)}</strong></div>
-            <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📅 Jadwal: <strong style="color: #fff;">${formatGanttDate(ms.startDate || proj.startDate)} &rarr; ${formatGanttDate(ms.dueDate || proj.dueDate)}</strong> (${msMetrics.durationDays} hari)</div>
-            <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">⚡ Status: <strong style="color: #facc15;">${msStatusText}</strong></div>
-            ${subtasks.length > 0 ? `<div style="font-size: 11px; color: #cbd5e1; margin-bottom: 2px;">📋 Subtask: <strong style="color: #fff;">${subtaskDone} dari ${subtasks.length} selesai (${msPercent}%)</strong></div>` : ''}
-            <div style="margin-top: 8px; font-size: 10px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 4px;">👉 Klik untuk membuka detail tugas</div>
+            <div style="font-weight: 700; font-size: 12px; margin-bottom: 4px;">${escapeHtml(ms.title)}</div>
+            <div style="font-size: 10.5px; color: #cbd5e1; margin-bottom: 2px;">👤 PIC: <strong style="color: #fff;">${escapeHtml(msPic)}</strong></div>
+            <div style="font-size: 10.5px; color: #cbd5e1; margin-bottom: 2px;">📅 Jadwal: <strong style="color: #fff;">${formatGanttDate(ms.startDate || proj.startDate)} &rarr; ${formatGanttDate(ms.dueDate || proj.dueDate)}</strong> (${msMetrics.durationDays} hari)</div>
+            <div style="font-size: 10.5px; color: #cbd5e1;">⚡ Status: <strong style="color: #facc15;">${msStatusText}</strong></div>
+            ${ms.notes ? `<div style="font-size: 10px; color: #94a3b8; margin-top: 3px; border-top: 1px dashed #334155; padding-top: 3px;">📝 ${escapeHtml(ms.notes)}</div>` : ''}
           `;
 
           const isLast = (mIdx === milestones.length - 1);
           const branchChar = isLast ? '└──' : '├──';
 
           rowsHtml += `
-            <tr class="gantt-task-row">
-              <!-- Col 1: Task Title (Width: 220px, Left: 0) -->
-              <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 220px; min-width: 200px; max-width: 220px; padding-left: 20px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 5px 8px 5px 20px;">
+            <tr class="gantt-task-row" style="height: 24px;">
+              <!-- Col 1: Task Title (Width: 210px, Left: 0) -->
+              <td class="gantt-col-task" style="position: sticky; left: 0; z-index: 5; background: #ffffff; width: 210px; min-width: 200px; max-width: 210px; padding-left: 14px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding-top: 2px; padding-bottom: 2px;">
                 <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
-                  <span style="color: #94a3b8; font-family: monospace; font-size: 11px; user-select: none; flex-shrink: 0;">${branchChar}</span>
-                  <div style="min-width: 0; flex: 1; overflow: hidden;">
-                    <div class="font-bold text-main" style="font-size: 11px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(ms.title)}">
-                      ${escapeHtml(ms.title)}
-                    </div>
-                    ${subtasks.length > 0 ? `
-                      <div style="font-size: 9.5px; color: #64748b; margin-top: 1px;">
-                        ✓ ${subtaskDone}/${subtasks.length} subtask
-                      </div>
-                    ` : ''}
+                  <span style="color: #94a3b8; font-family: monospace; font-size: 10px; user-select: none; flex-shrink: 0;">${branchChar}</span>
+                  <div class="font-medium text-main" style="font-size: 10.5px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;" title="${escapeAttr(ms.title)}">
+                    ${escapeHtml(ms.title)}
                   </div>
                 </div>
               </td>
 
-              <!-- Col 2: Task PIC (Width: 120px, Left: 220px) -->
-              <td class="gantt-col-pic" style="position: sticky; left: 220px; z-index: 5; background: #ffffff; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 5px 8px;">
-                <div style="display: flex; align-items: center; gap: 5px; overflow: hidden;">
-                  <div style="width: 20px; height: 20px; border-radius: 50%; background: ${proj.isService ? '#f97316' : '#0284c7'}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0;">
+              <!-- Col 2: Task PIC (Width: 110px, Left: 210px) -->
+              <td class="gantt-col-pic" style="position: sticky; left: 210px; z-index: 5; background: #ffffff; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
+                <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
+                  <div style="width: 16px; height: 16px; border-radius: 50%; background: ${proj.isService ? '#f97316' : (proj.isInternal ? '#14b8a6' : '#0284c7')}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; flex-shrink: 0;">
                     ${getPicAvatar(msPic)}
                   </div>
-                  <div class="font-medium text-main" style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(msPic)}">
+                  <div class="font-medium text-main" style="font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeAttr(msPic)}">
                     ${escapeHtml(msPic)}
                   </div>
                 </div>
               </td>
 
-              <!-- Col 3: Task Schedule (Width: 120px, Left: 340px) -->
-              <td class="gantt-col-schedule" style="position: sticky; left: 340px; z-index: 5; background: #ffffff; width: 120px; min-width: 110px; max-width: 120px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 5px 8px;">
-                <div style="font-size: 10.5px; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              <!-- Col 3: Task Schedule (Width: 110px, Left: 320px) -->
+              <td class="gantt-col-schedule" style="position: sticky; left: 320px; z-index: 5; background: #ffffff; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.06); padding: 2px 6px;">
+                <div style="font-size: 9.5px; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   ${formatGanttDate(ms.startDate || proj.startDate)} &rarr; ${formatGanttDate(ms.dueDate || proj.dueDate)}
-                </div>
-                <div style="font-size: 9.5px; color: #64748b; margin-top: 1px;">
-                  ${msMetrics.durationDays} hari kerja
                 </div>
               </td>
 
-              <!-- Col 4: Task Status (Width: 110px, Left: 460px) -->
-              <td class="gantt-col-status" style="position: sticky; left: 460px; z-index: 5; background: #ffffff; width: 110px; min-width: 100px; max-width: 110px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 5px 8px;">
-                <span class="badge ${msBadgeClass}" style="font-size: 9px; padding: 1px 5px;">
+              <!-- Col 4: Task Status (Width: 90px, Left: 430px) -->
+              <td class="gantt-col-status" style="position: sticky; left: 430px; z-index: 5; background: #ffffff; width: 90px; min-width: 85px; max-width: 90px; box-shadow: 3px 0 6px -2px rgba(0,0,0,0.12); border-right: 2px solid #cbd5e1; padding: 2px 6px;">
+                <span class="badge ${msBadgeClass}" style="font-size: 8.5px; padding: 0 4px;">
                   ${msStatusText}
                 </span>
-                ${msPercent > 0 ? `<span style="font-size: 9.5px; color: #64748b; margin-left: 3px; font-weight: 600;">${msPercent}%</span>` : ''}
               </td>
 
               <!-- Col 5: Milestone Gantt Bar Track Canvas -->
-              <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px;">
-                <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px;">
+              <td class="gantt-col-timeline" style="width: ${totalTimelineWidth}px; padding: 0;">
+                <div class="gantt-track-canvas" style="width: ${totalTimelineWidth}px; height: 24px;">
                   <!-- Grid lines -->
                   ${days.map((d, dIdx) => `
                     <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="left: ${dIdx * dayWidth}px; width: ${dayWidth}px;"></div>
@@ -2005,16 +2198,15 @@ function renderDashboardProjectGantt() {
                   <!-- Today line -->
                   ${todayLeftPx >= 0 ? `<div class="gantt-today-line" style="left: ${todayLeftPx}px;"></div>` : ''}
 
-                  <!-- Milestone Bar -->
-                  <div class="gantt-bar-item ${msClass}" style="left: ${msMetrics.leftPx}px; width: ${msMetrics.widthPx}px;"
+                  <!-- Milestone Bar (Compact & Clean: No floating external label) -->
+                  <div class="gantt-bar-item ${msClass}" style="left: ${msMetrics.leftPx}px; width: ${msMetrics.widthPx}px; height: 14px; border-radius: 3px;"
                        onmouseenter="showGanttTooltip(event, \`${msTooltipHtml.replace(/`/g, '\\`')}\`)"
                        onmousemove="moveGanttTooltip(event)"
                        onmouseleave="hideGanttTooltip()"
-                       onclick="openGanttMilestoneDetail('${proj.id}', '${ms.id}')">
-                    <div class="gantt-bar-progress-fill" style="width: ${msPercent}%;"></div>
-                    <span class="gantt-bar-text">
-                      ${isComp ? '✓' : isInProg ? '⚡' : isOver ? '⚠' : '○'}
-                      <strong>${escapeHtml(ms.title)}</strong> (${msPic} • ${msMetrics.durationDays}h)
+                       onclick="${barOnClickAttr}">
+                    <span class="gantt-bar-text" style="font-size: 8.5px; padding: 0 3px;">
+                      ${isComp ? '✓' : isInProg ? '⚡' : isOver ? '⚠' : ''}
+                      ${msMetrics.widthPx >= 45 ? `<strong>${escapeHtml(ms.title)}</strong>` : ''}
                     </span>
                   </div>
                 </div>
@@ -2038,4 +2230,6 @@ function renderDashboardProjectGantt() {
 
   if (window.lucide) lucide.createIcons();
 }
+}
+
 

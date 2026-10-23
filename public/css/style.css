@@ -3944,23 +3944,27 @@ textarea.form-control {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #3b82f6;
-  z-index: 4;
+  background: #ef4444;
+  border-left: 2px dashed #ef4444;
+  z-index: 6;
   pointer-events: none;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 .gantt-today-badge {
   position: absolute;
   top: 2px;
   transform: translateX(-50%);
-  background: #2563eb;
+  background: #ef4444;
   color: #ffffff;
   font-size: 9px;
   font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1.5px 6px;
+  border-radius: 4px;
   white-space: nowrap;
-  z-index: 5;
+  z-index: 7;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
 }
 
 /* Gantt Bar Styles */
@@ -3975,49 +3979,62 @@ textarea.form-control {
   font-weight: 600;
   color: #ffffff;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   z-index: 3;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
+}
+
+.gantt-bar-item.has-external-label {
+  overflow: visible !important;
+}
+
+.gantt-bar-external-label {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: #1e293b;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 5;
 }
 
 .gantt-bar-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
   z-index: 10;
 }
 
 .gantt-bar-item.project-summary {
-  height: 28px;
-  border-radius: 8px;
+  height: 26px;
+  border-radius: 7px;
   font-weight: 700;
-  background: linear-gradient(90deg, #1e293b, #334155);
-}
-
-.gantt-bar-item.status-in-progress {
-  background: linear-gradient(90deg, #4f46e5, #6366f1);
-}
-
-.gantt-bar-item.status-completed {
-  background: linear-gradient(90deg, #059669, #10b981);
-}
-
-.gantt-bar-item.status-overdue {
-  background: linear-gradient(90deg, #dc2626, #ef4444);
-}
-
-.gantt-bar-item.status-pending {
-  background: linear-gradient(90deg, #64748b, #94a3b8);
+  background: linear-gradient(90deg, #1e293b, #3b82f6);
+  box-shadow: 0 2px 6px rgba(30, 41, 59, 0.25);
 }
 
 .gantt-bar-item.service-summary {
-  height: 28px;
-  border-radius: 8px;
+  height: 26px;
+  border-radius: 7px;
   font-weight: 700;
-  background: linear-gradient(90deg, #9a3412, #ea580c) !important;
+  background: linear-gradient(90deg, #c2410c, #ea580c) !important;
   box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35) !important;
+}
+
+.gantt-bar-item.internal-summary {
+  height: 26px;
+  border-radius: 7px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #0f766e, #0d9488) !important;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.35) !important;
 }
 
 .gantt-bar-item.service-bar {
@@ -4025,14 +4042,40 @@ textarea.form-control {
   box-shadow: 0 2px 5px rgba(234, 88, 12, 0.25) !important;
 }
 
+.gantt-bar-item.internal-bar {
+  background: linear-gradient(90deg, #0d9488 0%, #14b8a6 100%) !important;
+  box-shadow: 0 2px 5px rgba(13, 148, 136, 0.25) !important;
+}
+
+.gantt-bar-item.status-in-progress {
+  background: linear-gradient(90deg, #4f46e5, #6366f1);
+  box-shadow: 0 2px 5px rgba(79, 70, 229, 0.25);
+}
+
+.gantt-bar-item.status-completed {
+  background: linear-gradient(90deg, #059669, #10b981);
+  box-shadow: 0 2px 5px rgba(16, 185, 129, 0.25);
+}
+
+.gantt-bar-item.status-overdue {
+  background: linear-gradient(90deg, #dc2626, #ef4444);
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+  animation: pulse-danger 2.5s infinite;
+}
+
+.gantt-bar-item.status-pending {
+  background: linear-gradient(90deg, #64748b, #94a3b8);
+  box-shadow: 0 1px 4px rgba(100, 116, 139, 0.2);
+}
+
 .gantt-bar-progress-fill {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
   pointer-events: none;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
 .gantt-bar-text {
@@ -4049,11 +4092,17 @@ textarea.form-control {
 .gantt-project-header-row {
   background: #f8fafc !important;
   font-weight: 700;
+  transition: background 0.15s ease;
 }
 
 .gantt-project-header-row td {
   background: #f8fafc !important;
   border-top: 2px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.gantt-project-header-row:hover td {
+  background: #f1f5f9 !important;
 }
 
 .gantt-task-row {
@@ -4061,10 +4110,10 @@ textarea.form-control {
   transition: background 0.15s ease;
 }
 
-.gantt-task-row:hover {
-  background: #f8fafc;
+.gantt-task-row td {
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.gantt-task-row:hover td.gantt-col-task {
-  background: #f8fafc;
+.gantt-task-row:hover td {
+  background: #f8fafc !important;
 }

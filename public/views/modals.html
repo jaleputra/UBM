@@ -309,17 +309,35 @@
     </div>
     <div class="modal-body" style="padding: 20px 24px; max-height: 80vh; overflow-y: auto;">
       <!-- ORDER SELECTOR & QUICK LINK TO TIMELINE -->
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px; background: #f8fafc; padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
-        <div>
-          <label class="form-label font-bold" style="font-size: 11px;">Pilih Referensi Order Penjualan</label>
-          <select id="pm-order-select" class="form-control" onchange="switchProjectOrder(this.value)">
-            <!-- Populated dynamically -->
-          </select>
+      <div style="margin-bottom: 20px; background: #f8fafc; padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: flex-end;">
+          <div>
+            <label class="form-label font-bold" style="font-size: 11px;">Pilih Referensi Order Penjualan</label>
+            <select id="pm-order-select" class="form-control" onchange="switchProjectOrder(this.value)">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div id="pm-quick-action-container" style="display: flex; align-items: center; justify-content: flex-end;">
+            <!-- Populated dynamically based on Product vs Service -->
+          </div>
         </div>
-        <div id="pm-quick-action-container" style="display: flex; align-items: center; justify-content: flex-end;">
-          <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('team-assignment-modal'); openProjectTimelinePage(currentActiveProjectOrderId)">
-            <i data-lucide="folder-kanban" style="color: #4f46e5;"></i> Buka Timeline Gantt &rarr;
-          </button>
+        <!-- Banner Informasi Tanggal Order & Due Date Riil (Bukan Tanggal Quotation) -->
+        <div id="pm-order-info-banner" style="margin-top: 12px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 11.5px; background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i data-lucide="calendar" style="width: 13px; height: 13px; color: #2563eb;"></i>
+            <span style="color: #64748b;">Tanggal Order:</span>
+            <strong id="pm-info-order-date" style="color: #0f172a;">-</strong>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i data-lucide="clock" style="width: 13px; height: 13px; color: #ea580c;"></i>
+            <span style="color: #64748b;">Due Date (Target Selesai):</span>
+            <strong id="pm-info-due-date" style="color: #0f172a;">-</strong>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i data-lucide="tag" style="width: 13px; height: 13px; color: #4f46e5;"></i>
+            <span style="color: #64748b;">Kategori:</span>
+            <span id="pm-info-order-type" style="font-weight: 700;">-</span>
+          </div>
         </div>
       </div>
 

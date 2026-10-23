@@ -342,11 +342,12 @@
             <input type="text" id="gantt-search-input" class="form-control" placeholder="Cari project, task, PIC..." oninput="onProjectGanttSearch(this.value)" style="padding-left: 32px; height: 36px; font-size: 12.5px;">
           </div>
 
-          <!-- Tipe Filter (Semua, Produk, Jasa) -->
-          <select id="gantt-type-filter" class="form-control" onchange="renderDashboardProjectGantt()" style="height: 36px; font-size: 12px; width: 170px; font-weight: 600;">
-            <option value="ALL" selected>⚡ Semua (Produk & Jasa)</option>
+          <!-- Tipe Filter (Semua, Produk, Jasa, Mandiri) -->
+          <select id="gantt-type-filter" class="form-control" onchange="renderDashboardProjectGantt()" style="height: 36px; font-size: 12px; width: 175px; font-weight: 600;">
+            <option value="ALL" selected>⚡ Semua Proyek Aktif</option>
             <option value="PRODUCT">📦 Produk Manufaktur</option>
             <option value="SERVICE">🛠️ Layanan Jasa</option>
+            <option value="INTERNAL">🏢 Proyek Mandiri / Internal</option>
           </select>
 
           <!-- Status Filter -->
@@ -376,12 +377,16 @@
         <!-- Color Legend -->
         <div class="gantt-legend-container">
           <div class="gantt-legend-item">
-            <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #4f46e5, #6366f1); font-size: 10px;"></span>
-            <span>In Progress</span>
+            <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #4f46e5, #6366f1);"></span>
+            <span>Manufaktur</span>
           </div>
           <div class="gantt-legend-item">
             <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #ea580c, #f97316);"></span>
             <span>Proyek Jasa</span>
+          </div>
+          <div class="gantt-legend-item">
+            <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #0d9488, #14b8a6);"></span>
+            <span>Mandiri / Internal</span>
           </div>
           <div class="gantt-legend-item">
             <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #059669, #10b981);"></span>
@@ -390,10 +395,6 @@
           <div class="gantt-legend-item">
             <span class="gantt-legend-dot" style="background: linear-gradient(90deg, #dc2626, #ef4444);"></span>
             <span>Overdue</span>
-          </div>
-          <div class="gantt-legend-item">
-            <span class="gantt-legend-dot" style="background: #94a3b8;"></span>
-            <span>Pending</span>
           </div>
         </div>
       </div>
