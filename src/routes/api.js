@@ -531,6 +531,38 @@ module.exports = function(broadcastReload) {
 
   const missingSupabaseTables = new Set();
 
+  // Helper to safely merge local DB items and cloud sync items by ID and timestamp
+  function mergeResourceLists(localList, cloudList) {
+    const localArr = Array.isArray(localList) ? localList : [];
+    const cloudArr = Array.isArray(cloudList) ? cloudList : [];
+    
+    const map = new Map();
+
+    // 1. Seed with cloud items
+    cloudArr.forEach(c => {
+      if (c && c.id) map.set(c.id, { ...c });
+    });
+
+    // 2. Merge local items; if both exist, prefer newer updatedAt or merge fields
+    localArr.forEach(l => {
+      if (!l || !l.id) return;
+      if (!map.has(l.id)) {
+        map.set(l.id, { ...l });
+      } else {
+        const c = map.get(l.id);
+        const lTime = new Date(l.updatedAt || l.createdAt || 0).getTime();
+        const cTime = new Date(c.updatedAt || c.createdAt || 0).getTime();
+        if (lTime >= cTime) {
+          map.set(l.id, { ...c, ...l });
+        } else {
+          map.set(l.id, { ...l, ...c });
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }
+
   // ---------------- GENERIC CRUD HELPER FUNCTION WITH CLOUD SYNC ----------------
   function registerCrudRoutes(resourceName, idPrefix) {
     // GET ALL
@@ -613,9 +645,10 @@ module.exports = function(broadcastReload) {
       try {
         const cloudData = await getCloudSync(resourceName);
         if (Array.isArray(cloudData)) {
-          db[resourceName] = cloudData;
+          const merged = mergeResourceLists(localItems, cloudData);
+          db[resourceName] = merged;
           writeDB(db);
-          return res.json(cloudData);
+          return res.json(merged);
         }
       } catch (syncErr) {
         console.warn(`[Cloud Sync] Fallback GET /api/${resourceName}:`, syncErr.message);
@@ -667,13 +700,14 @@ module.exports = function(broadcastReload) {
     // POST (CREATE)
     router.post(`/${resourceName}`, async (req, res) => {
       const db = readDB();
-      let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let localItems = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let items = localItems;
 
-      // Always retrieve latest list from Supabase Cloud Store to prevent race conditions & multi-device overwrites
+      // Always retrieve latest list from Supabase Cloud Store and safely merge with local DB
       try {
         const cloudData = await getCloudSync(resourceName);
         if (Array.isArray(cloudData)) {
-          items = cloudData;
+          items = mergeResourceLists(localItems, cloudData);
         }
       } catch (e) {}
 
@@ -826,11 +860,12 @@ module.exports = function(broadcastReload) {
       }
 
       const db = readDB();
-      let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let localItems = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let items = localItems;
       try {
         const cloudData = await getCloudSync(resourceName);
         if (Array.isArray(cloudData)) {
-          items = cloudData;
+          items = mergeResourceLists(localItems, cloudData);
         }
       } catch (e) {}
 
@@ -864,11 +899,12 @@ module.exports = function(broadcastReload) {
       }
 
       const db = readDB();
-      let items = (Array.isArray(db[resourceName]) ? db[resourceName] : []);
+      let localItems = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      let items = localItems;
       try {
         const cloudData = await getCloudSync(resourceName);
         if (Array.isArray(cloudData)) {
-          items = cloudData;
+          items = mergeResourceLists(localItems, cloudData);
         }
       } catch (e) {}
 

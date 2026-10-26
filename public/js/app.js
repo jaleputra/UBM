@@ -396,6 +396,12 @@ async function fetchResource(resource) {
       if (resource === 'service_expenses' && Array.isArray(data)) {
         try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data)); } catch (e) {}
       }
+      if (resource === 'activity_logs' && Array.isArray(data)) {
+        try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
+        if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
+          renderLogsView();
+        }
+      }
     }
     return data;
   } catch (err) {

@@ -383,35 +383,34 @@ function renderLogStats() {
   if (totalHoursEl) totalHoursEl.textContent = `${totalDaysAccumulated} Hari`;
 }
 
-// Determine effective status (handles automatic Overdue when past end date and not complete)
+// Determine effective status (strictly reflects user-saved status in database)
 function getEffectiveLogStatus(log) {
   if (!log) return 'Terjadwal';
   const rawStatus = (log.status || '').trim();
+  if (!rawStatus) return 'Terjadwal';
   const lower = rawStatus.toLowerCase();
 
-  // 1. Selesai always takes highest priority
+  // 1. Selesai
   if (lower.includes('selesai') || lower.includes('complete') || lower.includes('done') || lower.includes('tuntas')) {
     return 'Selesai';
   }
 
-  // 2. Explicit Overdue
-  if (lower === 'overdue') {
+  // 2. Overdue
+  if (lower.includes('overdue') || lower.includes('terlambat') || lower.includes('lewat')) {
     return 'Overdue';
   }
 
-  // 3. Check end date against current date (YYYY-MM-DD)
-  const endYMD = (log.endDate || log.endTime || log.startDate || log.startTime || '').slice(0, 10);
-  const todayYMD = formatYMD(new Date());
-
-  if (endYMD && endYMD < todayYMD) {
-    return 'Overdue';
-  }
-
-  if (lower.includes('berjalan') || lower.includes('progress')) {
+  // 3. Sedang Berjalan
+  if (lower.includes('berjalan') || lower.includes('progress') || lower.includes('proses')) {
     return 'Sedang Berjalan';
   }
 
-  return 'Terjadwal';
+  // 4. Terjadwal
+  if (lower.includes('jadwal') || lower.includes('terjadwal') || lower.includes('pending') || lower.includes('rencana')) {
+    return 'Terjadwal';
+  }
+
+  return rawStatus;
 }
 
 // Generate interactive status select dropdown for table rows
@@ -762,30 +761,17 @@ async function handleLogFormSubmit(e) {
     return;
   }
 
-  const todayYMD = formatYMD(new Date());
-  let finalStartDate = startDate;
-  let finalEndDate = endDate;
-
-  // Jika status diset ke Sedang Berjalan atau Terjadwal dan tanggal selesai telah lampau:
-  // Otomatis perpanjang tanggal selesai ke hari ini agar tidak otomatis kembali Overdue saat refresh
-  if ((status === 'Sedang Berjalan' || status === 'Terjadwal') && endDate < todayYMD) {
-    finalEndDate = todayYMD;
-    if (finalStartDate > todayYMD) {
-      finalStartDate = todayYMD;
-    }
-  }
-
   // Exact Supabase & REST API schema compatible payload
   const logPayload = {
     projectName,
     task,
     pic,
     category,
-    startDate: finalStartDate,
-    endDate: finalEndDate,
+    startDate,
+    endDate,
     // Backward compatibility for any existing readers
-    startTime: finalStartDate,
-    endTime: finalEndDate,
+    startTime: startDate,
+    endTime: endDate,
     status,
     notes,
     updatedAt: new Date().toISOString()
@@ -1165,31 +1151,9 @@ async function updateLogStatusDirect(logId, newStatus, selectEl) {
   }
 
   const oldStatus = log.status;
-  const oldStartDate = log.startDate || log.startTime;
-  const oldEndDate = log.endDate || log.endTime;
-  const todayYMD = formatYMD(new Date());
 
-  let newStartDate = oldStartDate || todayYMD;
-  let newEndDate = oldEndDate || todayYMD;
-  let dateAutoExtended = false;
-
-  // Jika diubah dari Overdue / jadwal lampau ke Sedang Berjalan atau Terjadwal:
-  // Otomatis perpanjang tanggal selesai ke hari ini agar status tidak langsung kembali Overdue secara otomatis
-  const endYMD = (newEndDate || '').slice(0, 10);
-  if ((newStatus === 'Sedang Berjalan' || newStatus === 'Terjadwal') && endYMD < todayYMD) {
-    newEndDate = todayYMD;
-    if ((newStartDate || '').slice(0, 10) > todayYMD) {
-      newStartDate = todayYMD;
-    }
-    dateAutoExtended = true;
-  }
-
-  // Update data objek lokal
+  // Update status data objek lokal
   log.status = newStatus;
-  log.startDate = newStartDate;
-  log.endDate = newEndDate;
-  log.startTime = newStartDate;
-  log.endTime = newEndDate;
   log.updatedAt = new Date().toISOString();
 
   // Optimistic UI state pada select
@@ -1219,10 +1183,7 @@ async function updateLogStatusDirect(logId, newStatus, selectEl) {
     }
     syncLogsToLocalStorage();
 
-    const toastMsg = dateAutoExtended
-      ? `Status kegiatan #${logId} diubah ke "${newStatus}" (jadwal diperpanjang ke hari ini)`
-      : `Status kegiatan #${logId} berhasil diubah ke "${newStatus}"`;
-    showToast(toastMsg, 'success');
+    showToast(`Status kegiatan #${logId} berhasil diubah ke "${newStatus}"`, 'success');
 
     // Re-render tampilan log & kalender
     renderLogsView();
@@ -1237,10 +1198,6 @@ async function updateLogStatusDirect(logId, newStatus, selectEl) {
     console.error('Error updating log status directly:', err);
     // Rollback nilai sebelumnya
     log.status = oldStatus;
-    log.startDate = oldStartDate;
-    log.endDate = oldEndDate;
-    log.startTime = oldStartDate;
-    log.endTime = oldEndDate;
     renderLogsView();
     showToast('Gagal mengubah status: ' + err.message, 'error');
   }
