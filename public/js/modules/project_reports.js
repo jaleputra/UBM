@@ -166,7 +166,11 @@ function renderProjectReportsTable() {
           ${isReported ? (
             returnedItemsCount > 0 
               ? `<span class="badge badge-success font-bold" style="font-size: 11px; padding: 3px 8px;"><i data-lucide="arrow-down-left" style="width: 12px; height: 12px; display: inline; vertical-align: middle;"></i> +${totalReturnedUnits} Unit (${returnedItemsCount} Jenis)</span>`
-              : (isSvc ? '<span class="text-muted font-xs font-italic">Pelaksanaan Selesai</span>' : '<span class="text-muted font-xs font-italic">Habis Terpakai (0 Sisa)</span>')
+              : (isSvc 
+                  ? `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10.5px; padding: 3px 8px; font-weight: 700;">
+                       <i data-lucide="paperclip" style="width: 11px; height: 11px; display: inline; vertical-align: middle;"></i> ${(report?.evidenceDocs?.length || 0)} Bukti / Foto
+                     </span>` 
+                  : '<span class="text-muted font-xs font-italic">Habis Terpakai (0 Sisa)</span>')
           ) : '<span class="text-muted font-xs">-</span>'}
         </td>
         <td style="text-align: center;">
@@ -212,7 +216,246 @@ function filterProjectReportsTable() {
 }
 
 // -------------------------------------------------------------
-// 2. MODAL FORMULIR PENGGUNAAN BARANG AKTUAL & RESTOCK SISA
+// 2. HELPER BUKTI TRANSPORT, MAKAN & DOKUMENTASI PROJECT JASA
+// -------------------------------------------------------------
+window._serviceEvidenceList = [];
+
+window.compressEvidenceImage = function(file, maxWidth = 1280, maxHeight = 1280, quality = 0.82) {
+  return new Promise((resolve) => {
+    if (!file.type || !file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(e.target.result);
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+window.handleServiceEvidenceUpload = async function(event, category) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  const validFiles = Array.from(files);
+  for (const file of validFiles) {
+    try {
+      const dataUrl = await window.compressEvidenceImage(file);
+      const newEvidence = {
+        id: 'evid-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+        category: category,
+        fileName: file.name,
+        fileType: file.type || 'image/jpeg',
+        fileSize: file.size,
+        dataUrl: dataUrl,
+        description: '',
+        amount: 0,
+        uploadedAt: new Date().toISOString()
+      };
+      window._serviceEvidenceList.push(newEvidence);
+    } catch (err) {
+      console.warn('Gagal memproses bukti:', file.name, err);
+    }
+  }
+
+  event.target.value = '';
+  refreshServiceEvidenceContainers();
+  if (window.lucide) lucide.createIcons();
+};
+
+window.updateServiceEvidenceItem = function(id, field, value) {
+  const item = (window._serviceEvidenceList || []).find(e => e.id === id);
+  if (item) {
+    item[field] = value;
+  }
+  updateServiceEvidenceSummaryBanner();
+};
+
+window.removeServiceEvidenceItem = function(id) {
+  window._serviceEvidenceList = (window._serviceEvidenceList || []).filter(e => e.id !== id);
+  refreshServiceEvidenceContainers();
+  if (window.lucide) lucide.createIcons();
+};
+
+window.viewServiceEvidenceFullImage = function(dataUrl, title) {
+  let modalEl = document.getElementById('evidence-lightbox-modal');
+  if (!modalEl) {
+    modalEl = document.createElement('div');
+    modalEl.id = 'evidence-lightbox-modal';
+    modalEl.style.cssText = 'display: none; position: fixed; inset: 0; z-index: 99999; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 20px;';
+    modalEl.innerHTML = `
+      <div style="background: #ffffff; border-radius: 8px; max-width: 900px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+          <div id="evidence-lightbox-title" style="font-weight: 700; font-size: 13.5px; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Bukti Lampiran</div>
+          <button type="button" class="btn-close" onclick="closeServiceEvidenceLightbox()" style="border: none; background: transparent; cursor: pointer; font-size: 18px; color: #64748b; font-weight: 700;">✕</button>
+        </div>
+        <div style="padding: 16px; overflow: auto; text-align: center; background: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 250px;">
+          <img id="evidence-lightbox-img" src="" alt="Pratinjau Bukti" style="max-width: 100%; max-height: 75vh; border-radius: 4px; object-fit: contain;">
+        </div>
+      </div>
+    `;
+    modalEl.addEventListener('click', (e) => {
+      if (e.target === modalEl) window.closeServiceEvidenceLightbox();
+    });
+    document.body.appendChild(modalEl);
+  }
+
+  const imgEl = document.getElementById('evidence-lightbox-img');
+  const titleEl = document.getElementById('evidence-lightbox-title');
+  if (imgEl) imgEl.src = dataUrl;
+  if (titleEl) titleEl.innerText = title || 'Pratinjau Bukti Lampiran';
+  modalEl.style.display = 'flex';
+};
+
+window.closeServiceEvidenceLightbox = function() {
+  const modalEl = document.getElementById('evidence-lightbox-modal');
+  if (modalEl) modalEl.style.display = 'none';
+};
+
+function renderServiceEvidenceCard(item) {
+  const isImage = item.dataUrl && (item.dataUrl.startsWith('data:image/') || item.fileType?.startsWith('image/'));
+  const isTransportOrMeal = item.category === 'transport' || item.category === 'meal';
+
+  return `
+    <div class="evidence-item-card" data-id="${item.id}" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+      <!-- THUMBNAIL / PREVIEW -->
+      <div style="width: 58px; height: 58px; border-radius: 4px; overflow: hidden; background: #f1f5f9; border: 1px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="viewServiceEvidenceFullImage('${item.dataUrl}', '${escapeAttr(item.description || item.fileName)}')" title="Klik untuk memperbesar gambar">
+        ${isImage ? `
+          <img src="${item.dataUrl}" alt="Thumbnail" style="width: 100%; height: 100%; object-fit: cover;">
+        ` : `
+          <div style="font-size: 10px; font-weight: 700; color: #dc2626; text-align: center;">
+            <i data-lucide="file-text" style="width: 22px; height: 22px; margin: 0 auto; display: block;"></i>
+            PDF
+          </div>
+        `}
+      </div>
+
+      <!-- DETAILS & INPUT DESKRIPSI -->
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <div style="font-weight: 600; font-size: 11.5px; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeAttr(item.fileName)}">
+            ${escapeHtml(item.fileName)}
+          </div>
+          <button type="button" class="btn btn-sm btn-icon" style="color: #ef4444; padding: 2px 4px; height: 24px; width: 24px; border-radius: 4px;" onclick="removeServiceEvidenceItem('${item.id}')" title="Hapus Bukti Ini">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <div style="flex: 1; min-width: 200px;">
+            <input type="text" 
+                   class="form-control form-control-sm evid-desc-input font-sm" 
+                   data-id="${item.id}"
+                   placeholder="Deskripsi bukti ini (contoh: ${item.category === 'transport' ? 'Bensin tol PP Cikampek' : (item.category === 'meal' ? 'Makan siang tim 3 orang di lokasi' : 'Foto instalasi unit di site')})" 
+                   value="${escapeAttr(item.description || '')}"
+                   oninput="updateServiceEvidenceItem('${item.id}', 'description', this.value)">
+          </div>
+
+          ${isTransportOrMeal ? `
+            <div style="display: flex; align-items: center; gap: 4px; width: 145px;">
+              <span class="font-xs text-muted" style="font-size: 11px;">Rp</span>
+              <input type="number" 
+                     class="form-control form-control-sm evid-amt-input font-mono text-right" 
+                     data-id="${item.id}"
+                     placeholder="Nominal" 
+                     value="${item.amount || ''}"
+                     oninput="updateServiceEvidenceItem('${item.id}', 'amount', parseFloat(this.value)||0)">
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function refreshServiceEvidenceContainers() {
+  const list = window._serviceEvidenceList || [];
+  
+  const transportItems = list.filter(e => e.category === 'transport');
+  const mealItems = list.filter(e => e.category === 'meal');
+  const docItems = list.filter(e => e.category === 'documentation');
+
+  const transportContainer = document.getElementById('evidence-list-transport');
+  if (transportContainer) {
+    transportContainer.innerHTML = transportItems.length === 0 
+      ? '<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding: 12px 14px; border: 1px dashed #cbd5e1; border-radius: 6px; text-align: center; background: #fafafa;">Belum ada bukti transportasi yang diunggah. Klik tombol di atas untuk menambah struk bensin, tol, tiket, taksi, dll.</div>'
+      : transportItems.map(renderServiceEvidenceCard).join('');
+  }
+
+  const mealContainer = document.getElementById('evidence-list-meal');
+  if (mealContainer) {
+    mealContainer.innerHTML = mealItems.length === 0
+      ? '<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding: 12px 14px; border: 1px dashed #cbd5e1; border-radius: 6px; text-align: center; background: #fafafa;">Belum ada bukti makan & konsumsi yang diunggah. Klik tombol di atas untuk menambah struk makan tim.</div>'
+      : mealItems.map(renderServiceEvidenceCard).join('');
+  }
+
+  const docContainer = document.getElementById('evidence-list-documentation');
+  if (docContainer) {
+    docContainer.innerHTML = docItems.length === 0
+      ? '<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding: 12px 14px; border: 1px dashed #cbd5e1; border-radius: 6px; text-align: center; background: #fafafa;">Belum ada foto dokumentasi yang diunggah. Klik tombol di atas untuk mengunggah foto aktivitas pengerjaan dan serah terima site.</div>'
+      : docItems.map(renderServiceEvidenceCard).join('');
+  }
+
+  updateServiceEvidenceSummaryBanner();
+}
+
+function updateServiceEvidenceSummaryBanner() {
+  const list = window._serviceEvidenceList || [];
+  const totalCount = list.length;
+  const transportCount = list.filter(e => e.category === 'transport').length;
+  const mealCount = list.filter(e => e.category === 'meal').length;
+  const docCount = list.filter(e => e.category === 'documentation').length;
+
+  const totalTransportAmt = list.filter(e => e.category === 'transport').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const totalMealAmt = list.filter(e => e.category === 'meal').reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const totalExpenseAmt = totalTransportAmt + totalMealAmt;
+
+  const summarySubtitle = document.getElementById('service-evidence-summary-subtitle');
+  if (summarySubtitle) {
+    summarySubtitle.innerHTML = totalCount > 0
+      ? `Terlampir <strong>${totalCount} berkas bukti</strong> (${transportCount} Transport, ${mealCount} Makan, ${docCount} Dokumentasi Lapangan).`
+      : 'Belum ada bukti yang dilampirkan. Anda dapat mengunggah struk pengeluaran dan foto hasil kerja.';
+  }
+
+  const summaryStats = document.getElementById('service-evidence-summary-stats');
+  if (summaryStats) {
+    summaryStats.innerHTML = `
+      <div style="background: #ffffff; border: 1px solid #fed7aa; padding: 4px 10px; border-radius: 4px;">
+        Total Berkas: <strong class="text-main">${totalCount} File</strong>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #fed7aa; padding: 4px 10px; border-radius: 4px;">
+        Total Biaya Transport & Makan: <strong style="color: #ea580c; font-weight: 700;">Rp ${totalExpenseAmt.toLocaleString('id-ID')}</strong>
+      </div>
+    `;
+  }
+}
+
+// -------------------------------------------------------------
+// 2B. MODAL FORMULIR PENGGUNAAN BARANG / BUKTI PELAKSANAAN JASA
 // -------------------------------------------------------------
 function openProjectReportModal(projectId) {
   const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
@@ -224,7 +467,7 @@ function openProjectReportModal(projectId) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(p.id, activeUser) : true;
   if (!isLead) {
-    showToast(`⚠️ Hanya akun yang ditugaskan sebagai Lead Project (${escapeHtml(p.projectLead || 'Lead')}) atau Administrator yang berwenang mengisi Laporan Penggunaan Barang.`, 'warning');
+    showToast(`⚠️ Hanya akun yang ditugaskan sebagai Lead Project (${escapeHtml(p.projectLead || 'Lead')}) atau Administrator yang berwenang mengisi Laporan Pelaksanaan Project.`, 'warning');
     return;
   }
 
@@ -249,7 +492,190 @@ function openProjectReportModal(projectId) {
         ${isEdit ? `Edit Laporan Penggunaan Barang: <span class="mono-id">${p.id}</span>` : `Input Penggunaan Barang Aktual: <span class="mono-id">${p.id}</span>`}
        </span>`;
 
-  // Ambil data bahan/komponen dari BOM sebelumnya, atau dari data laporan yang sudah pernah disimpan
+  const defaultReporter = existingReport?.reporterName || p.projectLead || 'PIC Operasional';
+  const defaultReportDate = existingReport?.reportDate || new Date().toISOString().split('T')[0];
+  const defaultNotes = existingReport?.notes || (isSvc 
+    ? `Pelaksanaan layanan jasa ${p.projectName || ''} telah terlaksana dengan baik sesuai lingkup penugasan. Tidak memerlukan dokumen BAST.`
+    : `Laporan aktual penggunaan bahan & material project ${p.projectName || ''}.`);
+
+  const formBody = document.getElementById('form-modal-body');
+
+  // ===============================================================
+  // CABANG 1: KHUSUS PROJECT JASA (UPLOAD BUKTI TRANSPORT, MAKAN, DOKUMENTASI & DESKRIPSI)
+  // ===============================================================
+  if (isSvc) {
+    // Inisialisasi daftar bukti dari laporan sebelumnya jika ada
+    window._serviceEvidenceList = (existingReport && Array.isArray(existingReport.evidenceDocs))
+      ? JSON.parse(JSON.stringify(existingReport.evidenceDocs))
+      : [];
+
+    const defaultOverallDesc = existingReport?.overallDescription || existingReport?.notes || '';
+
+    formBody.innerHTML = `
+      <form id="project-report-form" onsubmit="submitProjectReport(event, '${p.id}')" style="display: flex; flex-direction: column; gap: 18px;">
+        
+        <!-- CARD 1: INFORMASI PROJECT & PIC PELAPOR -->
+        <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="mono-id font-bold text-primary" style="font-size: 13px;">${p.id}</span>
+                ${p.orderId ? `<span class="badge badge-outline font-mono">Ref Order: ${p.orderId}</span>` : ''}
+                <span class="badge badge-warning font-bold" style="background: #ffedd5; color: #c2410c; border: 1px solid #fdba74;">
+                  🛠️ Layanan Jasa (Biaya Disetujui)
+                </span>
+                <span class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px; font-weight: 700;">
+                  Tanpa Dokumen BAST
+                </span>
+              </div>
+              <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 4px 0 2px 0;">${escapeHtml(p.projectName || 'Project')}</h3>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                Pelanggan: <strong class="text-main">${escapeHtml(p.customerName || '-')}</strong>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 11px; color: var(--text-muted);">Alur Project:</div>
+              <div style="font-size: 12.5px; font-weight: 700; color: #ea580c;">
+                Layanan Jasa (Non-BOM • Langsung ke Kerjasama)
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 14px; border-top: 1px solid #fed7aa; padding-top: 12px;">
+            <div class="form-group">
+              <label class="form-label font-bold" style="font-size: 11.5px;">PIC Pengisi Laporan Jasa *</label>
+              <select name="reporterName" class="form-control" required>
+                ${(typeof getUserDropdownOptions === 'function')
+                    ? getUserDropdownOptions(defaultReporter, '-- Pilih PIC Pengisi Laporan --')
+                    : `<option value="${escapeAttr(defaultReporter)}">${escapeHtml(defaultReporter)}</option>`}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label font-bold" style="font-size: 11.5px;">Tanggal Pelaporan *</label>
+              <input type="date" name="reportDate" class="form-control" required value="${defaultReportDate}">
+            </div>
+            <div class="form-group">
+              <label class="form-label font-bold" style="font-size: 11.5px;">Ringkasan Status Pelaksanaan</label>
+              <input type="text" name="notes" class="form-control" value="${escapeAttr(defaultNotes)}" placeholder="Contoh: Pekerjaan pendampingan selesai 100% dan diterima baik">
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: INPUT DESKRIPSI LAPORAN MENYELURUH -->
+        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label font-bold" style="font-size: 13px; color: #0f172a; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <i data-lucide="file-text" style="width: 16px; height: 16px; color: #ea580c;"></i>
+              Deskripsi Laporan Menyeluruh Hasil Pelaksanaan Jasa *
+            </label>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
+              Uraikan ringkasan menyeluruh mengenai pekerjaan jasa yang telah diselesaikan: ruang lingkup tugas, personil yang bertugas, kendala & solusi di site, konfirmasi kepuasan pelanggan, serta evaluasi hasil pelaksanaan.
+            </div>
+            <textarea name="overallDescription" class="form-control font-sm" rows="4" style="line-height: 1.6; border-color: #fdba74; font-size: 12.5px;" placeholder="Tuliskan uraian menyeluruh pelaksanaan jasa di sini..." required>${escapeHtml(defaultOverallDesc)}</textarea>
+          </div>
+        </div>
+
+        <!-- CARD 3: UPLOAD BUKTI TRANSPORTASI -->
+        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h4 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="car" style="width: 16px; height: 16px; color: #0284c7;"></i>
+                Bukti Transportasi & Perjalanan Dinas
+              </h4>
+              <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">
+                Unggah struk bensin, tiket tol, tiket transportasi umum, karcis parkir, atau nota kendaraan operasional.
+              </p>
+            </div>
+            <div>
+              <label class="btn btn-sm btn-outline" style="cursor: pointer; font-size: 11px; color: #0284c7; border-color: #bae6fd; background: #f0f9ff; margin: 0; display: inline-flex; align-items: center; gap: 5px;">
+                <i data-lucide="upload-cloud" style="width: 14px; height: 14px;"></i> + Upload Bukti Transport
+                <input type="file" multiple accept="image/*,application/pdf" style="display: none;" onchange="handleServiceEvidenceUpload(event, 'transport')">
+              </label>
+            </div>
+          </div>
+          <div id="evidence-list-transport"></div>
+        </div>
+
+        <!-- CARD 4: UPLOAD BUKTI MAKAN & KONSUMSI TIM -->
+        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h4 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="utensils" style="width: 16px; height: 16px; color: #d97706;"></i>
+                Bukti Makan & Konsumsi Tim
+              </h4>
+              <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">
+                Unggah struk makan siang/malam, konsumsi lembur, atau logistik konsumsi tim selama pelaksanaan jasa di site.
+              </p>
+            </div>
+            <div>
+              <label class="btn btn-sm btn-outline" style="cursor: pointer; font-size: 11px; color: #d97706; border-color: #fde68a; background: #fffbeb; margin: 0; display: inline-flex; align-items: center; gap: 5px;">
+                <i data-lucide="upload-cloud" style="width: 14px; height: 14px;"></i> + Upload Bukti Makan
+                <input type="file" multiple accept="image/*,application/pdf" style="display: none;" onchange="handleServiceEvidenceUpload(event, 'meal')">
+              </label>
+            </div>
+          </div>
+          <div id="evidence-list-meal"></div>
+        </div>
+
+        <!-- CARD 5: UPLOAD FOTO DOKUMENTASI KEGIATAN LAPANGAN & LAINNYA -->
+        <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h4 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="camera" style="width: 16px; height: 16px; color: #16a34a;"></i>
+                Foto Dokumentasi Kegiatan Lapangan & Lainnya
+              </h4>
+              <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">
+                Unggah foto aktivitas teknisi di lokasi, foto bersama PIC Klien, kondisi instalasi/mesin, atau berita serah terima lapangan.
+              </p>
+            </div>
+            <div>
+              <label class="btn btn-sm btn-outline" style="cursor: pointer; font-size: 11px; color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; margin: 0; display: inline-flex; align-items: center; gap: 5px;">
+                <i data-lucide="upload-cloud" style="width: 14px; height: 14px;"></i> + Upload Foto Dokumentasi
+                <input type="file" multiple accept="image/*,application/pdf" style="display: none;" onchange="handleServiceEvidenceUpload(event, 'documentation')">
+              </label>
+            </div>
+          </div>
+          <div id="evidence-list-documentation"></div>
+        </div>
+
+        <!-- CARD 6: REALTIME SUMMARY BUKTI TERLAMPIR -->
+        <div id="service-evidence-summary-box" style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: #ffedd5; display: flex; align-items: center; justify-content: center;">
+              <i data-lucide="paperclip" style="width: 16px; height: 16px; color: #ea580c;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 700; font-size: 12.5px; color: #9a3412;" id="service-evidence-summary-title">Ringkasan Bukti & Biaya Operasional Jasa</div>
+              <div style="font-size: 11px; color: #c2410c;" id="service-evidence-summary-subtitle">Memuat ringkasan bukti...</div>
+            </div>
+          </div>
+          <div id="service-evidence-summary-stats" style="display: flex; gap: 14px; font-size: 12px;"></div>
+        </div>
+
+        <!-- FOOTER ACTIONS -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">
+            <i data-lucide="x"></i> Batal
+          </button>
+          <button type="submit" class="btn btn-primary" style="background: #ea580c; border-color: #ea580c; font-weight: 700; padding: 8px 20px; font-size: 13px;">
+            <i data-lucide="check-circle-2"></i> Simpan Laporan & Masukkan ke Pembagian Hasil Kerjasama
+          </button>
+        </div>
+      </form>
+    `;
+
+    openModal('form-modal');
+    refreshServiceEvidenceContainers();
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // ===============================================================
+  // CABANG 2: PROJECT MANUFAKTUR / BOM (TABEL MATERIAL & RESTOCK SISA)
+  // ===============================================================
   let componentsList = [];
   if (bom && Array.isArray(bom.components) && bom.components.length > 0) {
     componentsList = bom.components.map(c => {
@@ -276,13 +702,6 @@ function openProjectReportModal(projectId) {
     }));
   }
 
-  const defaultReporter = existingReport?.reporterName || p.projectLead || 'PIC Operasional';
-  const defaultReportDate = existingReport?.reportDate || new Date().toISOString().split('T')[0];
-  const defaultNotes = existingReport?.notes || (isSvc 
-    ? `Pelaksanaan layanan jasa ${p.projectName || ''} telah terlaksana dengan baik sesuai lingkup penugasan. Tidak memerlukan dokumen BAST.`
-    : `Laporan aktual penggunaan bahan & material project ${p.projectName || ''}.`);
-
-  const formBody = document.getElementById('form-modal-body');
   formBody.innerHTML = `
     <form id="project-report-form" onsubmit="submitProjectReport(event, '${p.id}')" style="display: flex; flex-direction: column; gap: 18px;">
       
@@ -293,10 +712,9 @@ function openProjectReportModal(projectId) {
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="mono-id font-bold text-primary" style="font-size: 13px;">${p.id}</span>
               ${p.orderId ? `<span class="badge badge-outline font-mono">Ref Order: ${p.orderId}</span>` : ''}
-              <span class="badge ${isSvc ? 'badge-warning font-bold' : 'badge-success font-bold'}">
-                ${isSvc ? '🛠️ Layanan Jasa (Biaya Disetujui)' : 'Project Selesai (Completed)'}
+              <span class="badge badge-success font-bold">
+                Project Selesai (Completed)
               </span>
-              ${isSvc ? `<span class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px;">Tanpa Dokumen BAST</span>` : ''}
             </div>
             <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 4px 0 2px 0;">${escapeHtml(p.projectName || 'Project')}</h3>
             <div style="font-size: 12px; color: var(--text-muted);">
@@ -304,9 +722,9 @@ function openProjectReportModal(projectId) {
             </div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 11px; color: var(--text-muted);">${isSvc ? 'Status Operasional Jasa:' : 'Referensi Master BOM:'}</div>
-            <div style="font-size: 12.5px; font-weight: 700; color: ${isSvc ? '#ea580c' : '#4f46e5'};">
-              ${isSvc ? 'Layanan Jasa (Non-BOM / Tanpa BAST)' : (bom ? `${bom.id || 'BOM Terkait'} (${componentsList.length} Bahan)` : 'BOM Tidak Terhubung')}
+            <div style="font-size: 11px; color: var(--text-muted);">Referensi Master BOM:</div>
+            <div style="font-size: 12.5px; font-weight: 700; color: #4f46e5;">
+              ${bom ? `${bom.id || 'BOM Terkait'} (${componentsList.length} Bahan)` : 'BOM Tidak Terhubung'}
             </div>
           </div>
         </div>
@@ -331,29 +749,16 @@ function openProjectReportModal(projectId) {
         </div>
       </div>
 
-      <!-- CARD 2: TABEL PENGGUNAAN BARANG AKTUAL BERBASIS BOM (ATAU DOKUMENTASI UNTUK JASA) -->
+      <!-- CARD 2: TABEL PENGGUNAAN BARANG AKTUAL BERBASIS BOM -->
       <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
-        ${isSvc ? `
-          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px;">
-            <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #9a3412; font-size: 12.5px; margin-bottom: 3px;">
-              <i data-lucide="info" style="width: 15px; height: 15px; color: #ea580c;"></i> Alur Pelaksanaan Layanan Jasa
-            </div>
-            <div style="font-size: 11.5px; color: #7c2d12; line-height: 1.5;">
-              Biaya operasional jasa telah disetujui di Keuangan Project. Project jasa <strong>tidak memerlukan dokumen BAST</strong>. Setelah laporan ini disimpan oleh Lead Project, project otomatis dinyatakan selesai dan masuk ke <strong>Pembagian Hasil pada Tab Kerjasama Keuangan Project</strong>.
-            </div>
-          </div>
-        ` : ''}
-
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
           <div>
             <h4 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
-              <i data-lucide="${isSvc ? 'wrench' : 'boxes'}" style="width: 16px; height: 16px; color: ${isSvc ? '#ea580c' : '#4f46e5'};"></i>
-              ${isSvc ? 'Rincian Penggunaan Material / Tools Penunjang Jasa (Opsional)' : 'Rincian Penggunaan Barang Aktual & Pengembalian Sisa'}
+              <i data-lucide="boxes" style="width: 16px; height: 16px; color: #4f46e5;"></i>
+              Rincian Penggunaan Barang Aktual & Pengembalian Sisa
             </h4>
             <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">
-              ${isSvc 
-                ? 'Jika ada perlengkapan/material habis pakai yang digunakan atau sisa, Anda dapat mencatatnya di bawah. Jika tidak ada, Anda dapat langsung menyimpan laporan.' 
-                : 'Sistem memuat daftar material dari formulasi BOM. Isi kuantiti aktual yang terpakai. <strong>Jika ada sisa material, stoknya akan otomatis dikembalikan ke Database Master Barang Purchasing.</strong>'}
+              Sistem memuat daftar material dari formulasi BOM. Isi kuantiti aktual yang terpakai. <strong>Jika ada sisa material, stoknya akan otomatis dikembalikan ke Database Master Barang Purchasing.</strong>
             </p>
           </div>
           <button type="button" class="btn btn-sm btn-outline" onclick="addManualReportItemRow()" style="font-size: 11px;">
@@ -376,9 +781,7 @@ function openProjectReportModal(projectId) {
               ${componentsList.length === 0 ? `
                 <tr id="empty-report-row">
                   <td colspan="5" class="text-center text-muted" style="padding: 24px;">
-                    ${isSvc 
-                      ? 'Tidak ada material penunjang yang terdaftar. Anda dapat langsung menyimpan laporan atau menambahkan perlengkapan secara manual di atas.' 
-                      : 'Belum ada data komponen BOM. Anda dapat menambahkan material secara manual menggunakan tombol di atas.'}
+                    Belum ada data komponen BOM. Anda dapat menambahkan material secara manual menggunakan tombol di atas.
                   </td>
                 </tr>
               ` : componentsList.map((item, idx) => `
@@ -436,8 +839,8 @@ function openProjectReportModal(projectId) {
         <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">
           <i data-lucide="x"></i> Batal
         </button>
-        <button type="submit" class="btn btn-primary" style="background: ${isSvc ? '#ea580c' : '#16a34a'}; border-color: ${isSvc ? '#ea580c' : '#16a34a'}; font-weight: 700; padding: 8px 20px; font-size: 13px;">
-          <i data-lucide="${isSvc ? 'check-circle-2' : 'save'}"></i> ${isSvc ? 'Simpan Laporan & Masukkan ke Pembagian Hasil Kerjasama' : 'Simpan & Kembalikan Sisa ke Master Barang'}
+        <button type="submit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 700; padding: 8px 20px; font-size: 13px;">
+          <i data-lucide="save"></i> Simpan & Kembalikan Sisa ke Master Barang
         </button>
       </div>
     </form>
@@ -591,59 +994,119 @@ async function submitProjectReport(event, projectId) {
     return;
   }
 
+  const isSvc = p.isService || isProjectService(p);
   const existingReport = getLinkedProjectReport(p);
-  const rows = document.querySelectorAll('#project-report-items-body .report-item-row');
-  const items = [];
-  const itemsToReturn = [];
 
-  rows.forEach(r => {
-    const itemName = r.querySelector('.report-item-name')?.value?.trim();
-    const unit = r.querySelector('.report-item-unit')?.value?.trim() || 'Pcs';
-    const unitCost = parseFloat(r.querySelector('.report-item-unit-cost')?.value) || 0;
-    const planQty = parseFloat(r.querySelector('.report-plan-qty')?.value) || 0;
-    const actualQty = parseFloat(r.querySelector('.report-actual-qty')?.value) || 0;
-    const remainingQty = Math.max(0, planQty - actualQty);
-    const notes = r.querySelector('.report-item-notes')?.value?.trim() || '';
+  const reporterName = form.reporterName?.value?.trim() || p.projectLead || 'PIC Project';
+  const reportDate = form.reportDate?.value || new Date().toISOString().split('T')[0];
+  const notes = form.notes?.value?.trim() || '';
 
-    if (itemName) {
-      const itemData = {
-        itemName,
-        unit,
-        unitCost,
-        planQty,
-        actualQty,
-        remainingQty,
-        notes
-      };
-      items.push(itemData);
+  let reportPayload;
+  let itemsToReturn = [];
 
-      if (remainingQty > 0) {
-        itemsToReturn.push(itemData);
-      }
+  // ===============================================================
+  // JIKA PROJECT JASA: SIMPAN BUKTI TRANSPORT, MAKAN, DOKUMENTASI & DESKRIPSI
+  // ===============================================================
+  if (isSvc) {
+    // Sinkronkan input deskripsi & amount terbaru dari kartu-kartu bukti di DOM
+    if (Array.isArray(window._serviceEvidenceList)) {
+      window._serviceEvidenceList.forEach(item => {
+        const descEl = document.querySelector(`.evid-desc-input[data-id="${item.id}"]`);
+        if (descEl) item.description = descEl.value.trim();
+        const amtEl = document.querySelector(`.evid-amt-input[data-id="${item.id}"]`);
+        if (amtEl) item.amount = parseFloat(amtEl.value) || 0;
+      });
     }
-  });
 
-  const reporterName = form.reporterName.value.trim();
-  const reportDate = form.reportDate.value;
-  const notes = form.notes.value.trim();
+    const overallDescription = form.overallDescription ? form.overallDescription.value.trim() : '';
+    if (!overallDescription) {
+      showToast('⚠️ Harap isi Deskripsi Laporan Menyeluruh Hasil Pelaksanaan Jasa!', 'warning');
+      return;
+    }
 
-  const reportPayload = {
-    id: existingReport?.id || `REP-${p.orderId || p.id}-${Date.now().toString().slice(-4)}`,
-    projectId: p.id,
-    orderId: p.orderId || p.id,
-    projectName: p.projectName || 'Project',
-    customerName: p.customerName || '-',
-    reporterName,
-    reportDate,
-    notes,
-    items,
-    totalItems: items.length,
-    returnedItemsCount: itemsToReturn.length,
-    totalReturnedUnits: itemsToReturn.reduce((sum, it) => sum + it.remainingQty, 0),
-    status: 'Completed',
-    createdAt: existingReport?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
+    const evidenceDocs = window._serviceEvidenceList || [];
+    const totalTransportAmount = evidenceDocs
+      .filter(e => e.category === 'transport')
+      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    const totalMealAmount = evidenceDocs
+      .filter(e => e.category === 'meal')
+      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
+    reportPayload = {
+      id: existingReport?.id || `REP-${p.orderId || p.id}-${Date.now().toString().slice(-4)}`,
+      projectId: p.id,
+      orderId: p.orderId || p.id,
+      projectName: p.projectName || 'Project',
+      customerName: p.customerName || '-',
+      reporterName,
+      reportDate,
+      notes: notes || overallDescription,
+      overallDescription,
+      evidenceDocs,
+      isServiceReport: true,
+      totalEvidenceCount: evidenceDocs.length,
+      totalTransportAmount,
+      totalMealAmount,
+      items: [],
+      totalItems: 0,
+      returnedItemsCount: 0,
+      totalReturnedUnits: 0,
+      status: 'Completed',
+      createdAt: existingReport?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  } else {
+    // ===============================================================
+    // JIKA PROJECT MANUFAKTUR: HITUNG PENGGUNAAN MATERIAL BOM & RESTOCK
+    // ===============================================================
+    const rows = document.querySelectorAll('#project-report-items-body .report-item-row');
+    const items = [];
+
+    rows.forEach(r => {
+      const itemName = r.querySelector('.report-item-name')?.value?.trim();
+      const unit = r.querySelector('.report-item-unit')?.value?.trim() || 'Pcs';
+      const unitCost = parseFloat(r.querySelector('.report-item-unit-cost')?.value) || 0;
+      const planQty = parseFloat(r.querySelector('.report-plan-qty')?.value) || 0;
+      const actualQty = parseFloat(r.querySelector('.report-actual-qty')?.value) || 0;
+      const remainingQty = Math.max(0, planQty - actualQty);
+      const rowNotes = r.querySelector('.report-item-notes')?.value?.trim() || '';
+
+      if (itemName) {
+        const itemData = {
+          itemName,
+          unit,
+          unitCost,
+          planQty,
+          actualQty,
+          remainingQty,
+          notes: rowNotes
+        };
+        items.push(itemData);
+
+        if (remainingQty > 0) {
+          itemsToReturn.push(itemData);
+        }
+      }
+    });
+
+    reportPayload = {
+      id: existingReport?.id || `REP-${p.orderId || p.id}-${Date.now().toString().slice(-4)}`,
+      projectId: p.id,
+      orderId: p.orderId || p.id,
+      projectName: p.projectName || 'Project',
+      customerName: p.customerName || '-',
+      reporterName,
+      reportDate,
+      notes,
+      items,
+      totalItems: items.length,
+      returnedItemsCount: itemsToReturn.length,
+      totalReturnedUnits: itemsToReturn.reduce((sum, it) => sum + it.remainingQty, 0),
+      status: 'Completed',
+      createdAt: existingReport?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
 
   try {
     // 1. Simpan data laporan pelaksanaan project ke resource project_reports
@@ -956,11 +1419,289 @@ function viewProjectReportDetail(identifier) {
   }
   if (!content) return;
 
+  const isSvcReport = report.isServiceReport || (project && (project.isService || isProjectService(project)));
+
   const titleEl = document.getElementById('preview-modal-title');
   if (titleEl) {
-    titleEl.innerHTML = '<span style="display: inline-flex; align-items: center; gap: 8px;"><i data-lucide="file-spreadsheet" style="color: #16a34a;"></i> Dokumen Laporan Pelaksanaan Project</span>';
+    titleEl.innerHTML = isSvcReport
+      ? '<span style="display: inline-flex; align-items: center; gap: 8px;"><i data-lucide="wrench" style="color: #ea580c;"></i> Dokumen Laporan Pelaksanaan Layanan Jasa</span>'
+      : '<span style="display: inline-flex; align-items: center; gap: 8px;"><i data-lucide="file-spreadsheet" style="color: #16a34a;"></i> Dokumen Laporan Pelaksanaan Project</span>';
   }
 
+  // ===============================================================
+  // TAMPILAN 1: DOKUMEN LAPORAN HASIL PELAKSANAAN LAYANAN JASA
+  // ===============================================================
+  if (isSvcReport) {
+    const evidenceList = Array.isArray(report.evidenceDocs) ? report.evidenceDocs : [];
+    const transportItems = evidenceList.filter(e => e.category === 'transport');
+    const mealItems = evidenceList.filter(e => e.category === 'meal');
+    const docItems = evidenceList.filter(e => e.category === 'documentation');
+
+    const totalTransport = transportItems.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const totalMeal = mealItems.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const totalOps = totalTransport + totalMeal;
+
+    const overallDescription = report.overallDescription || report.notes || '-';
+
+    content.innerHTML = `
+      <!-- NO-PRINT HEADER ACTIONS -->
+      <div class="no-print" style="background: #fff7ed; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border: 1px solid #fed7aa;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="font-sm font-bold text-muted">Status:</span>
+          <span class="badge" style="background: #ea580c; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+            <i data-lucide="check-check" style="width: 13px; height: 13px;"></i> Laporan Jasa Selesai (Non-BAST)
+          </span>
+          <span class="badge font-bold" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+            ${evidenceList.length} Lampiran Bukti
+          </span>
+          ${totalOps > 0 ? `
+            <span class="badge font-bold" style="background: #ffedd5; color: #c2410c; border: 1px solid #fdba74;">
+              Klaim Bukti: Rp ${totalOps.toLocaleString('id-ID')}
+            </span>
+          ` : ''}
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('preview-modal'); openProjectReportModal('${report.projectId}')">
+            <i data-lucide="edit-3"></i> Edit Data
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" style="background: #ea580c; border-color: #ea580c; display: inline-flex; align-items: center; gap: 6px; font-weight: 700;" onclick="printCurrentDocument()">
+            <i data-lucide="printer"></i> Cetak Dokumen PDF
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN PRINTABLE DOCUMENT -->
+      <div id="quotation-printable-area" class="print-container">
+        <!-- HEADER PERUSAHAAN -->
+        <div class="print-header" style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h1 style="font-size: 20px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: -0.5px;">PT. UNGGUL BERKAT MANUFACTURING</h1>
+              <div style="font-size: 11px; color: #475569; margin-top: 3px;">Precision CNC, Fabrication, Automation & Technical Services</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 15px; font-weight: 800; color: #ea580c; letter-spacing: 0.5px;">LAPORAN HASIL PELAKSANAAN JASA</div>
+              <div class="mono-id" style="font-size: 12px; color: #334155; margin-top: 2px;">No: ${report.id}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INFO PROJECT JASA -->
+        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 18px; background: #fff7ed; padding: 12px 14px; border-radius: 6px; border: 1px solid #fed7aa; font-size: 12px;">
+          <div>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="width: 125px; color: #7c2d12; padding: 2px 0;">Layanan / Project:</td>
+                <td style="font-weight: 700; color: #0f172a;">${escapeHtml(report.projectName)}</td>
+              </tr>
+              <tr>
+                <td style="color: #7c2d12; padding: 2px 0;">Klien / Pelanggan:</td>
+                <td style="font-weight: 700; color: #0f172a;">${escapeHtml(report.customerName)}</td>
+              </tr>
+              <tr>
+                <td style="color: #7c2d12; padding: 2px 0;">No. Ref Order:</td>
+                <td style="font-family: monospace; font-weight: 600;">${report.orderId || '-'}</td>
+              </tr>
+            </table>
+          </div>
+          <div>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="width: 120px; color: #7c2d12; padding: 2px 0;">Tanggal Laporan:</td>
+                <td style="font-weight: 600;">${report.reportDate || '-'}</td>
+              </tr>
+              <tr>
+                <td style="color: #7c2d12; padding: 2px 0;">PIC Pelaksana Jasa:</td>
+                <td style="font-weight: 700; color: #ea580c;">${escapeHtml(report.reporterName || '-')}</td>
+              </tr>
+              <tr>
+                <td style="color: #7c2d12; padding: 2px 0;">Status Pelaksanaan:</td>
+                <td><span style="background: #dcfce7; color: #166534; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 11px;">100% Selesai (Non-BAST)</span></td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- 1. DESKRIPSI LAPORAN MENYELURUH -->
+        <div style="margin-bottom: 20px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 16px;">
+          <div style="font-weight: 800; font-size: 12.5px; color: #0f172a; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="file-text" style="width: 15px; height: 15px; color: #ea580c;"></i>
+            1. Uraian & Deskripsi Menyeluruh Hasil Pelaksanaan Jasa
+          </div>
+          <div style="font-size: 12px; color: #1e293b; line-height: 1.65; white-space: pre-wrap; background: #f8fafc; padding: 12px 14px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            ${escapeHtml(overallDescription)}
+          </div>
+        </div>
+
+        <!-- 2. LAMPIRAN BUKTI BIAYA TRANSPORTASI -->
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-weight: 800; font-size: 12.5px; color: #0f172a; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="car" style="width: 15px; height: 15px; color: #0284c7;"></i>
+              2. Lampiran Bukti Biaya Transportasi & Perjalanan Dinas
+            </div>
+            ${totalTransport > 0 ? `
+              <div style="font-size: 11.5px; font-weight: 700; color: #0369a1;">
+                Total Transport: Rp ${totalTransport.toLocaleString('id-ID')}
+              </div>
+            ` : ''}
+          </div>
+
+          ${transportItems.length === 0 ? `
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 12px; font-size: 11.5px; color: #94a3b8; font-style: italic; text-align: center;">
+              Tidak ada bukti klaim transportasi terlampir pada laporan ini.
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+              ${transportItems.map((item, idx) => `
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; display: flex; gap: 10px; align-items: flex-start;">
+                  <div style="width: 65px; height: 65px; border-radius: 4px; overflow: hidden; background: #f1f5f9; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer;" onclick="viewServiceEvidenceFullImage('${item.dataUrl}', '${escapeAttr(item.description || item.fileName)}')" title="Klik untuk memperbesar">
+                    ${(item.dataUrl && (item.dataUrl.startsWith('data:image/') || item.fileType?.startsWith('image/'))) ? `
+                      <img src="${item.dataUrl}" alt="Struk" style="width: 100%; height: 100%; object-fit: cover;">
+                    ` : `
+                      <div style="height: 100%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #dc2626;">PDF</div>
+                    `}
+                  </div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">
+                      #${idx + 1} ${escapeHtml(item.description || item.fileName)}
+                    </div>
+                    ${item.amount ? `
+                      <div style="font-family: monospace; font-size: 12px; font-weight: 700; color: #0284c7;">
+                        Rp ${Number(item.amount).toLocaleString('id-ID')}
+                      </div>
+                    ` : ''}
+                    <div style="font-size: 10px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      ${escapeHtml(item.fileName)}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 3. LAMPIRAN BUKTI BIAYA MAKAN & KONSUMSI TIM -->
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-weight: 800; font-size: 12.5px; color: #0f172a; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="utensils" style="width: 15px; height: 15px; color: #d97706;"></i>
+              3. Lampiran Bukti Biaya Makan & Konsumsi Tim
+            </div>
+            ${totalMeal > 0 ? `
+              <div style="font-size: 11.5px; font-weight: 700; color: #b45309;">
+                Total Konsumsi: Rp ${totalMeal.toLocaleString('id-ID')}
+              </div>
+            ` : ''}
+          </div>
+
+          ${mealItems.length === 0 ? `
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 12px; font-size: 11.5px; color: #94a3b8; font-style: italic; text-align: center;">
+              Tidak ada bukti klaim konsumsi/makan terlampir pada laporan ini.
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+              ${mealItems.map((item, idx) => `
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; display: flex; gap: 10px; align-items: flex-start;">
+                  <div style="width: 65px; height: 65px; border-radius: 4px; overflow: hidden; background: #f1f5f9; border: 1px solid #cbd5e1; flex-shrink: 0; cursor: pointer;" onclick="viewServiceEvidenceFullImage('${item.dataUrl}', '${escapeAttr(item.description || item.fileName)}')" title="Klik untuk memperbesar">
+                    ${(item.dataUrl && (item.dataUrl.startsWith('data:image/') || item.fileType?.startsWith('image/'))) ? `
+                      <img src="${item.dataUrl}" alt="Struk Makan" style="width: 100%; height: 100%; object-fit: cover;">
+                    ` : `
+                      <div style="height: 100%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #dc2626;">PDF</div>
+                    `}
+                  </div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">
+                      #${idx + 1} ${escapeHtml(item.description || item.fileName)}
+                    </div>
+                    ${item.amount ? `
+                      <div style="font-family: monospace; font-size: 12px; font-weight: 700; color: #d97706;">
+                        Rp ${Number(item.amount).toLocaleString('id-ID')}
+                      </div>
+                    ` : ''}
+                    <div style="font-size: 10px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      ${escapeHtml(item.fileName)}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 4. FOTO DOKUMENTASI KEGIATAN LAPANGAN & LAINNYA -->
+        <div style="margin-bottom: 24px;">
+          <div style="font-weight: 800; font-size: 12.5px; color: #0f172a; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="camera" style="width: 15px; height: 15px; color: #16a34a;"></i>
+            4. Foto Dokumentasi Kegiatan Lapangan & Serah Terima Site
+          </div>
+
+          ${docItems.length === 0 ? `
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 12px; font-size: 11.5px; color: #94a3b8; font-style: italic; text-align: center;">
+              Tidak ada foto dokumentasi lapangan terlampir.
+            </div>
+          ` : `
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px;">
+              ${docItems.map((item, idx) => `
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                  <div style="height: 170px; background: #0f172a; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden;" onclick="viewServiceEvidenceFullImage('${item.dataUrl}', '${escapeAttr(item.description || item.fileName)}')" title="Klik untuk memperbesar foto">
+                    <img src="${item.dataUrl}" alt="Dokumentasi" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+                  </div>
+                  <div style="padding: 10px 12px; background: #fafafa; border-top: 1px solid #e2e8f0;">
+                    <div style="font-size: 11.5px; font-weight: 700; color: #0f172a; line-height: 1.4;">
+                      ${escapeHtml(item.description || `Foto Dokumentasi Kegiatan #${idx + 1}`)}
+                    </div>
+                    <div style="font-size: 10px; color: #64748b; margin-top: 3px;">
+                      File: ${escapeHtml(item.fileName)}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- 5. STATUS KEUANGAN & PEMBAGIAN HASIL KERJASAMA -->
+        <div style="margin-bottom: 24px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; font-size: 11.5px; color: #166534; line-height: 1.5;">
+          <strong><i data-lucide="check-circle-2" style="width: 14px; height: 14px; display: inline; vertical-align: middle;"></i> Status Alur Jasa:</strong>
+          Pelaksanaan layanan jasa ini telah selesai diverifikasi. Sesuai ketentuan operasional, project jasa <strong>tidak memerlukan dokumen BAST</strong> dan otomatis diteruskan ke <strong>Pembagian Hasil pada tab Kerjasama Keuangan Project</strong>.
+        </div>
+
+        <!-- 6. LEMBAR TANDA TANGAN RESMI -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 36px; page-break-inside: avoid;">
+          <div style="text-align: center; font-size: 12px;">
+            <div style="color: #64748b; margin-bottom: 50px;">Dibuat Oleh (PIC Pelaksana Jasa),</div>
+            <div style="font-weight: 700; color: #0f172a; border-bottom: 1px solid #94a3b8; display: inline-block; min-width: 140px; padding-bottom: 2px;">
+              ${escapeHtml(report.reporterName || 'PIC Jasa')}
+            </div>
+            <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">Divisi Pelayanan & Teknis Jasa</div>
+          </div>
+          <div style="text-align: center; font-size: 12px;">
+            <div style="color: #64748b; margin-bottom: 50px;">Diverifikasi (Keuangan Project),</div>
+            <div style="font-weight: 700; color: #0f172a; border-bottom: 1px solid #94a3b8; display: inline-block; min-width: 140px; padding-bottom: 2px;">
+              Keuangan & Kerjasama
+            </div>
+            <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">Tab Kerjasama Keuangan</div>
+          </div>
+          <div style="text-align: center; font-size: 12px;">
+            <div style="color: #64748b; margin-bottom: 50px;">Mengetahui (Manajemen / Klien),</div>
+            <div style="font-weight: 700; color: #0f172a; border-bottom: 1px solid #94a3b8; display: inline-block; min-width: 140px; padding-bottom: 2px;">
+              Project Manager / Direksi
+            </div>
+            <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">PT. Unggul Berkat Manufacturing</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    openModal('preview-modal');
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // ===============================================================
+  // TAMPILAN 2: DOKUMEN LAPORAN PELAKSANAAN PROJECT MANUFAKTUR (BOM)
+  // ===============================================================
   const items = report.items || [];
   let returnedCount = 0;
   let returnedUnits = 0;
