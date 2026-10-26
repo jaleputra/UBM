@@ -44,8 +44,9 @@ function renderBastTable() {
     return true;
   });
 
-  // 3. Project selesai yang belum diterbitkan dokumen BAST
+  // 3. Project selesai yang belum diterbitkan dokumen BAST (Project Jasa TIDAK PERLU BAST)
   const unissuedCompletedProjects = completedProjects.filter(p => {
+    if (p.isService || (typeof isProjectService === 'function' && isProjectService(p))) return false;
     const hasBast = validBastList.some(b => b.projectId === p.id || (p.orderId && b.orderId === p.orderId));
     return !hasBast;
   });
@@ -593,11 +594,14 @@ Politeknik Takumi`;
 // MODAL BUAT BAST BARU
 // -------------------------------------------------------------
 function openCreateBastModal(preselectedProjectId = null) {
-  // Hanya project yang seluruh tahapan milestonenya Completed
-  const eligibleProjects = (state.projects || []).filter(p => isProjectMilestonesAllCompleted(p));
+  // Hanya project manufaktur yang seluruh tahapan milestonenya Completed (Project Jasa tidak memerlukan BAST)
+  const eligibleProjects = (state.projects || []).filter(p => {
+    if (p.isService || (typeof isProjectService === 'function' && isProjectService(p))) return false;
+    return isProjectMilestonesAllCompleted(p);
+  });
 
   if (eligibleProjects.length === 0) {
-    showToast('⚠️ Belum ada project dengan seluruh tahapan milestone Completed! Harap selesaikan seluruh tahapan milestone di Timeline sebelum menerbitkan BAST.', 'warning');
+    showToast('⚠️ Belum ada project manufaktur dengan seluruh tahapan milestone Completed! Harap selesaikan seluruh tahapan milestone di Timeline sebelum menerbitkan BAST.', 'warning');
     return;
   }
 

@@ -471,6 +471,8 @@ function updateSidebarBadges() {
   const badgeBast = document.getElementById('badge-bast-count');
   if (badgeBast) {
     const completedProjectsCount = (state.projects || []).filter(p => {
+      const isSvc = p.isService || (typeof isProjectService === 'function' && isProjectService(p));
+      if (isSvc) return false;
       const orderExists = (state.orders || []).some(o => o.id === p.orderId);
       return orderExists && p.milestones && p.milestones.length > 0 && p.milestones.every(m => m.status === 'Completed');
     }).length;
@@ -480,6 +482,9 @@ function updateSidebarBadges() {
   const badgeReports = document.getElementById('badge-project-reports-count');
   if (badgeReports) {
     const completedCount = (state.projects || []).filter(p => {
+      if (typeof isProjectFullyCompleted === 'function') return isProjectFullyCompleted(p);
+      const isSvc = p.isService || (typeof isProjectService === 'function' && isProjectService(p));
+      if (isSvc && p.serviceExpenseApproved) return true;
       const orderExists = (state.orders || []).some(o => o.id === p.orderId || o.id === p.id);
       return orderExists && (p.status === 'Completed' || p.progressPercent === 100 || (p.milestones && p.milestones.length > 0 && p.milestones.every(m => m.status === 'Completed')));
     }).length;

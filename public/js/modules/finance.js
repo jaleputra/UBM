@@ -2975,6 +2975,61 @@ async function saveServiceExpenseStatus(event) {
 
   closeModal('modal-service-expense-status');
   renderServiceExpensesTable();
+
+  // Jika status disetujui atau dicairkan, masukkan project jasa ke Laporan Project
+  const isApproved = item.status === 'Disetujui' || item.status === 'Dicairkan';
+  if (isApproved) {
+    try {
+      const orderId = item.orderId || id;
+      state.projects = state.projects || [];
+      let proj = state.projects.find(p => p.orderId === orderId || p.id === orderId || p.id === id);
+
+      if (proj) {
+        proj.isService = true;
+        proj.serviceExpenseApproved = true;
+        proj.serviceExpenseStatus = item.status;
+        proj.updatedAt = new Date().toISOString();
+        await fetch(`/api/projects/${proj.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(proj)
+        }).catch(e => console.warn(e));
+      } else {
+        const order = (state.orders || []).find(o => o.id === orderId);
+        const quo = order?.quotationId ? (state.quotations || []).find(q => q.id === order.quotationId) : null;
+        const newProj = {
+          id: `PRJ-${orderId}`,
+          orderId: orderId,
+          projectName: item.serviceName || order?.notes || quo?.projectName || 'Pelaksanaan Layanan Jasa',
+          customerName: item.customerName || order?.customerName || quo?.customerName || '-',
+          projectLead: item.picName || 'PIC Jasa',
+          teamMembers: item.teamMembers || '',
+          isService: true,
+          serviceExpenseApproved: true,
+          serviceExpenseStatus: item.status,
+          startDate: item.date || new Date().toISOString().split('T')[0],
+          dueDate: item.date || new Date().toISOString().split('T')[0],
+          status: 'In Progress',
+          progressPercent: 60,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        state.projects.unshift(newProj);
+        await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newProj)
+        }).catch(e => console.warn(e));
+      }
+
+      if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+      showToast(`Pengeluaran jasa ${id} ${item.status}! Project otomatis masuk ke Halaman Laporan Project untuk dilaporkan oleh Lead Project.`, 'success');
+      return;
+    } catch (projErr) {
+      console.warn('Error syncing project for service expense approval:', projErr);
+    }
+  }
+
   showToast(`Status pengeluaran ${id} berhasil diperbarui: ${item.status}`, 'success');
 }
 

@@ -2,8 +2,33 @@
 // UBM - Project Reports Module (Laporan Pelaksanaan Project)
 // =========================================================
 
+// Helper: Cek apakah project bertipe Jasa / Non-BOM
+function isProjectService(p) {
+  if (!p) return false;
+  if (p.isService) return true;
+  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.orderId) {
+    const order = (state.orders || []).find(o => o.id === p.orderId);
+    if (order && (order.orderType === 'jasa' || order.quotationType === 'jasa' || (order.notes && order.notes.toLowerCase().includes('jasa')))) return true;
+  }
+  return false;
+}
+
 function isProjectFullyCompleted(project) {
   if (!project) return false;
+
+  // 1. Project Jasa: Ketika pengeluaran jasa sudah disetujui di Keuangan Project, project otomatis masuk ke Laporan Project
+  const isSvc = project.isService || isProjectService(project);
+  if (isSvc) {
+    const hasApprovedExpense = (state.service_expenses || []).some(exp => 
+      (exp.orderId === project.orderId || exp.orderId === project.id || exp.id === project.id) &&
+      (exp.status === 'Disetujui' || exp.status === 'Dicairkan')
+    );
+    if (hasApprovedExpense || project.serviceExpenseApproved) {
+      return true;
+    }
+  }
+
   const validOrderExists = (state.orders || []).some(o => o.id === project.orderId || o.id === project.id);
   if (!validOrderExists) return false;
 
@@ -38,7 +63,7 @@ function renderProjectReportsTable() {
   const statusFilter = document.getElementById('filter-report-status')?.value || 'ALL';
   const allProjects = state.projects || [];
   
-  // Ambil hanya project yang valid dan sudah COMPLETED
+  // Ambil project yang valid & completed, atau project jasa yang pengeluaran jasanya telah disetujui
   let completedProjects = allProjects.filter(p => isProjectFullyCompleted(p));
 
   // Search filter
@@ -67,7 +92,7 @@ function renderProjectReportsTable() {
           <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
             <i data-lucide="clipboard-x" style="width: 36px; height: 36px; color: #94a3b8;"></i>
             <div style="font-weight: 700; color: #475569; font-size: 14px;">Tidak ada project yang memenuhi kriteria</div>
-            <div style="font-size: 12px; color: #94a3b8;">Hanya project berstatus <strong>Completed</strong> dari Order Penjualan yang ditampilkan di sini.</div>
+            <div style="font-size: 12px; color: #94a3b8;">Project berstatus <strong>Completed</strong> atau Project Jasa yang biaya pengeluarannya telah <strong>Disetujui</strong> akan muncul di sini untuk dilaporkan oleh Lead.</div>
           </div>
         </td>
       </tr>
@@ -79,6 +104,7 @@ function renderProjectReportsTable() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   tbody.innerHTML = completedProjects.map(p => {
     const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(p.id, activeUser) : true;
+    const isSvc = p.isService || isProjectService(p);
     const bom = getLinkedProjectBOM(p);
     const report = getLinkedProjectReport(p);
     const isReported = Boolean(report);
@@ -103,6 +129,7 @@ function renderProjectReportsTable() {
         <td>
           <span class="mono-id font-bold text-primary" style="font-size: 11.5px;">${p.id}</span>
           ${p.orderId ? `<div class="font-xs text-muted font-mono" style="font-size: 10px; margin-top: 2px;">Ref: ${p.orderId}</div>` : ''}
+          ${isSvc ? `<span class="badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 9.5px; padding: 1px 5px; margin-top: 3px; display: inline-block;">🛠️ Jasa</span>` : ''}
         </td>
         <td>
           <div class="font-bold text-main" style="word-break: break-word; font-size: 13px; color: #0f172a;">${escapeHtml(p.projectName || 'Project')}</div>
@@ -110,12 +137,12 @@ function renderProjectReportsTable() {
         </td>
         <td>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <div style="width: 26px; height: 26px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; flex-shrink: 0;">
+            <div style="width: 26px; height: 26px; border-radius: 50%; background: ${isSvc ? '#ffedd5' : '#e0e7ff'}; color: ${isSvc ? '#c2410c' : '#4338ca'}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; flex-shrink: 0;">
               ${(p.projectLead || 'P').charAt(0)}
             </div>
             <div>
               <div class="font-bold text-main" style="font-size: 12px;">${escapeHtml(p.projectLead || 'Belum diassign')}</div>
-              <div class="text-muted font-xs" style="font-size: 10px;">${escapeHtml(p.department || 'Engineering')}</div>
+              <div class="text-muted font-xs" style="font-size: 10px;">${escapeHtml(p.department || (isSvc ? 'Operasional Jasa' : 'Engineering'))}</div>
             </div>
           </div>
         </td>
@@ -123,19 +150,23 @@ function renderProjectReportsTable() {
           ${dueDate}
         </td>
         <td style="text-align: center;">
-          ${bom ? `
+          ${isSvc ? `
+            <span class="badge" style="background: #fff7ed; color: #ea580c; border: 1px solid #fdba74; font-size: 10.5px; padding: 3px 8px; font-weight: 700;">
+              <i data-lucide="wrench" style="width: 11px; height: 11px; display: inline; vertical-align: middle;"></i> Non-BOM (Tanpa BAST)
+            </span>
+          ` : (bom ? `
             <span class="badge badge-secondary font-mono" style="font-size: 11px; padding: 3px 8px; font-weight: 700;">
               <i data-lucide="boxes" style="width: 12px; height: 12px; display: inline; vertical-align: middle; color: #4f46e5;"></i> ${bomComponentsCount} Komponen
             </span>
           ` : `
             <span class="badge badge-outline" style="color: #94a3b8; font-size: 10.5px; border-color: #cbd5e1;">BOM Belum Ada</span>
-          `}
+          `)}
         </td>
         <td style="text-align: center;">
           ${isReported ? (
             returnedItemsCount > 0 
               ? `<span class="badge badge-success font-bold" style="font-size: 11px; padding: 3px 8px;"><i data-lucide="arrow-down-left" style="width: 12px; height: 12px; display: inline; vertical-align: middle;"></i> +${totalReturnedUnits} Unit (${returnedItemsCount} Jenis)</span>`
-              : '<span class="text-muted font-xs font-italic">Habis Terpakai (0 Sisa)</span>'
+              : (isSvc ? '<span class="text-muted font-xs font-italic">Pelaksanaan Selesai</span>' : '<span class="text-muted font-xs font-italic">Habis Terpakai (0 Sisa)</span>')
           ) : '<span class="text-muted font-xs">-</span>'}
         </td>
         <td style="text-align: center;">
@@ -156,13 +187,13 @@ function renderProjectReportsTable() {
                 <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> Lihat Laporan
               </button>
               ${isLead ? `
-                <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Penggunaan Barang" onclick="openProjectReportModal('${p.id}')">
+                <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Laporan" onclick="openProjectReportModal('${p.id}')">
                   <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
                 </button>
               ` : ''}
             ` : (isLead ? `
-              <button class="btn btn-sm btn-primary" style="background: #16a34a; border-color: #16a34a; font-size: 11px; padding: 4px 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="openProjectReportModal('${p.id}')" title="Input Penggunaan Barang & Pengembalian Sisa">
-                <i data-lucide="clipboard-check" style="width: 13px; height: 13px;"></i> Input Barang
+              <button class="btn btn-sm btn-primary" style="background: ${isSvc ? '#ea580c' : '#16a34a'}; border-color: ${isSvc ? '#ea580c' : '#16a34a'}; font-size: 11px; padding: 4px 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="openProjectReportModal('${p.id}')" title="Input Hasil Pelaksanaan Project">
+                <i data-lucide="${isSvc ? 'clipboard-check' : 'clipboard-check'}" style="width: 13px; height: 13px;"></i> ${isSvc ? 'Laporkan Hasil Jasa' : 'Input Barang'}
               </button>
             ` : `
               <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 10.5px; border: 1px solid #cbd5e1;">Menunggu Lead</span>
@@ -197,6 +228,7 @@ function openProjectReportModal(projectId) {
     return;
   }
 
+  const isSvc = p.isService || isProjectService(p);
   const bom = getLinkedProjectBOM(p);
   const existingReport = getLinkedProjectReport(p);
   const isEdit = Boolean(existingReport);
@@ -207,12 +239,15 @@ function openProjectReportModal(projectId) {
     modalContainer.style.width = '94vw';
   }
 
-  document.getElementById('form-modal-title').innerHTML = `
-    <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 16px;">
-      <i data-lucide="clipboard-check" style="color: #16a34a;"></i>
-      ${isEdit ? `Edit Laporan Penggunaan Barang: <span class="mono-id">${p.id}</span>` : `Input Penggunaan Barang Aktual: <span class="mono-id">${p.id}</span>`}
-    </span>
-  `;
+  document.getElementById('form-modal-title').innerHTML = isSvc
+    ? `<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 16px;">
+        <i data-lucide="wrench" style="color: #ea580c;"></i>
+        ${isEdit ? `Edit Laporan Hasil Pelaksanaan Jasa: <span class="mono-id">${p.id}</span>` : `Input Laporan Hasil Pelaksanaan Jasa: <span class="mono-id">${p.id}</span>`}
+       </span>`
+    : `<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 16px;">
+        <i data-lucide="clipboard-check" style="color: #16a34a;"></i>
+        ${isEdit ? `Edit Laporan Penggunaan Barang: <span class="mono-id">${p.id}</span>` : `Input Penggunaan Barang Aktual: <span class="mono-id">${p.id}</span>`}
+       </span>`;
 
   // Ambil data bahan/komponen dari BOM sebelumnya, atau dari data laporan yang sudah pernah disimpan
   let componentsList = [];
@@ -241,9 +276,11 @@ function openProjectReportModal(projectId) {
     }));
   }
 
-  const defaultReporter = existingReport?.reporterName || p.projectLead || 'PIC Engineering';
+  const defaultReporter = existingReport?.reporterName || p.projectLead || 'PIC Operasional';
   const defaultReportDate = existingReport?.reportDate || new Date().toISOString().split('T')[0];
-  const defaultNotes = existingReport?.notes || `Laporan aktual penggunaan bahan & material project ${p.projectName || ''}.`;
+  const defaultNotes = existingReport?.notes || (isSvc 
+    ? `Pelaksanaan layanan jasa ${p.projectName || ''} telah terlaksana dengan baik sesuai lingkup penugasan. Tidak memerlukan dokumen BAST.`
+    : `Laporan aktual penggunaan bahan & material project ${p.projectName || ''}.`);
 
   const formBody = document.getElementById('form-modal-body');
   formBody.innerHTML = `
@@ -256,7 +293,10 @@ function openProjectReportModal(projectId) {
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="mono-id font-bold text-primary" style="font-size: 13px;">${p.id}</span>
               ${p.orderId ? `<span class="badge badge-outline font-mono">Ref Order: ${p.orderId}</span>` : ''}
-              <span class="badge badge-success font-bold">Project Selesai (Completed)</span>
+              <span class="badge ${isSvc ? 'badge-warning font-bold' : 'badge-success font-bold'}">
+                ${isSvc ? '🛠️ Layanan Jasa (Biaya Disetujui)' : 'Project Selesai (Completed)'}
+              </span>
+              ${isSvc ? `<span class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px;">Tanpa Dokumen BAST</span>` : ''}
             </div>
             <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 4px 0 2px 0;">${escapeHtml(p.projectName || 'Project')}</h3>
             <div style="font-size: 12px; color: var(--text-muted);">
@@ -264,8 +304,10 @@ function openProjectReportModal(projectId) {
             </div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 11px; color: var(--text-muted);">Referensi Master BOM:</div>
-            <div style="font-size: 12.5px; font-weight: 700; color: #4f46e5;">${bom ? `${bom.id || 'BOM Terkait'} (${componentsList.length} Bahan)` : 'BOM Tidak Terhubung'}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">${isSvc ? 'Status Operasional Jasa:' : 'Referensi Master BOM:'}</div>
+            <div style="font-size: 12.5px; font-weight: 700; color: ${isSvc ? '#ea580c' : '#4f46e5'};">
+              ${isSvc ? 'Layanan Jasa (Non-BOM / Tanpa BAST)' : (bom ? `${bom.id || 'BOM Terkait'} (${componentsList.length} Bahan)` : 'BOM Tidak Terhubung')}
+            </div>
           </div>
         </div>
 
@@ -289,15 +331,29 @@ function openProjectReportModal(projectId) {
         </div>
       </div>
 
-      <!-- CARD 2: TABEL PENGGUNAAN BARANG AKTUAL BERBASIS BOM -->
+      <!-- CARD 2: TABEL PENGGUNAAN BARANG AKTUAL BERBASIS BOM (ATAU DOKUMENTASI UNTUK JASA) -->
       <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 20px;">
+        ${isSvc ? `
+          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #9a3412; font-size: 12.5px; margin-bottom: 3px;">
+              <i data-lucide="info" style="width: 15px; height: 15px; color: #ea580c;"></i> Alur Pelaksanaan Layanan Jasa
+            </div>
+            <div style="font-size: 11.5px; color: #7c2d12; line-height: 1.5;">
+              Biaya operasional jasa telah disetujui di Keuangan Project. Project jasa <strong>tidak memerlukan dokumen BAST</strong>. Setelah laporan ini disimpan oleh Lead Project, project otomatis dinyatakan selesai dan masuk ke <strong>Pembagian Hasil pada Tab Kerjasama Keuangan Project</strong>.
+            </div>
+          </div>
+        ` : ''}
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
           <div>
             <h4 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
-              <i data-lucide="boxes" style="width: 16px; height: 16px; color: #4f46e5;"></i> Rincian Penggunaan Barang Aktual & Pengembalian Sisa
+              <i data-lucide="${isSvc ? 'wrench' : 'boxes'}" style="width: 16px; height: 16px; color: ${isSvc ? '#ea580c' : '#4f46e5'};"></i>
+              ${isSvc ? 'Rincian Penggunaan Material / Tools Penunjang Jasa (Opsional)' : 'Rincian Penggunaan Barang Aktual & Pengembalian Sisa'}
             </h4>
             <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0;">
-              Sistem memuat daftar material dari formulasi BOM. Isi kuantiti aktual yang terpakai. <strong>Jika ada sisa material, stoknya akan otomatis dikembalikan ke Database Master Barang Purchasing.</strong>
+              ${isSvc 
+                ? 'Jika ada perlengkapan/material habis pakai yang digunakan atau sisa, Anda dapat mencatatnya di bawah. Jika tidak ada, Anda dapat langsung menyimpan laporan.' 
+                : 'Sistem memuat daftar material dari formulasi BOM. Isi kuantiti aktual yang terpakai. <strong>Jika ada sisa material, stoknya akan otomatis dikembalikan ke Database Master Barang Purchasing.</strong>'}
             </p>
           </div>
           <button type="button" class="btn btn-sm btn-outline" onclick="addManualReportItemRow()" style="font-size: 11px;">
@@ -320,7 +376,9 @@ function openProjectReportModal(projectId) {
               ${componentsList.length === 0 ? `
                 <tr id="empty-report-row">
                   <td colspan="5" class="text-center text-muted" style="padding: 24px;">
-                    Belum ada data komponen BOM. Anda dapat menambahkan material secara manual menggunakan tombol di atas.
+                    ${isSvc 
+                      ? 'Tidak ada material penunjang yang terdaftar. Anda dapat langsung menyimpan laporan atau menambahkan perlengkapan secara manual di atas.' 
+                      : 'Belum ada data komponen BOM. Anda dapat menambahkan material secara manual menggunakan tombol di atas.'}
                   </td>
                 </tr>
               ` : componentsList.map((item, idx) => `
@@ -378,8 +436,8 @@ function openProjectReportModal(projectId) {
         <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">
           <i data-lucide="x"></i> Batal
         </button>
-        <button type="submit" class="btn btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 700; padding: 8px 20px; font-size: 13px;">
-          <i data-lucide="save"></i> Simpan & Kembalikan Sisa ke Master Barang
+        <button type="submit" class="btn btn-primary" style="background: ${isSvc ? '#ea580c' : '#16a34a'}; border-color: ${isSvc ? '#ea580c' : '#16a34a'}; font-weight: 700; padding: 8px 20px; font-size: 13px;">
+          <i data-lucide="${isSvc ? 'check-circle-2' : 'save'}"></i> ${isSvc ? 'Simpan Laporan & Masukkan ke Pembagian Hasil Kerjasama' : 'Simpan & Kembalikan Sisa ke Master Barang'}
         </button>
       </div>
     </form>
@@ -600,12 +658,80 @@ async function submitProjectReport(event, projectId) {
 
     // 2. Simpan referensi laporan pada project record
     p.actualUsageReport = reportPayload;
+    const isSvc = p.isService || isProjectService(p);
+    if (isSvc) {
+      p.status = 'Completed';
+      p.progressPercent = 100;
+    }
     if (p.id) {
       await fetch(`/api/projects/${p.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...p, actualUsageReport: reportPayload })
+        body: JSON.stringify({ 
+          ...p, 
+          actualUsageReport: reportPayload,
+          status: isSvc ? 'Completed' : p.status,
+          progressPercent: isSvc ? 100 : p.progressPercent
+        })
       }).catch(e => console.warn('Error updating project report ref:', e));
+    }
+
+    // 2B. JIKA PROJECT JASA: OTOMATIS MASUK KE PEMBAGIAN HASIL (TAB KERJASAMA DI KEUANGAN PROJECT)
+    if (isSvc) {
+      try {
+        const order = (state.orders || []).find(o => o.id === p.orderId || o.id === p.id);
+        const quo = order?.quotationId ? (state.quotations || []).find(q => q.id === order.quotationId) : null;
+        let billedAmount = parseFloat(order?.totalAmount || order?.grandTotal || quo?.totalPrice || 0);
+        if (!billedAmount && order && Array.isArray(order.items)) {
+          billedAmount = order.items.reduce((s, it) => s + (parseFloat(it.total) || 0), 0);
+        }
+
+        state.partnerships = state.partnerships || [];
+        const existingPartner = state.partnerships.find(pt => 
+          pt.orderId === (p.orderId || p.id) || 
+          pt.projectId === p.id || 
+          pt.invoiceRef === (p.orderId || p.id) ||
+          (pt.serviceName && pt.serviceName.toLowerCase() === (p.projectName || '').toLowerCase())
+        );
+
+        if (!existingPartner) {
+          const activePct = (typeof getPartnershipPercentages === 'function') 
+            ? getPartnershipPercentages() 
+            : { takumi: 65, sales: 15, adminTax: 10, freelance: 10 };
+
+          const partnerDoc = {
+            id: `PTS-${p.orderId || p.id}-${Date.now().toString().slice(-4)}`,
+            date: reportDate || new Date().toISOString().split('T')[0],
+            paymentStatus: order?.paymentStatus === 'Lunas' ? 'Lunas' : 'Belum Lunas',
+            serviceName: p.projectName || order?.notes || 'Pelaksanaan Layanan Jasa',
+            clientName: p.customerName || '-',
+            billedAmount: billedAmount > 0 ? billedAmount : 0,
+            orderId: p.orderId || p.id,
+            projectId: p.id,
+            invoiceRef: p.orderId || p.id,
+            percentages: activePct,
+            contributions: {
+              takumi: { takumi: true, ayumi: false },
+              sales: { takumi: true, ayumi: false },
+              adminTax: { takumi: false, ayumi: true },
+              freelance: { takumi: true, ayumi: false }
+            },
+            notes: `Otomatis dari Laporan Pelaksanaan Jasa #${reportPayload.id} (PIC: ${reporterName})`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          await fetch('/api/partnerships', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(partnerDoc)
+          }).catch(e => console.warn('Sync partnership error:', e));
+
+          state.partnerships.unshift(partnerDoc);
+        }
+      } catch (partErr) {
+        console.warn('Error creating partnership entry:', partErr);
+      }
     }
 
     // 3. JIKA ADA SISA MATERIAL, KEMBALIKAN KE DATABASE MASTER BARANG (PURCHASING)
@@ -674,7 +800,9 @@ async function submitProjectReport(event, projectId) {
     closeModal('form-modal');
     
     // Tampilkan notifikasi toast lengkap
-    if (itemsToReturn.length > 0) {
+    if (isSvc) {
+      showToast(`✅ Laporan Pelaksanaan Jasa #${p.id} tersimpan! Project berhasil masuk ke Pembagian Hasil pada tab Kerjasama Keuangan Project.`, 'success');
+    } else if (itemsToReturn.length > 0) {
       showToast(`✅ Laporan Pelaksanaan Project #${p.id} tersimpan! Sebanyak ${itemsToReturn.length} jenis sisa barang (+${reportPayload.totalReturnedUnits} unit) berhasil dikembalikan ke Database Master Barang Purchasing.`, 'success');
     } else {
       showToast(`✅ Laporan Pelaksanaan Project #${p.id} berhasil disimpan! Seluruh material terpakai sesuai rencana.`, 'success');
@@ -684,7 +812,8 @@ async function submitProjectReport(event, projectId) {
     await Promise.allSettled([
       fetchResource('project_reports'),
       fetchResource('projects'),
-      fetchResource('purchasing')
+      fetchResource('purchasing'),
+      fetchResource('partnerships')
     ]);
 
     renderProjectReportsTable();
