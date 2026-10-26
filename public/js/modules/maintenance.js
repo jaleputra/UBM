@@ -4,6 +4,10 @@
 
 function isProjectCompletedForMaintenance(project) {
   if (!project) return false;
+  // Project jasa TIDAK boleh masuk ke halaman After Sales (hanya project barang)
+  const isSvc = project.isService || (typeof isProjectService === 'function' && isProjectService(project));
+  if (isSvc) return false;
+
   const validOrderExists = (state.orders || []).some(o => o.id === project.orderId || o.id === project.id);
   if (!validOrderExists) return false;
 
@@ -163,6 +167,11 @@ function openMaintenanceModal(projectId) {
   const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan!', 'error');
+    return;
+  }
+
+  if (p.isService || (typeof isProjectService === 'function' && isProjectService(p))) {
+    showToast('Project layanan jasa tidak memiliki pemeliharaan/maintenance unit', 'warning');
     return;
   }
 

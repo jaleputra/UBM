@@ -180,6 +180,37 @@ async function setCloudSync(resource, data) {
   }
 }
 
+function mergeResourceLists(localList, cloudList) {
+  const localArr = Array.isArray(localList) ? localList : [];
+  const cloudArr = Array.isArray(cloudList) ? cloudList : [];
+  
+  const map = new Map();
+
+  // 1. Seed with cloud items
+  cloudArr.forEach(c => {
+    if (c && c.id) map.set(c.id, { ...c });
+  });
+
+  // 2. Merge local items; if both exist, prefer newer updatedAt or merge fields
+  localArr.forEach(l => {
+    if (!l || !l.id) return;
+    if (!map.has(l.id)) {
+      map.set(l.id, { ...l });
+    } else {
+      const c = map.get(l.id);
+      const lTime = new Date(l.updatedAt || l.createdAt || 0).getTime();
+      const cTime = new Date(c.updatedAt || c.createdAt || 0).getTime();
+      if (lTime >= cTime) {
+        map.set(l.id, { ...c, ...l });
+      } else {
+        map.set(l.id, { ...l, ...c });
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 module.exports = {
   readDB,
   writeDB,
@@ -190,6 +221,7 @@ module.exports = {
   getCloudSync,
   setCloudSync,
   getCloudSyncKey,
+  mergeResourceLists,
   CLOUD_SYNC_PREFIX,
   DB_FILE: LOCAL_DB_FILE
 };

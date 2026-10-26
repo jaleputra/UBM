@@ -243,13 +243,39 @@
           "phone": ""
         }
       ],
+      "status": "Completed",
       "orderId": "ORD-2026-9137-573",
       "createdAt": "2026-10-26T10:07:21.232Z",
+      "updatedAt": "2026-10-26T12:29:40.006Z",
       "department": "IT",
       "projectLead": "Rangga Gading Satria",
       "projectName": "Pendampingan",
       "customerName": "KJRI OSAKA",
-      "isLeadLocked": true
+      "isLeadLocked": true,
+      "progressPercent": 100,
+      "actualUsageReport": {
+        "id": "REP-ORD-2026-9137-573-8698",
+        "items": [],
+        "notes": "Pelaksanaan layanan jasa Pendampingan telah terlaksana dengan baik sesuai lingkup penugasan. Tidak memerlukan dokumen BAST.",
+        "status": "Completed",
+        "orderId": "ORD-2026-9137-573",
+        "createdAt": "2026-10-26T12:29:38.699Z",
+        "projectId": "PRJ-2026-1232-942",
+        "updatedAt": "2026-10-26T12:29:38.699Z",
+        "reportDate": "2026-10-26",
+        "totalItems": 0,
+        "projectName": "Pendampingan",
+        "customerName": "KJRI OSAKA",
+        "evidenceDocs": [],
+        "reporterName": "Rangga Gading Satria",
+        "isServiceReport": true,
+        "totalMealAmount": 0,
+        "overallDescription": "contoh laporan",
+        "returnedItemsCount": 0,
+        "totalEvidenceCount": 0,
+        "totalReturnedUnits": 0,
+        "totalTransportAmount": 0
+      }
     }
   ],
   "quotations": [
@@ -257,13 +283,13 @@
       "id": "QUO-2026-9112-156",
       "items": [
         {
-          "itemName": "Smart Door",
-          "sku": "001",
-          "warranty": "12 Bulan",
           "qty": 15,
+          "sku": "001",
           "unit": "Unit",
-          "unitPrice": 4000000,
-          "total": 60000000
+          "total": 60000000,
+          "itemName": "Smart Door",
+          "warranty": "12 Bulan",
+          "unitPrice": 4000000
         }
       ],
       "notes": "1. Harga sudah termasuk biaya instalasi dan pengetesan fungsi di lokasi.\n2. Penawaran harga ini mengikat selama masa berlaku penawaran.",
@@ -276,6 +302,7 @@
       "warranty": "Garansi resmi 12 bulan untuk suku cadang dan servis",
       "createdAt": "2026-10-26T12:26:29.113Z",
       "taxAmount": 7103250,
+      "updatedAt": "2026-10-26T12:26:56.089Z",
       "grandTotal": 71678250,
       "itemsTotal": 61500000,
       "validUntil": "2026-11-30",
@@ -292,14 +319,13 @@
       "customerAddress": "",
       "additionalServices": [
         {
-          "serviceName": "Installasi",
           "qty": 15,
           "unit": "pcs",
+          "total": 1500000,
           "unitPrice": 100000,
-          "total": 1500000
+          "serviceName": "Installasi"
         }
-      ],
-      "updatedAt": "2026-10-26T12:26:56.089Z"
+      ]
     },
     {
       "id": "QUO-2026-6186-192",
@@ -352,7 +378,31 @@
     }
   ],
   "bast": [],
-  "project_reports": [],
+  "project_reports": [
+    {
+      "id": "REP-ORD-2026-9137-573-8698",
+      "items": [],
+      "notes": "Pelaksanaan layanan jasa Pendampingan telah terlaksana dengan baik sesuai lingkup penugasan. Tidak memerlukan dokumen BAST.",
+      "status": "Completed",
+      "orderId": "ORD-2026-9137-573",
+      "createdAt": "2026-10-26T12:29:38.699Z",
+      "projectId": "PRJ-2026-1232-942",
+      "updatedAt": "2026-10-26T12:29:38.699Z",
+      "reportDate": "2026-10-26",
+      "totalItems": 0,
+      "projectName": "Pendampingan",
+      "customerName": "KJRI OSAKA",
+      "evidenceDocs": [],
+      "reporterName": "Rangga Gading Satria",
+      "isServiceReport": true,
+      "totalMealAmount": 0,
+      "overallDescription": "contoh laporan",
+      "returnedItemsCount": 0,
+      "totalEvidenceCount": 0,
+      "totalReturnedUnits": 0,
+      "totalTransportAmount": 0
+    }
+  ],
   "maintenance": [],
   "service_tickets": [],
   "warranty_claims": [],
@@ -669,7 +719,47 @@
       "department": "Operations & Management"
     }
   ],
-  "partnerships": [],
+  "partnerships": [
+    {
+      "id": "PTS-ORD-2026-9137-573-0574",
+      "date": "2026-10-26",
+      "notes": "Otomatis dari Laporan Pelaksanaan Jasa #REP-ORD-2026-9137-573-8698 (PIC: Rangga Gading Satria)",
+      "orderId": "ORD-2026-9137-573",
+      "createdAt": "2026-10-26T12:29:40.819Z",
+      "projectId": "PRJ-2026-1232-942",
+      "clientName": "KJRI OSAKA",
+      "created_at": "2026-10-26T12:29:40.574Z",
+      "invoiceRef": "ORD-2026-9137-573",
+      "updated_at": "2026-10-26T12:29:40.574Z",
+      "percentages": {
+        "sales": 10,
+        "takumi": 40,
+        "adminTax": 20,
+        "freelance": 30
+      },
+      "serviceName": "Pendampingan",
+      "billedAmount": 12062500,
+      "contributions": {
+        "sales": {
+          "ayumi": false,
+          "takumi": true
+        },
+        "takumi": {
+          "ayumi": false,
+          "takumi": true
+        },
+        "adminTax": {
+          "ayumi": true,
+          "takumi": false
+        },
+        "freelance": {
+          "ayumi": false,
+          "takumi": true
+        }
+      },
+      "paymentStatus": "Belum Lunas"
+    }
+  ],
   "service_expenses": [
     {
       "id": "EXP-JSA-2026-2201-824",
@@ -684,7 +774,7 @@
       "mealRate": 50000,
       "createdAt": "2026-10-26T10:08:02.807Z",
       "mealNotes": "",
-      "updatedAt": "2026-10-26T10:08:31.166Z",
+      "updatedAt": "2026-10-26T10:08:31.154Z",
       "bankHolder": "",
       "bankAccount": "",
       "mealPersons": 2,
@@ -713,7 +803,7 @@
       "mealRate": 50000,
       "createdAt": "2026-10-23T10:18:22.486Z",
       "mealNotes": "",
-      "updatedAt": "2026-10-26T10:08:39.644Z",
+      "updatedAt": "2026-10-26T10:08:39.639Z",
       "bankHolder": "",
       "bankAccount": "",
       "mealPersons": 1,
@@ -742,7 +832,7 @@
       "mealRate": 50000,
       "createdAt": "2026-10-23T10:18:20.576Z",
       "mealNotes": "",
-      "updatedAt": "2026-10-26T10:08:44.771Z",
+      "updatedAt": "2026-10-26T10:08:44.768Z",
       "bankHolder": "",
       "bankAccount": "",
       "mealPersons": 1,
@@ -771,7 +861,7 @@
       "mealRate": 50000,
       "createdAt": "2026-10-23T10:18:19.953Z",
       "mealNotes": "",
-      "updatedAt": "2026-10-26T10:08:49.702Z",
+      "updatedAt": "2026-10-26T10:08:49.698Z",
       "bankHolder": "",
       "bankAccount": "",
       "mealPersons": 1,
@@ -800,7 +890,7 @@
       "mealRate": 35000,
       "createdAt": "2026-10-23T08:29:44.802Z",
       "mealNotes": "",
-      "updatedAt": "2026-10-26T10:08:54.205Z",
+      "updatedAt": "2026-10-26T10:08:54.202Z",
       "bankHolder": "Rangga",
       "bankAccount": "093840293840298",
       "mealPersons": 3,

@@ -383,3 +383,95 @@ async function directSupabaseFetchServiceExpenses() {
 window.directSupabaseSyncServiceExpenses = directSupabaseSyncServiceExpenses;
 window.directSupabaseFetchServiceExpenses = directSupabaseFetchServiceExpenses;
 
+// Universal direct Supabase Cloud Store helper for any resource
+async function directSupabaseFetchResource(resource) {
+  try {
+    const syncKey = `__SYS_SYNC_${resource}__`;
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache, no-store'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data[0] && data[0].items !== undefined) {
+        return data[0].items;
+      }
+    }
+  } catch (err) {
+    console.warn(`⚠️ [Direct Supabase Fetch] ${resource}:`, err.message);
+  }
+  return null;
+}
+
+async function directSupabaseSyncResource(resource, items) {
+  if (items === undefined || items === null) return false;
+  try {
+    const syncKey = `__SYS_SYNC_${resource}__`;
+    const itemsPayload = Array.isArray(items) ? items : (typeof items === 'object' ? items : []);
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
+      method: 'POST',
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({
+        id: syncKey,
+        customer_name: '__UBM_SYS_STORE__',
+        items: itemsPayload,
+        notes: `Universal direct synchronization for ${resource}`,
+        updated_at: new Date().toISOString()
+      })
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`⚠️ [Direct Supabase Sync] ${resource}:`, err.message);
+    return false;
+  }
+}
+
+window.directSupabaseFetchResource = directSupabaseFetchResource;
+window.directSupabaseSyncResource = directSupabaseSyncResource;
+
+// ==================== SERVICE (JASA) DETECTION HELPERS ====================
+function isServiceOrder(order) {
+  if (!order) return false;
+  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
+  if (order.quotationId && window.state && state.quotations) {
+    const quo = (state.quotations || []).find(q => q.id === order.quotationId);
+    if (quo && quo.quotationType === 'jasa') return true;
+  }
+  if (order.notes && (
+    order.notes.toLowerCase().includes('[tipe: jasa]') ||
+    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
+    order.notes.toLowerCase().includes('(jasa)')
+  )) return true;
+  return false;
+}
+
+function isProjectService(p) {
+  if (!p) return false;
+  if (p.isService === true || p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.orderId && window.state && state.orders) {
+    const order = (state.orders || []).find(o => o.id === p.orderId);
+    if (order && isServiceOrder(order)) return true;
+  }
+  if (p.quotationId && window.state && state.quotations) {
+    const quo = (state.quotations || []).find(q => q.id === p.quotationId);
+    if (quo && quo.quotationType === 'jasa') return true;
+  }
+  if (p.notes && (
+    p.notes.toLowerCase().includes('[tipe: jasa]') ||
+    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
+    p.notes.toLowerCase().includes('(jasa)')
+  )) return true;
+  return false;
+}
+
+window.isServiceOrder = isServiceOrder;
+window.isProjectService = isProjectService;
+

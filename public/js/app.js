@@ -346,6 +346,7 @@ async function loadAllData() {
 }
 
 async function fetchResource(resource) {
+  // 1. Prioritaskan fetch khusus jika ada helper dedicated
   if (resource === 'users' && typeof directSupabaseFetchUsers === 'function') {
     try {
       const directUsers = await directSupabaseFetchUsers();
@@ -376,6 +377,7 @@ async function fetchResource(resource) {
     } catch (e) {}
   }
 
+  // 2. Fetch via Express / Netlify Serverless API endpoint
   try {
     const cacheBuster = `_t=${Date.now()}`;
     const url = `/api/${resource}?${cacheBuster}`;
@@ -386,34 +388,51 @@ async function fetchResource(resource) {
         'Pragma': 'no-cache'
       }
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (resource === 'settings') {
-      state.settings = data;
-    } else {
-      state[resource] = Array.isArray(data) ? data : [];
-      if (resource === 'users' && Array.isArray(data) && data.length > 0) {
-        try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
-      }
-      if (resource === 'partnerships' && Array.isArray(data)) {
-        try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data)); } catch (e) {}
-      }
-      if (resource === 'service_expenses' && Array.isArray(data)) {
-        try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data)); } catch (e) {}
-      }
-      if (resource === 'activity_logs' && Array.isArray(data)) {
-        try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
-        if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
-          renderLogsView();
+    if (res.ok) {
+      const data = await res.json();
+      if (resource === 'settings') {
+        state.settings = data;
+      } else {
+        state[resource] = Array.isArray(data) ? data : [];
+        if (resource === 'users' && Array.isArray(data) && data.length > 0) {
+          try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
+        }
+        if (resource === 'partnerships' && Array.isArray(data)) {
+          try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data)); } catch (e) {}
+        }
+        if (resource === 'service_expenses' && Array.isArray(data)) {
+          try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data)); } catch (e) {}
+        }
+        if (resource === 'activity_logs' && Array.isArray(data)) {
+          try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
+          if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
+            renderLogsView();
+          }
         }
       }
+      return data;
     }
-    return data;
   } catch (err) {
-    console.warn(`[Data Fetch] Gagal mengambil resource ${resource}:`, err.message);
-    if (!state[resource]) state[resource] = (resource === 'settings' ? null : []);
-    return state[resource];
+    console.warn(`[Data Fetch /api/${resource}] Server notice, mencoba direct Supabase:`, err.message);
   }
+
+  // 3. Fallback Universal: Fetch langsung ke Supabase Cloud Store (untuk sinkronisasi instan live & multi-device)
+  if (typeof directSupabaseFetchResource === 'function') {
+    try {
+      const directData = await directSupabaseFetchResource(resource);
+      if (directData !== null && directData !== undefined) {
+        if (resource === 'settings') {
+          state.settings = directData;
+        } else {
+          state[resource] = Array.isArray(directData) ? directData : [];
+        }
+        return state[resource];
+      }
+    } catch (e) {}
+  }
+
+  if (!state[resource]) state[resource] = (resource === 'settings' ? null : []);
+  return state[resource];
 }
 
 function updateSidebarBadges() {
@@ -494,6 +513,8 @@ function updateSidebarBadges() {
   const badgeService = document.getElementById('badge-service-count');
   if (badgeService) {
     const completedWithWarranty = (state.projects || []).filter(p => {
+      const isSvc = p.isService || (typeof isProjectService === 'function' && isProjectService(p));
+      if (isSvc) return false;
       const orderExists = (state.orders || []).some(o => o.id === p.orderId || o.id === p.id);
       return orderExists && (p.status === 'Completed' || p.progressPercent === 100 || (p.milestones && p.milestones.length > 0 && p.milestones.every(m => m.status === 'Completed')));
     }).length;
@@ -503,6 +524,8 @@ function updateSidebarBadges() {
   const badgeMaintenance = document.getElementById('badge-maintenance-count');
   if (badgeMaintenance) {
     const completedCount = (state.projects || []).filter(p => {
+      const isSvc = p.isService || (typeof isProjectService === 'function' && isProjectService(p));
+      if (isSvc) return false;
       const orderExists = (state.orders || []).some(o => o.id === p.orderId || o.id === p.id);
       return orderExists && (p.status === 'Completed' || p.progressPercent === 100 || (p.milestones && p.milestones.length > 0 && p.milestones.every(m => m.status === 'Completed')));
     }).length;

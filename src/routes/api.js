@@ -3,7 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../config/supabase');
-const { readDB, writeDB, mapToSnakeCase, mapToCamelCase, getCloudSync, setCloudSync, CLOUD_SYNC_PREFIX } = require('../utils/dbHelper');
+const { readDB, writeDB, mapToSnakeCase, mapToCamelCase, getCloudSync, setCloudSync, mergeResourceLists, CLOUD_SYNC_PREFIX } = require('../utils/dbHelper');
 
 const UPLOADS_PO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'po');
 const UPLOADS_QUO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'quotations');
@@ -62,6 +62,7 @@ module.exports = function(broadcastReload) {
   (async function bootstrapCloudSync() {
     try {
       const db = readDB();
+      const isServerless = !!(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
       // 1. Sync Settings
       const cloudSettings = await getCloudSync('settings');
@@ -80,24 +81,66 @@ module.exports = function(broadcastReload) {
       if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
         db.users = cloudUsers;
         writeDB(db);
+      } else if (Array.isArray(db.users) && db.users.length > 0) {
+        await setCloudSync('users', db.users);
       }
 
       // 3. Sync Other Resources
-      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims', 'partnerships', 'service_expenses'];
+      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'delivery', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims', 'partnerships', 'service_expenses'];
       for (const resName of resourcesToSync) {
         const cloudData = await getCloudSync(resName);
         if (cloudData === null) {
           const seedData = Array.isArray(db[resName]) ? db[resName] : [];
           await setCloudSync(resName, seedData);
         } else if (Array.isArray(cloudData)) {
-          db[resName] = cloudData;
-          writeDB(db);
+          if (isServerless) {
+            db[resName] = cloudData;
+            writeDB(db);
+          } else {
+            // Local development: bidirectional sync so any local additions are pushed and cloud additions are pulled
+            const localData = Array.isArray(db[resName]) ? db[resName] : [];
+            const merged = mergeResourceLists(localData, cloudData);
+            db[resName] = merged;
+            writeDB(db);
+            if (merged.length !== cloudData.length) {
+              await setCloudSync(resName, merged);
+            }
+          }
         }
       }
+      console.log('⚡ [Cloud Sync] Sinkronisasi awal database lokal dan Supabase Cloud Store aktif.');
     } catch (err) {
       console.warn('⚠️ [Cloud Sync] Bootstrap notice:', err.message);
     }
   })();
+
+  // Endpoint sinkronisasi manual / on-demand antara lokal dan Supabase
+  router.all('/sync-cloud', async (req, res) => {
+    try {
+      const db = readDB();
+      const results = {};
+      const resourcesToSync = ['quotations', 'projects', 'activity_logs', 'orders', 'po', 'invoices', 'purchasing', 'bom', 'delivery', 'bast', 'project_reports', 'maintenance', 'service_tickets', 'warranty_claims', 'partnerships', 'service_expenses', 'users'];
+      for (const resName of resourcesToSync) {
+        const cloudData = await getCloudSync(resName);
+        const localData = Array.isArray(db[resName]) ? db[resName] : [];
+        if (cloudData === null) {
+          await setCloudSync(resName, localData);
+          results[resName] = { action: 'uploaded_seed', count: localData.length };
+        } else {
+          const merged = mergeResourceLists(localData, cloudData);
+          db[resName] = merged;
+          if (merged.length !== cloudData.length) {
+            await setCloudSync(resName, merged);
+          }
+          results[resName] = { action: 'synchronized', count: merged.length };
+        }
+      }
+      writeDB(db);
+      res.json({ success: true, timestamp: new Date().toISOString(), results });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ---------------- AUTHENTICATION ENDPOINTS ----------------
   const ADMIN_EMAIL = 'admin@ubm.co.id';
@@ -569,6 +612,7 @@ module.exports = function(broadcastReload) {
     router.get(`/${resourceName}`, async (req, res) => {
       const db = readDB();
       const localItems = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+      const isServerless = !!(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
       try {
         // Special case: delivery table holds Cloud Store rows; filter out system rows
@@ -591,68 +635,49 @@ module.exports = function(broadcastReload) {
           }
         }
 
-        // Check native Supabase table if not known to be missing
+        // Fetch authoritative data from Supabase Cloud Store
+        const cloudData = await getCloudSync(resourceName);
+        if (Array.isArray(cloudData)) {
+          if (isServerless) {
+            // Live Serverless: Supabase Cloud Store is the single source of truth; never resurrect stale items from git bundle
+            db[resourceName] = cloudData;
+            writeDB(db);
+            return res.json(cloudData);
+          } else {
+            // Local dev: Merge local and cloud; if local has any new items not yet in Cloud, push them to Cloud Store immediately
+            const merged = mergeResourceLists(localItems, cloudData);
+            db[resourceName] = merged;
+            writeDB(db);
+            if (merged.length !== cloudData.length) {
+              setCloudSync(resourceName, merged).catch(() => {});
+            }
+            return res.json(merged);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Supabase Sync] GET /api/${resourceName} notice:`, err.message);
+      }
+
+      // Check native Supabase table if not known to be missing and Cloud Store was empty
+      try {
         if (supabase && !missingSupabaseTables.has(resourceName) && resourceName !== 'users') {
           const { data, error } = await supabase
             .from(resourceName)
             .select('*')
             .order('created_at', { ascending: false });
 
-          if (!error && data) {
+          if (!error && data && data.length > 0) {
             const remoteCamel = mapToCamelCase(data);
-
-            // Fetch cloud store items to retain any JSON or extended fields not present in SQL columns
-            let cloudItems = [];
-            try {
-              const cData = await getCloudSync(resourceName);
-              if (Array.isArray(cData)) cloudItems = cData;
-            } catch (e) {}
-
-            const remoteIds = new Set(remoteCamel.map(r => r.id));
-            const merged = remoteCamel.map(remoteItem => {
-              const localMatch = localItems.find(l => l.id === remoteItem.id) || {};
-              const cloudMatch = cloudItems.find(c => c.id === remoteItem.id) || {};
-              return {
-                ...localMatch,
-                ...cloudMatch,
-                ...remoteItem,
-                // Ensure critical rich fields (e.g. poDocument, poFileUrl, poFileName) are NEVER wiped out by missing SQL columns
-                poDocument: remoteItem.poDocument || cloudMatch.poDocument || localMatch.poDocument || undefined,
-                poFileUrl: remoteItem.poFileUrl || cloudMatch.poFileUrl || localMatch.poFileUrl || undefined,
-                poFileName: remoteItem.poFileName || cloudMatch.poFileName || localMatch.poFileName || undefined,
-                items: (remoteItem.items && remoteItem.items.length > 0) ? remoteItem.items : (cloudMatch.items || localMatch.items || []),
-                additionalServices: remoteItem.additionalServices || cloudMatch.additionalServices || localMatch.additionalServices || []
-              };
-            });
-
-            const extraCloud = cloudItems.filter(c => c.id && !remoteIds.has(c.id));
-            const extraLocal = localItems.filter(l => l.id && l.id !== 'undefined' && !remoteIds.has(l.id) && !cloudItems.some(c => c.id === l.id));
-            const fullMerged = [...merged, ...extraCloud, ...extraLocal];
-            db[resourceName] = fullMerged;
+            db[resourceName] = remoteCamel;
             writeDB(db);
-            return res.json(fullMerged);
+            return res.json(remoteCamel);
           } else if (error) {
             if (error.code === 'PGRST205' || error.message.includes('Could not find the table') || error.message.includes('relation') || error.message.includes('does not exist')) {
               missingSupabaseTables.add(resourceName);
             }
           }
         }
-      } catch (err) {
-        console.warn(`[Supabase] GET /api/${resourceName} native check notice:`, err.message);
-      }
-
-      // Fallback: Fetch from Supabase Cloud Store for all devices synchronization
-      try {
-        const cloudData = await getCloudSync(resourceName);
-        if (Array.isArray(cloudData)) {
-          const merged = mergeResourceLists(localItems, cloudData);
-          db[resourceName] = merged;
-          writeDB(db);
-          return res.json(merged);
-        }
-      } catch (syncErr) {
-        console.warn(`[Cloud Sync] Fallback GET /api/${resourceName}:`, syncErr.message);
-      }
+      } catch (err) {}
 
       const cleanResult = resourceName === 'delivery'
         ? localItems.filter(l => l.id && !l.id.startsWith(CLOUD_SYNC_PREFIX))

@@ -8,6 +8,10 @@ let currentActiveServiceTab = 'warranty';
 
 function isProjectCompletedForService(project) {
   if (!project) return false;
+  // Project jasa TIDAK boleh masuk ke halaman After Sales (hanya project barang)
+  const isSvc = project.isService || (typeof isProjectService === 'function' && isProjectService(project));
+  if (isSvc) return false;
+
   const validOrderExists = (state.orders || []).some(o => o.id === project.orderId || o.id === project.id);
   if (!validOrderExists) return false;
 
@@ -1055,8 +1059,8 @@ function openServiceTicketFormModal(existingTicket = null) {
     </div>
   `;
 
-  // Opsi preset dari order/project jika ingin autofill customer
-  const projectOptions = (state.projects || []).map(p => `
+  // Opsi preset dari order/project jika ingin autofill customer (hanya project barang)
+  const projectOptions = (state.projects || []).filter(p => !p.isService && (typeof isProjectService !== 'function' || !isProjectService(p))).map(p => `
     <option value="${p.id}" ${existingTicket?.projectId === p.id ? 'selected' : ''}>
       ${p.id} - ${escapeHtml(p.projectName)} (${escapeHtml(p.customerName || 'Customer')})
     </option>
@@ -1965,9 +1969,9 @@ function renderServiceFinanceTable() {
   const allProjects = state.projects || [];
   let completedProjects = allProjects.filter(p => isProjectCompletedForService(p));
   
-  // Jika tidak ada project completed, ambil project yang memiliki order agar tabel tetap informatif
+  // Jika tidak ada project completed, ambil project barang yang memiliki order agar tabel tetap informatif
   if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects.filter(p => (state.orders || []).some(o => o.id === p.orderId));
+    completedProjects = allProjects.filter(p => !p.isService && (typeof isProjectService !== 'function' || !isProjectService(p)) && (state.orders || []).some(o => o.id === p.orderId));
   }
 
   // Hitung KPI Keuangan Keseluruhan
@@ -2707,7 +2711,7 @@ function exportServiceFinanceToCSV() {
   const allProjects = state.projects || [];
   let completedProjects = allProjects.filter(p => isProjectCompletedForService(p));
   if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects.filter(p => (state.orders || []).some(o => o.id === p.orderId));
+    completedProjects = allProjects.filter(p => !p.isService && (typeof isProjectService !== 'function' || !isProjectService(p)) && (state.orders || []).some(o => o.id === p.orderId));
   }
 
   if (completedProjects.length === 0) {
