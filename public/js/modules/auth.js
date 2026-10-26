@@ -496,7 +496,7 @@ async function handleAuthLogin(event) {
  * Handle user logout
  */
 function handleUbmLogout() {
-  if (confirm('Apakah Anda yakin ingin keluar dari sistem UBM Enterprise?')) {
+  if (confirm('Apakah Anda yakin ingin keluar dari sistem Unit Bisnis Mandiri, Politeknik Takumi?')) {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
     

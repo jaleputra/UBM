@@ -649,10 +649,9 @@ async function resetSettingsToDefault() {
 }
 
 function updateAppFooterCopyright() {
-  const s = getCompanySettings();
   const footerTextEl = document.getElementById('app-footer-copyright-text');
   if (footerTextEl) {
-    footerTextEl.innerHTML = `&copy; 2026 <strong>Bisnis Digital Takumi</strong> &bull; ${escapeHtml(s.companyShortName)} Enterprise Management System`;
+    footerTextEl.innerHTML = `&copy; 2026 <strong>Bisnis Digital Takumi</strong> &bull; Unit Bisnis Mandiri, Politeknik Takumi`;
   }
 }
 
