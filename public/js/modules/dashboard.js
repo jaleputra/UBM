@@ -1278,34 +1278,53 @@ function openGanttMilestoneDetail(projId, msId) {
 
 // Global Gantt Tooltip Singleton
 function initGanttTooltip() {
-  if (document.getElementById('dashboard-gantt-tooltip')) return;
-  const tip = document.createElement('div');
-  tip.id = 'dashboard-gantt-tooltip';
-  tip.className = 'gantt-tooltip';
-  document.body.appendChild(tip);
+  let tip = document.getElementById('dashboard-gantt-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'dashboard-gantt-tooltip';
+    tip.className = 'gantt-tooltip';
+    tip.style.position = 'fixed';
+    tip.style.display = 'none';
+    tip.style.pointerEvents = 'none';
+    tip.style.zIndex = '99999';
+    document.body.appendChild(tip);
+  }
+  return tip;
 }
 
 function showGanttTooltip(e, html) {
-  initGanttTooltip();
-  const tip = document.getElementById('dashboard-gantt-tooltip');
+  const tip = initGanttTooltip();
   if (!tip) return;
   tip.innerHTML = html;
+  tip.style.display = 'block';
   tip.classList.add('visible');
   moveGanttTooltip(e);
 }
 
 function moveGanttTooltip(e) {
   const tip = document.getElementById('dashboard-gantt-tooltip');
-  if (!tip || !tip.classList.contains('visible')) return;
-  const x = e.clientX + 14;
-  const y = e.clientY + 14;
-  tip.style.left = `${Math.min(window.innerWidth - 300, x)}px`;
-  tip.style.top = `${Math.min(window.innerHeight - 150, y)}px`;
+  if (!tip || tip.style.display === 'none') return;
+  const tipWidth = tip.offsetWidth || 280;
+  const tipHeight = tip.offsetHeight || 120;
+  let x = e.clientX + 14;
+  let y = e.clientY + 14;
+  if (x + tipWidth > window.innerWidth - 10) {
+    x = Math.max(10, e.clientX - tipWidth - 14);
+  }
+  if (y + tipHeight > window.innerHeight - 10) {
+    y = Math.max(10, e.clientY - tipHeight - 14);
+  }
+  tip.style.left = `${x}px`;
+  tip.style.top = `${y}px`;
 }
 
 function hideGanttTooltip() {
   const tip = document.getElementById('dashboard-gantt-tooltip');
-  if (tip) tip.classList.remove('visible');
+  if (tip) {
+    tip.style.display = 'none';
+    tip.classList.remove('visible');
+    tip.innerHTML = '';
+  }
 }
 
 function formatGanttDate(dateStr) {

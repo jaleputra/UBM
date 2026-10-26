@@ -182,6 +182,11 @@ function navigateTo(viewName) {
     state.previousView = state.currentView;
   }
   state.currentView = viewName;
+
+  // Bersihkan floating tooltip jika ada
+  if (typeof hideGanttTooltip === 'function') {
+    hideGanttTooltip();
+  }
   
   // Update nav item active states
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
