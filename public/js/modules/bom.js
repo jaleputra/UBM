@@ -194,6 +194,9 @@ async function restoreBOMComponentsStock(components) {
         body: JSON.stringify(prData)
       });
     }
+    if (typeof directSyncPurchasingTablesToSupabase === 'function') {
+      await directSyncPurchasingTablesToSupabase().catch(e => console.warn(e));
+    }
   } catch (err) {
     console.error('Error updating restored stock in server:', err);
   }
@@ -201,52 +204,16 @@ async function restoreBOMComponentsStock(components) {
 
 async function deductBOMComponentsStock(components) {
   if (!components || !Array.isArray(components) || components.length === 0) return;
-  const prUpdateMap = new Map();
-
-  components.forEach(comp => {
-    const usedQty = parseFloat(comp.qty) || 0;
-    if (usedQty <= 0) return;
-
-    let pr = (state.purchasing || []).find(p => p.id === comp.prId);
-    if (!pr) {
-      pr = (state.purchasing || []).find(p =>
-        (p.status === 'Disetujui' || p.status === 'Stock' || p.status === 'Approved') &&
-        (p.items || []).some(it => (it.itemName || '').toLowerCase().trim() === (comp.componentName || '').toLowerCase().trim() && it.itemStatus === 'Sesuai')
-      );
-    }
-
-    if (pr && pr.items) {
-      let targetItem = null;
-      if (comp.itemIndex !== undefined && pr.items[comp.itemIndex] && pr.items[comp.itemIndex].itemStatus === 'Sesuai') {
-        targetItem = pr.items[comp.itemIndex];
-      }
-      if (!targetItem) {
-        targetItem = pr.items.find(i => 
-          (i.itemName || '').toLowerCase().trim() === (comp.componentName || '').toLowerCase().trim() && i.itemStatus === 'Sesuai'
-        ) || pr.items.find(i => (i.itemName || '').toLowerCase().trim() === (comp.componentName || '').toLowerCase().trim());
-      }
-
-      if (targetItem) {
-        const currentStock = parseFloat(targetItem.qty) || 0;
-        targetItem.qty = Math.max(0, currentStock - usedQty);
-        const unitPrice = parseFloat(targetItem.purchasePrice !== undefined ? targetItem.purchasePrice : (targetItem.actualPrice !== undefined ? targetItem.actualPrice : (targetItem.estimatedPrice || targetItem.unitPrice || 0))) || 0;
-        targetItem.total = targetItem.qty * unitPrice;
-        pr.totalEstimated = pr.items.reduce((s, it) => s + (parseFloat(it.total) || 0), 0);
-        prUpdateMap.set(pr.id, pr);
-      }
-    }
-  });
-
+  // Pengurangan stok inventory Master Barang dihitung secara riil dan dinamis:
+  // Stok Tersedia = Total Masuk (PR Sesuai) - Digunakan di BOM + Pengembalian Laporan Proyek.
+  // Ketika komponen ditambahkan ke BOM, komponen tersebut otomatis tercatat dalam pemakaian (usedInBom)
+  // dan secara langsung mengurangi stok tersedia di Master Barang (Inventory).
   try {
-    for (const [prId, prData] of prUpdateMap.entries()) {
-      await fetch(`/api/purchasing/${prId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(prData)
-      });
+    if (typeof directSyncPurchasingTablesToSupabase === 'function') {
+      await directSyncPurchasingTablesToSupabase().catch(e => console.warn(e));
     }
   } catch (err) {
-    console.error('Error updating deducted stock in server:', err);
+    console.error('Error syncing deducted stock in server:', err);
   }
 }
 
@@ -670,15 +637,25 @@ function createBOMFromOrder(orderId) {
 function getAvailablePRComponents() {
   const list = [];
   
-  // Ambil HANYA data barang dari Database Master Barang (PR) yang SUDAH DISETUJUI & STATUS KESESUAIAN 'Sesuai'
+  // Ambil data barang dari Database Master Barang yang SUDAH DISETUJUI & STATUS 'Sesuai'
+  // Dan hitung sisa stok tersedia riil (setelah pemotongan BOM lain dan pengembalian sisa project)
+  const masterItems = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const masterMap = new Map();
+  masterItems.forEach(m => masterMap.set((m.itemName || '').toLowerCase().trim(), m));
+
   (state.purchasing || []).forEach(pr => {
     const isStock = pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved';
     if (!isStock) return;
 
     (pr.items || []).forEach((item, itemIdx) => {
       if (item.itemStatus !== 'Sesuai') return;
-      const qty = parseFloat(item.qty) || 0;
+      const itemNameClean = (item.itemName || '').trim();
+      const mMatch = masterMap.get(itemNameClean.toLowerCase());
+      
+      // Gunakan stok tersedia dari Master Inventory jika ada
+      const availableQty = mMatch ? mMatch.qty : (parseFloat(item.qty) || 0);
       const unitCost = parseFloat(item.purchasePrice !== undefined ? item.purchasePrice : (item.actualPrice !== undefined ? item.actualPrice : (item.estimatedPrice || item.unitPrice || 0))) || 0;
+      
       list.push({
         prId: pr.id,
         itemIndex: itemIdx,
@@ -687,10 +664,11 @@ function getAvailablePRComponents() {
         status: 'Disetujui',
         itemName: item.itemName,
         specs: item.specs || '',
-        qty: qty,
+        qty: availableQty,
+        initialQty: parseFloat(item.qty) || 0,
         unit: item.unit || 'Pcs',
         unitCost: unitCost,
-        totalCost: parseFloat(item.total) || (qty * unitCost),
+        totalCost: parseFloat(item.total) || (availableQty * unitCost),
         source: `PR: ${pr.id} (${pr.department || 'Umum'})`
       });
     });
@@ -1106,7 +1084,16 @@ function navigateBackFromBOM() {
   navigateTo(target);
 }
 
+let currentActiveBOMPageData = null;
+
 function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = null, defaultSku = null, isReadOnly = false, isReapply = false) {
+  currentActiveBOMPageData = bomData || {
+    orderId: defaultOrderId || '',
+    productName: defaultItemName || '',
+    productCode: defaultSku || '',
+    components: []
+  };
+
   // Tentukan view asal pemanggil
   if (state.currentView === 'orders') {
     state.bomReturnView = 'orders';
@@ -1218,7 +1205,7 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
             <div>
               <div style="font-weight: 700; color: #065f46; font-size: 13.5px;">Formula Master BOM Telah Ditetapkan (Terkunci)</div>
               <div style="font-size: 12px; color: #047857; margin-top: 2px;">
-                Formula bahan baku dan perhitungan HPP untuk <strong>${escapeHtml(bomData?.productName || defaultItemName || 'Project Ini')}</strong> ${boundOrderId ? `(Order: <strong>${escapeHtml(boundOrderId)}</strong>)` : ''} telah disimpan ke sistem dan menjadi acuan produksi sehingga tidak dapat diedit kembali.
+                Formula bahan baku dan perhitungan HPP untuk <strong>${escapeHtml(bomData?.productName || defaultItemName || 'Project Ini')}</strong> ${boundOrderId ? `(Order: <strong>${escapeHtml(boundOrderId)}</strong>)` : ''} telah disimpan ke sistem dan menjadi acuan produksi sehingga komponen yang sudah ada tidak dapat diubah kembali. Anda dapat menambahkan komponen yang diperlukan melalui tombol <strong>+ Tambah Komponen</strong> pada Struktur Komponen &amp; Bahan Baku di bawah.
               </div>
             </div>
           </div>
@@ -1388,10 +1375,18 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
     notesEl.style.cursor = isReadOnly ? 'default' : '';
   }
 
-  // Sembunyikan / Tampilkan tombol Inventory & Ajukan PR pada Struktur Komponen
+  // Sembunyikan / Tampilkan tombol pada Struktur Komponen & Bahan Baku
   const compActionBtns = document.getElementById('bom-components-action-btns');
   if (compActionBtns) {
-    compActionBtns.style.display = isReadOnly ? 'none' : 'flex';
+    compActionBtns.style.display = 'flex';
+  }
+  const addCompBtn = document.getElementById('btn-bom-add-component');
+  if (addCompBtn) {
+    addCompBtn.style.display = 'inline-flex';
+  }
+  const bottomAddBtn = document.getElementById('bom-components-bottom-add-btn');
+  if (bottomAddBtn) {
+    bottomAddBtn.style.display = 'flex';
   }
   document.querySelectorAll('#view-bom-form button[onclick*="openPRPickerModal"], #view-bom-form button[onclick*="redirectToPurchasingPR"]').forEach(btn => {
     btn.style.display = isReadOnly ? 'none' : 'inline-flex';
@@ -1591,6 +1586,10 @@ function addBOMPageComponentRow(comp = null, isReadOnly = false) {
     'minmax(0, 2.5fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.4fr)' :
     'minmax(0, 2.5fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.4fr) auto';
 
+  const addedBadgeHtml = comp?.isAddedLater
+    ? `<span class="badge badge-success" style="font-size: 9.5px; margin-left: 6px; padding: 2px 7px; font-weight: 700; background: #dcfce7; color: #15803d; border: 1px solid #86efac; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="plus-circle" style="width: 10px; height: 10px;"></i> Tambahan Baru</span>`
+    : '';
+
   const stockBadgeHtml = isOutOfStock
     ? `<span class="badge badge-danger" style="font-size: 10px; margin-left: 6px; padding: 2px 7px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;"><i data-lucide="alert-triangle" style="width: 11px; height: 11px;"></i> Stok Kosong (0 ${escapeAttr(comp?.unit || 'Pcs')})</span>`
     : (comp ? `<span class="badge badge-success" style="font-size: 9.5px; margin-left: 4px; padding: 1px 6px;">Stok: ${availableStock} ${escapeAttr(comp?.unit || 'Pcs')}</span>` : '');
@@ -1600,6 +1599,7 @@ function addBOMPageComponentRow(comp = null, isReadOnly = false) {
       <div>
         <label class="form-label font-sm" style="font-size: 11px; margin-bottom: 2px; display: flex; align-items: center; flex-wrap: wrap;">
           Nama Bahan / Komponen ${comp?.prId ? `<span class="badge badge-sm badge-info" style="font-size: 9.5px; margin-left: 4px;">PR: ${comp.prId}</span>` : ''}
+          ${addedBadgeHtml}
           ${stockBadgeHtml}
         </label>
         <input type="text" class="form-control bom-comp-name" placeholder="Nama Komponen / Bahan" required value="${escapeAttr(comp?.componentName || '')}" readonly style="background-color: ${isOutOfStock ? '#fef2f2' : '#f8fafc'}; font-weight: 600; cursor: default; ${isOutOfStock ? 'color: #991b1b;' : ''}">
@@ -1939,3 +1939,503 @@ function editBOM(bomId) {
     openBOMPage(bom, bom.orderId, bom.productName, bom.productCode, isLocked);
   }
 }
+window.deductBOMComponentsStock = deductBOMComponentsStock;
+
+// =========================================================================
+// PENAMBAHAN KOMPONEN TAMBAHAN LANGSUNG PADA FORMULIR MASTER BOM
+// (Tanpa Merubah Komponen yang Sudah Ada Sebelumnya - Hanya Menambahkan)
+// =========================================================================
+
+function openAddBOMComponentModal() {
+  const editId = document.getElementById('page-bom-edit-id')?.value;
+  const orderSelectVal = document.getElementById('page-bom-order-select')?.value || '';
+  const currentOrderId = orderSelectVal ? orderSelectVal.split('::')[0] : '';
+
+  const boundBOM = currentActiveBOMPageData || 
+    (editId ? (state.bom || []).find(b => b.id === editId) : null) ||
+    (currentOrderId ? (state.bom || []).find(b => b.orderId === currentOrderId) : null);
+
+  const orderId = boundBOM?.orderId || currentOrderId || '';
+  const productName = boundBOM?.productName || document.getElementById('page-bom-name')?.value || 'Produk BOM';
+
+  const modal = document.getElementById('form-modal');
+  const modalBody = modal?.querySelector('.modal-body') || modal;
+  if (!modalBody) return;
+
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  
+  // Kumpulkan komponen yang saat ini ada di formulir
+  const existingComponents = [];
+  document.querySelectorAll('#page-bom-components-list .bom-item-block').forEach(b => {
+    const name = b.querySelector('.bom-comp-name')?.value?.trim();
+    const qty = parseFloat(b.querySelector('.bom-comp-qty')?.value) || 0;
+    const unit = b.querySelector('.bom-comp-unit')?.value?.trim() || 'Pcs';
+    const unitCost = parseFloat(b.querySelector('.bom-comp-cost')?.value) || 0;
+    if (name) {
+      existingComponents.push({ componentName: name, qty, unit, unitCost });
+    }
+  });
+
+  modalBody.innerHTML = `
+    <div style="font-family: 'Inter', system-ui, sans-serif; max-height: 85vh; overflow-y: auto; padding-right: 4px;">
+      <!-- HEADER MODAL -->
+      <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+              <i data-lucide="boxes" style="color: #059669; width: 22px; height: 22px;"></i>
+              Tambah Komponen ke Master BOM
+            </h3>
+            <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">
+              Produk: <strong>${escapeHtml(productName)}</strong> &bull; Ref Order: <span class="font-mono">${escapeHtml(orderId || '-')}</span> ${boundBOM?.id ? `&bull; BOM: <span class="font-mono font-bold text-success">${escapeHtml(boundBOM.id)} (${boundBOM.status || 'Accepted'})</span>` : ''}
+            </p>
+          </div>
+          <span class="badge badge-success" style="font-size: 10.5px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px;">
+            <i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Komponen Sebelumnya Terkunci &amp; Utuh
+          </span>
+        </div>
+      </div>
+
+      <!-- FORMULIR INPUT KOMPONEN -->
+      <form id="form-bom-add-component-dialog" onsubmit="event.preventDefault();" style="display: flex; flex-direction: column; gap: 14px;">
+        <datalist id="bom-master-items-datalist">
+          ${masterList.map(m => `<option value="${escapeAttr(m.itemName)}">${escapeAttr(m.itemName)} (${m.specs ? escapeAttr(m.specs) + ' | ' : ''}Stok Tersedia: ${m.qty} ${m.unit} | Rp ${Number(m.unitCost || 0).toLocaleString('id-ID')})</option>`).join('')}
+        </datalist>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+            Nama Komponen / Bahan Baku <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="input-bom-modal-comp-name" class="form-control" list="bom-master-items-datalist" placeholder="Ketik atau pilih dari Master Barang Inventory..." oninput="handleBOMComponentModalInput()" required autocomplete="off" style="font-weight: 600; font-size: 13px;">
+          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">
+            💡 Anda dapat memilih dari Database Master Barang atau mengetik nama material baru.
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Spesifikasi Teknis
+            </label>
+            <input type="text" id="input-bom-modal-comp-specs" class="form-control" placeholder="Tipe, ukuran, material..." style="font-size: 12px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Satuan
+            </label>
+            <input type="text" id="input-bom-modal-comp-unit" class="form-control" value="Pcs" placeholder="Pcs, Set, Mtr..." style="font-size: 12px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Jumlah Dibutuhkan (Qty) <span class="text-danger">*</span>
+            </label>
+            <input type="number" id="input-bom-modal-comp-qty" class="form-control font-mono font-bold" min="1" step="any" value="1" oninput="handleBOMComponentModalInput()" required style="font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Estimasi Biaya Satuan (Rp)
+            </label>
+            <input type="number" id="input-bom-modal-comp-cost" class="form-control font-mono" min="0" value="0" oninput="handleBOMComponentModalInput()" style="font-size: 13px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Estimasi Subtotal Biaya
+            </label>
+            <div id="preview-bom-modal-comp-subtotal" class="form-control font-mono font-bold" style="background: #f8fafc; font-size: 14px; color: #059669; display: flex; align-items: center;">
+              Rp 0
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+            Keterangan Kebutuhan / Catatan Penambahan
+          </label>
+          <textarea id="input-bom-modal-comp-notes" class="form-control" rows="2" placeholder="Alasan penambahan komponen, modifikasi wiring, perkuatan struktur, dll..." style="font-size: 12px;"></textarea>
+        </div>
+
+        <!-- LIVE STOCK FEEDBACK BOX -->
+        <div id="bom-modal-comp-stock-feedback">
+          <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; color: #64748b; font-size: 12px;">
+            Ketik atau pilih nama komponen di atas untuk memeriksa ketersediaan stok di Inventory.
+          </div>
+        </div>
+
+        <!-- MODAL ACTION BUTTONS -->
+        <div id="bom-modal-comp-actions" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 4px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        </div>
+      </form>
+
+      <!-- REFERENSI: KOMPONEN YANG SUDAH ADA SEBELUMNYA (TETAP UTUH & TERKUNCI) -->
+      ${existingComponents.length > 0 ? `
+        <div style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 14px;">
+          <div style="font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span>Komponen yang Sudah Ada Sebelumnya (${existingComponents.length} Material - Tidak Berubah):</span>
+            <span class="text-muted font-xs">Total Biaya Bahan: <strong>${typeof formatRupiah === 'function' ? formatRupiah(existingComponents.reduce((s, c) => s + (c.qty * c.unitCost), 0)) : 'Rp 0'}</strong></span>
+          </div>
+          <div class="table-responsive" style="max-height: 140px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+            <table class="data-table" style="font-size: 11px; margin: 0; width: 100%;">
+              <thead>
+                <tr style="background: #f8fafc;">
+                  <th style="padding: 5px 8px;">No</th>
+                  <th style="padding: 5px 8px;">Komponen</th>
+                  <th style="padding: 5px 8px; text-align: center;">Qty</th>
+                  <th style="padding: 5px 8px; text-align: right;">Biaya</th>
+                  <th style="padding: 5px 8px; text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${existingComponents.map((c, i) => `
+                  <tr>
+                    <td style="padding: 5px 8px;">${i + 1}</td>
+                    <td style="padding: 5px 8px; font-weight: 600;">${escapeHtml(c.componentName || c.itemName || '-')}</td>
+                    <td style="padding: 5px 8px; text-align: center;" class="font-mono">${c.qty} ${c.unit || 'Pcs'}</td>
+                    <td style="padding: 5px 8px; text-align: right;" class="font-mono">${typeof formatRupiah === 'function' ? formatRupiah(c.unitCost || 0) : c.unitCost}</td>
+                    <td style="padding: 5px 8px; text-align: center;"><span class="badge badge-secondary" style="font-size: 9.5px; padding: 1px 5px;"><i data-lucide="lock" style="width: 10px; height: 10px;"></i> Terkunci</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  openModal('form-modal');
+  if (window.lucide) lucide.createIcons();
+}
+
+function handleBOMComponentModalInput() {
+  const nameInput = document.getElementById('input-bom-modal-comp-name');
+  const qtyInput = document.getElementById('input-bom-modal-comp-qty');
+  const costInput = document.getElementById('input-bom-modal-comp-cost');
+  const unitInput = document.getElementById('input-bom-modal-comp-unit');
+  const specsInput = document.getElementById('input-bom-modal-comp-specs');
+  const feedback = document.getElementById('bom-modal-comp-stock-feedback');
+  const previewSubtotal = document.getElementById('preview-bom-modal-comp-subtotal');
+  const actionContainer = document.getElementById('bom-modal-comp-actions');
+
+  if (!nameInput || !feedback) return;
+
+  const rawName = nameInput.value?.trim() || '';
+  const nameLower = rawName.toLowerCase();
+  const qty = Math.max(1, parseFloat(qtyInput?.value) || 1);
+
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const matched = masterList.find(m => m.itemName.toLowerCase().trim() === nameLower);
+
+  if (matched) {
+    if (unitInput && !unitInput.dataset.manualEdited) unitInput.value = matched.unit || 'Pcs';
+    if (costInput && (!costInput.value || costInput.value === '0')) costInput.value = matched.unitCost || 0;
+    if (specsInput && !specsInput.value && matched.specs) specsInput.value = matched.specs;
+  }
+
+  const unitCost = parseFloat(costInput?.value) || (matched?.unitCost || 0);
+  const subtotal = qty * unitCost;
+  if (previewSubtotal) {
+    previewSubtotal.textContent = typeof formatRupiah === 'function' ? formatRupiah(subtotal) : `Rp ${subtotal.toLocaleString('id-ID')}`;
+  }
+
+  if (!rawName) {
+    feedback.innerHTML = `
+      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; color: #64748b; font-size: 12px;">
+        Ketik atau pilih nama komponen di atas untuk memeriksa ketersediaan stok di Inventory.
+      </div>
+    `;
+    if (actionContainer) actionContainer.innerHTML = `<button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>`;
+    return;
+  }
+
+  const availableStock = matched ? (parseFloat(matched.qty) || 0) : 0;
+  const unit = (unitInput?.value || matched?.unit || 'Pcs').trim();
+
+  if (matched && availableStock >= qty) {
+    // KONDISI 1: ADA DI INVENTORY DAN STOK CUKUP
+    feedback.innerHTML = `
+      <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <span style="font-size: 13px; font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i> Stok Tersedia di Inventory: <strong>${availableStock} ${unit}</strong>
+          </span>
+          <span class="badge badge-success" style="font-size: 10.5px;">✓ Siap Digunakan Langsung</span>
+        </div>
+        <div style="font-size: 11.5px; color: #166534; margin-top: 5px;">
+          Komponen <strong>${escapeHtml(matched.itemName)}</strong> tersedia di Master Barang. Klik tombol hijau di bawah untuk <strong>langsung menambahkan ${qty} ${unit} ke BOM ini</strong> tanpa merubah komponen sebelumnya, dan stok inventory otomatis terpotong.
+        </div>
+      </div>
+    `;
+    if (actionContainer) {
+      actionContainer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        <button type="button" class="btn btn-success" style="background: #059669; border-color: #059669; padding: 9px 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="executeAddDirectComponentToBOMPage()">
+          <i data-lucide="check-circle"></i> Gunakan Langsung & Tambah ke BOM (${qty} ${unit})
+        </button>
+      `;
+    }
+  } else {
+    // KONDISI 2: TIDAK ADA DI INVENTORY ATAU STOK TIDAK CUKUP
+    const statusText = matched ? `Stok Kurang (Tersedia: ${availableStock} ${unit}, Dibutuhkan: ${qty} ${unit})` : 'Belum Ada di Inventory (Stok: 0)';
+    feedback.innerHTML = `
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <span style="font-size: 13px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="alert-triangle" style="width: 16px; height: 16px;"></i> ${statusText}
+          </span>
+          <span class="badge badge-amber" style="font-size: 10.5px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">Pengajuan Purchasing Diperlukan</span>
+        </div>
+        <div style="font-size: 11.5px; color: #92400e; margin-top: 5px;">
+          Stok barang tidak mencukupi di inventory untuk kebutuhan BOM ini. Klik tombol di bawah untuk <strong>otomatis mengajukan Request Pengadaan (Purchasing)</strong>.
+        </div>
+      </div>
+    `;
+    if (actionContainer) {
+      actionContainer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        <button type="button" class="btn btn-primary" style="background: #d97706; border-color: #d97706; padding: 9px 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="executeSubmitPurchasingFromBOMPage()">
+          <i data-lucide="shopping-cart"></i> Ajukan Pengadaan Purchasing (${qty} ${unit})
+        </button>
+      `;
+    }
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function executeAddDirectComponentToBOMPage() {
+  const editId = document.getElementById('page-bom-edit-id')?.value;
+  const orderSelectVal = document.getElementById('page-bom-order-select')?.value || '';
+  const currentOrderId = orderSelectVal ? orderSelectVal.split('::')[0] : '';
+
+  const boundBOM = currentActiveBOMPageData || 
+    (editId ? (state.bom || []).find(b => b.id === editId) : null) ||
+    (currentOrderId ? (state.bom || []).find(b => b.orderId === currentOrderId) : null);
+
+  const nameInput = document.getElementById('input-bom-modal-comp-name');
+  const qtyInput = document.getElementById('input-bom-modal-comp-qty');
+  const costInput = document.getElementById('input-bom-modal-comp-cost');
+  const unitInput = document.getElementById('input-bom-modal-comp-unit');
+  const specsInput = document.getElementById('input-bom-modal-comp-specs');
+  const notesInput = document.getElementById('input-bom-modal-comp-notes');
+
+  const itemName = (nameInput?.value || '').trim();
+  const qty = parseFloat(qtyInput?.value) || 0;
+  const unit = (unitInput?.value || 'Pcs').trim();
+  const unitCost = parseFloat(costInput?.value) || 0;
+  const specs = (specsInput?.value || '').trim();
+  const notes = (notesInput?.value || '').trim();
+
+  if (!itemName) {
+    showToast('Harap masukkan nama komponen', 'warning');
+    return;
+  }
+  if (qty <= 0) {
+    showToast('Jumlah (Qty) komponen harus lebih dari 0', 'warning');
+    return;
+  }
+
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const mItem = masterList.find(m => m.itemName.toLowerCase().trim() === itemName.toLowerCase().trim());
+  const availableStock = mItem ? (parseFloat(mItem.qty) || 0) : 0;
+
+  if (!mItem || availableStock < qty) {
+    showToast(`⚠️ Stok di inventory tidak mencukupi (${availableStock} ${unit}). Silakan klik tombol Ajukan Pengadaan Purchasing!`, 'warning');
+    return;
+  }
+
+  const newComponent = {
+    componentName: itemName,
+    specs: specs || (mItem?.specs || ''),
+    qty: qty,
+    unit: unit || (mItem?.unit || 'Pcs'),
+    unitCost: unitCost || (mItem?.unitCost || 0),
+    prId: mItem?.sourcePrId || '',
+    notes: notes || 'Komponen tambahan',
+    isAddedLater: true
+  };
+
+  try {
+    if (boundBOM && boundBOM.id) {
+      // BOM SUDAH TERSIMPAN DI DATABASE: Tambahkan tanpa merubah komponen sebelumnya
+      if (!Array.isArray(boundBOM.components)) boundBOM.components = [];
+
+      const existingIdx = boundBOM.components.findIndex(c => 
+        (c.componentName || c.itemName || '').toLowerCase().trim() === itemName.toLowerCase().trim()
+      );
+
+      if (existingIdx !== -1) {
+        boundBOM.components[existingIdx].qty = (parseFloat(boundBOM.components[existingIdx].qty) || 0) + qty;
+        if (unitCost > 0) boundBOM.components[existingIdx].unitCost = unitCost;
+        if (specs) boundBOM.components[existingIdx].specs = specs;
+        if (notes) boundBOM.components[existingIdx].notes = (boundBOM.components[existingIdx].notes ? `${boundBOM.components[existingIdx].notes}; ` : '') + notes;
+        boundBOM.components[existingIdx].isAddedLater = true;
+      } else {
+        boundBOM.components.push(newComponent);
+      }
+
+      // Hitung ulang HPP
+      boundBOM.materialCost = boundBOM.components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost) || 0)), 0);
+      boundBOM.totalEstimatedCost = boundBOM.materialCost + (parseFloat(boundBOM.laborCost) || 0) + (parseFloat(boundBOM.overheadCost) || 0);
+      boundBOM.updatedAt = new Date().toISOString();
+
+      // Simpan ke API
+      const res = await fetch(`/api/bom/${boundBOM.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(boundBOM)
+      });
+      if (!res.ok) throw new Error('Gagal memperbarui data BOM di server');
+
+      // Potong stok inventory & sync Supabase
+      if (typeof deductBOMComponentsStock === 'function') {
+        await deductBOMComponentsStock([newComponent]);
+      }
+
+      // Update keuangan project di Supabase
+      const finRecord = (state.project_finances || []).find(f => f.projectId === boundBOM.projectId || f.orderId === boundBOM.orderId);
+      if (finRecord) {
+        finRecord.materialCost = boundBOM.materialCost;
+        finRecord.modalTotal = boundBOM.materialCost + (parseFloat(finRecord.laborCost) || 0) + (parseFloat(finRecord.overheadCost) || 0);
+        finRecord.grossProfit = (parseFloat(finRecord.sellingPrice) || 0) - finRecord.modalTotal;
+        finRecord.netProfit = finRecord.grossProfit - (parseFloat(finRecord.claimedWarranty) || 0);
+        finRecord.profitMargin = finRecord.sellingPrice > 0 ? Number(((finRecord.netProfit / finRecord.sellingPrice) * 100).toFixed(2)) : 0;
+        finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
+        finRecord.updatedAt = new Date().toISOString();
+
+        await fetch(`/api/project_finances/${finRecord.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finRecord)
+        }).catch(e => console.warn(e));
+      }
+
+      // Re-render UI komponen di formulir BOM (komponen sebelumnya tetap terkunci)
+      const isLocked = boundBOM.status === 'Accepted' || Boolean(boundBOM.orderId);
+      const container = document.getElementById('page-bom-components-list');
+      if (container) {
+        container.innerHTML = '';
+        boundBOM.components.forEach(c => addBOMPageComponentRow(c, isLocked));
+      }
+
+      if (typeof fetchResource === 'function') {
+        await Promise.allSettled([
+          fetchResource('bom'),
+          fetchResource('master_items'),
+          fetchResource('purchasing'),
+          fetchResource('project_finances')
+        ]);
+      }
+
+      closeModal('form-modal');
+      showToast(`✅ Komponen "${itemName}" (${qty} ${unit}) berhasil ditambahkan ke Master BOM tanpa merubah komponen sebelumnya!`, 'success');
+      calculateBOMPageTotals();
+    } else {
+      // DRAFT FORM BOM BARU: Tambahkan baris komponen ke formulir
+      addBOMPageComponentRow(newComponent, false);
+      closeModal('form-modal');
+      showToast(`✅ Komponen "${itemName}" (${qty} ${unit}) ditambahkan ke formulir!`, 'success');
+      calculateBOMPageTotals();
+    }
+  } catch (err) {
+    console.error('Error adding component to BOM:', err);
+    showToast('Gagal menambahkan komponen: ' + err.message, 'error');
+  }
+}
+
+async function executeSubmitPurchasingFromBOMPage() {
+  const editId = document.getElementById('page-bom-edit-id')?.value;
+  const orderSelectVal = document.getElementById('page-bom-order-select')?.value || '';
+  const currentOrderId = orderSelectVal ? orderSelectVal.split('::')[0] : '';
+
+  const boundBOM = currentActiveBOMPageData || 
+    (editId ? (state.bom || []).find(b => b.id === editId) : null) ||
+    (currentOrderId ? (state.bom || []).find(b => b.orderId === currentOrderId) : null);
+
+  const orderId = boundBOM?.orderId || currentOrderId || '';
+  const productName = boundBOM?.productName || document.getElementById('page-bom-name')?.value || 'Produk BOM';
+
+  const nameInput = document.getElementById('input-bom-modal-comp-name');
+  const qtyInput = document.getElementById('input-bom-modal-comp-qty');
+  const costInput = document.getElementById('input-bom-modal-comp-cost');
+  const unitInput = document.getElementById('input-bom-modal-comp-unit');
+  const specsInput = document.getElementById('input-bom-modal-comp-specs');
+  const notesInput = document.getElementById('input-bom-modal-comp-notes');
+
+  const itemName = (nameInput?.value || '').trim();
+  const qty = parseFloat(qtyInput?.value) || 0;
+  const unit = (unitInput?.value || 'Pcs').trim();
+  const unitCost = parseFloat(costInput?.value) || 0;
+  const specs = (specsInput?.value || '').trim();
+  const notes = (notesInput?.value || '').trim();
+
+  if (!itemName) {
+    showToast('Harap masukkan nama komponen', 'warning');
+    return;
+  }
+  if (qty <= 0) {
+    showToast('Jumlah (Qty) komponen harus lebih dari 0', 'warning');
+    return;
+  }
+
+  const authUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const newPrId = `PR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`;
+
+  const newPR = {
+    id: newPrId,
+    orderId: orderId || '',
+    projectId: boundBOM?.projectId || '',
+    projectName: productName || '',
+    bomId: boundBOM?.id || '',
+    requestor: authUser?.name || 'Lead Project',
+    department: authUser?.department || 'Engineering & Produksi',
+    requestDate: new Date().toISOString().split('T')[0],
+    requiredDate: '',
+    urgency: 'High',
+    status: 'Pending',
+    purpose: `Pengadaan Bahan Tambahan BOM: ${productName} (Ref Order: ${orderId || '-'})`,
+    notes: notes ? `${notes} [Untuk BOM: ${boundBOM?.id || productName}]` : `Kebutuhan komponen tambahan untuk BOM: ${boundBOM?.id || productName}`,
+    items: [
+      {
+        itemName: itemName,
+        specs: specs || '',
+        qty: qty,
+        unit: unit || 'Pcs',
+        estimatedPrice: unitCost || 0,
+        actualPrice: unitCost || 0,
+        total: qty * (unitCost || 0),
+        itemStatus: 'Belum Dipesan'
+      }
+    ],
+    totalEstimated: qty * (unitCost || 0),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch('/api/purchasing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPR)
+    });
+    if (!res.ok) throw new Error('Gagal mengirim pengajuan purchasing ke server');
+    const saved = await res.json();
+    state.purchasing = state.purchasing || [];
+    state.purchasing.unshift(saved || newPR);
+
+    closeModal('form-modal');
+    showToast(`📋 Pengajuan Purchasing #${newPrId} berhasil dibuat untuk ${itemName} (${qty} ${unit})! Menunggu proses pembelian & stok masuk.`, 'success');
+    if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  } catch (err) {
+    console.error('Error submitting purchasing:', err);
+    showToast('Gagal mengajukan purchasing: ' + err.message, 'error');
+  }
+}
+
+window.openAddBOMComponentModal = openAddBOMComponentModal;
+window.handleBOMComponentModalInput = handleBOMComponentModalInput;
+window.executeAddDirectComponentToBOMPage = executeAddDirectComponentToBOMPage;
+window.executeSubmitPurchasingFromBOMPage = executeSubmitPurchasingFromBOMPage;

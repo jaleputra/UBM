@@ -59,9 +59,23 @@ function getProjectWarrantyInfo(project) {
   // Total Nilai Order / Penjualan (Grand Total jika ada, atau itemsTotal / project budget)
   const orderTotal = parseFloat(order?.grandTotal || quotation?.grandTotal || (itemsTotal > 0 ? itemsTotal : (project?.totalBudget || 0))) || 0;
 
-  // Nominal Biaya / Plafon Garansi 5% yang Ditentukan (Terkunci Sesuai Penawaran / Quotation)
+  // Cek apakah proyek ini memiliki garansi atau Tanpa Garansi (0 Bulan / Rp 0 / 'Tidak Ada Garansi')
+  const isNoWarranty = 
+    quotation?.warrantyMonths === 0 ||
+    quotation?.warrantyFee === 0 ||
+    order?.warrantyFee === 0 ||
+    (typeof quotation?.warranty === 'string' && (quotation.warranty.toLowerCase().includes('tidak ada') || quotation.warranty === '0' || quotation.warranty === '0 Bulan')) ||
+    (typeof order?.warranty === 'string' && (order.warranty.toLowerCase().includes('tidak ada') || order.warranty === '0' || order.warranty === '0 Bulan')) ||
+    (typeof order?.notes === 'string' && order.notes.toLowerCase().includes('tidak ada garansi')) ||
+    (typeof project?.warrantyText === 'string' && project.warrantyText.toLowerCase().includes('tidak ada'));
+
+  // Nominal Biaya / Plafon Garansi Sesuai Penawaran / Quotation
   let allocatedWarrantyAmount = 0;
-  if (quotation?.warrantyFee !== undefined && quotation?.warrantyFee !== null && parseFloat(quotation.warrantyFee) > 0) {
+  if (isNoWarranty) {
+    allocatedWarrantyAmount = 0;
+    warrantyText = 'Tidak Ada Garansi (0 Bulan)';
+    months = 0;
+  } else if (quotation?.warrantyFee !== undefined && quotation?.warrantyFee !== null && parseFloat(quotation.warrantyFee) > 0) {
     allocatedWarrantyAmount = parseFloat(quotation.warrantyFee);
   } else if (order?.warrantyFee !== undefined && order?.warrantyFee !== null && parseFloat(order.warrantyFee) > 0) {
     allocatedWarrantyAmount = parseFloat(order.warrantyFee);
@@ -73,7 +87,7 @@ function getProjectWarrantyInfo(project) {
     allocatedWarrantyAmount = parseFloat(project.warrantyBudget);
   } else {
     // Sesuai rumus Quotation: 5% dari total produk & jasa (itemsTotal sebelum pajak)
-    allocatedWarrantyAmount = itemsTotal > 0 ? Math.round(itemsTotal * 0.05) : (orderTotal > 0 ? Math.round(orderTotal * 0.05) : 1000000);
+    allocatedWarrantyAmount = itemsTotal > 0 ? Math.round(itemsTotal * 0.05) : (orderTotal > 0 ? Math.round(orderTotal * 0.05) : 0);
   }
 
   // Riwayat klaim garansi untuk project ini
@@ -1739,17 +1753,18 @@ function getProjectFinancialData(project) {
     (q.projectName && q.projectName.toLowerCase() === project.projectName?.toLowerCase())
   );
 
-  // 1. NILAI KONTRAK DASAR (DPP Penjualan Quotation / SO)
-  const mainItemsVal = parseFloat(
+  // 1. NILAI KONTRAK DASAR (DPP Penjualan Order Penjualan / Quotation)
+  const contractSellingPrice = parseFloat(
+    order?.grandTotal ||
+    quotation?.grandTotal ||
+    order?.itemsTotal ||
     quotation?.itemsTotal ||
-    (quotation?.items && quotation.items.length > 0 ? quotation.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
-    (order?.items && order.items.length > 0 ? order.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
     order?.subtotal ||
     quotation?.subtotal ||
+    (order?.items && order.items.length > 0 ? order.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
+    project?.totalBudget ||
     0
   ) || 0;
-
-  const contractSellingPrice = mainItemsVal > 0 ? mainItemsVal : (parseFloat(order?.grandTotal || quotation?.grandTotal || project?.totalBudget || 0) || 0);
 
   // 2. KORELASI DENGAN INVOICE & REALISASI PEMBAYARAN
   const linkedInvoices = (state.invoices || []).filter(inv => 
@@ -1806,103 +1821,90 @@ function getProjectFinancialData(project) {
     paymentPercentage = 0;
   }
 
-  // 3. HARGA JUAL REALISASI (SELLING PRICE AKTIF MENGIKUTI PEMBAYARAN INVOICE)
-  let sellingPrice = 0;
-  if (invoiceStatus === 'Paid') {
-    sellingPrice = contractSellingPrice > 0 ? contractSellingPrice : totalPaidAmount;
-  } else if (invoiceStatus === 'Partial' || totalPaidAmount > 0) {
-    if (invoiceGrandTotal > 0 && contractSellingPrice > 0) {
-      sellingPrice = Math.round((totalPaidAmount / invoiceGrandTotal) * contractSellingPrice);
-    } else {
-      sellingPrice = totalPaidAmount;
-    }
-  } else {
-    sellingPrice = 0;
-  }
+  // 3. HARGA JUAL PROYEK (Mengacu Penuh ke Nilai Order Penjualan)
+  const sellingPrice = contractSellingPrice > 0 ? contractSellingPrice : (invoiceGrandTotal || totalPaidAmount || 0);
 
-  // 4. HARGA MODAL (HPP / COGS)
+  // 4. HARGA MODAL (HPP / COGS DARI BOM)
   let materialCost = 0;
   let laborCost = 0;
   let overheadCost = 0;
   let isCustomCost = false;
 
-  if (project.modalCost && typeof project.modalCost === 'object') {
+  // Cek BOM terkait proyek
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === project.id || 
+    b.orderId === (project.orderId || project.id) || 
+    (project.bomId && b.id === project.bomId) ||
+    (quotation?.id && b.quotationId === quotation.id) ||
+    (b.projectName && b.projectName.toLowerCase().trim() === project.projectName?.toLowerCase().trim()) ||
+    (b.productName && b.productName.toLowerCase().trim() === project.projectName?.toLowerCase().trim())
+  );
+
+  if (project.modalCost && typeof project.modalCost === 'object' && project.modalCost.isManualCustom) {
     isCustomCost = true;
     materialCost = parseFloat(project.modalCost.material) || 0;
     laborCost = parseFloat(project.modalCost.labor) || 0;
     overheadCost = parseFloat(project.modalCost.overhead) || 0;
+  } else if (project.actualUsageReport?.items && project.actualUsageReport.items.length > 0) {
+    materialCost = project.actualUsageReport.items.reduce((sum, item) => {
+      const qty = parseFloat(item.actualQty ?? item.planQty ?? 0) || 0;
+      const cost = parseFloat(item.unitCost ?? item.unitPrice ?? 0) || 0;
+      return sum + (qty * cost);
+    }, 0);
+    laborCost = parseFloat(linkedBom?.laborCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.labor : 0) || 0);
+    overheadCost = parseFloat(linkedBom?.overheadCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.overhead : 0) || 0);
+  } else if (linkedBom) {
+    if (linkedBom.components && linkedBom.components.length > 0) {
+      materialCost = linkedBom.components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost || c.actualPrice || c.purchasePrice || 0))), 0);
+    } else {
+      materialCost = parseFloat(linkedBom.materialCost || linkedBom.totalEstimatedCost || linkedBom.totalCost || 0);
+    }
+    laborCost = parseFloat(linkedBom.laborCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.labor : 0) || 0);
+    overheadCost = parseFloat(linkedBom.overheadCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.overhead : 0) || 0);
+  } else if (project.modalCost && typeof project.modalCost === 'object') {
+    materialCost = parseFloat(project.modalCost.material) || 0;
+    laborCost = parseFloat(project.modalCost.labor) || 0;
+    overheadCost = parseFloat(project.modalCost.overhead) || 0;
   } else {
-    if (project.actualUsageReport?.items && project.actualUsageReport.items.length > 0) {
-      materialCost = project.actualUsageReport.items.reduce((sum, item) => {
-        const qty = parseFloat(item.actualQty ?? item.planQty ?? 0) || 0;
-        const cost = parseFloat(item.unitCost ?? item.unitPrice ?? 0) || 0;
-        return sum + (qty * cost);
-      }, 0);
-    } else {
-      const linkedBom = (state.bom || []).find(b => 
-        b.projectId === project.id || 
-        b.orderId === (project.orderId || project.id) || 
-        (quotation?.id && b.quotationId === quotation.id) ||
-        (b.projectName && b.projectName.toLowerCase() === project.projectName?.toLowerCase())
-      );
-      if (linkedBom && (linkedBom.totalEstimatedCost || linkedBom.materialCost || linkedBom.totalCost || (linkedBom.items && linkedBom.items.length > 0))) {
-        materialCost = parseFloat(linkedBom.materialCost || linkedBom.totalEstimatedCost || linkedBom.totalCost || 0);
-        if (materialCost === 0 && linkedBom.items) {
-          materialCost = linkedBom.items.reduce((sum, it) => sum + (parseFloat(it.totalCost || it.total || (it.qty * (it.unitCost || it.unitPrice || 0))) || 0), 0);
-        }
-      } else {
-        const linkedPRs = (state.purchasing || []).filter(pr => 
-          pr.projectId === project.id || 
-          pr.orderId === (project.orderId || project.id) ||
-          (pr.purpose && pr.purpose.toLowerCase().includes(project.projectName?.toLowerCase()))
-        );
-        if (linkedPRs.length > 0) {
-          materialCost = linkedPRs.reduce((sum, pr) => sum + (parseFloat(pr.totalEstimated || pr.totalAmount || 0) || (pr.items || []).reduce((isum, it) => isum + (it.qty * (it.actualPrice || it.unitPrice || 0)), 0)), 0);
-        } else {
-          materialCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.55) : 0;
-        }
-      }
+    const linkedPRs = (state.purchasing || []).filter(pr => 
+      pr.projectId === project.id || 
+      pr.orderId === (project.orderId || project.id) ||
+      (pr.purpose && pr.purpose.toLowerCase().includes(project.projectName?.toLowerCase()))
+    );
+    if (linkedPRs.length > 0) {
+      materialCost = linkedPRs.reduce((sum, pr) => sum + (parseFloat(pr.totalEstimated || pr.totalAmount || 0) || (pr.items || []).reduce((isum, it) => isum + (it.qty * (it.actualPrice || it.unitPrice || 0)), 0)), 0);
     }
-
-    const serviceItemsTotal = parseFloat(quotation?.servicesTotal || 0);
-    if (serviceItemsTotal > 0) {
-      laborCost = Math.round(serviceItemsTotal * 0.6);
-    } else {
-      laborCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.12) : 0;
-    }
-
-    overheadCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.05) : 0;
   }
 
   const modalTotal = materialCost + laborCost + overheadCost;
 
-  // 5. GARANSI (Alokasi 5% dari Kontrak & Realisasi Klaim Terpakai)
-  const allocatedWarranty = warrantyInfo ? warrantyInfo.allocatedWarrantyAmount : Math.round(contractSellingPrice * 0.05);
-  const claimedWarranty = warrantyInfo ? warrantyInfo.totalClaimed : 0;
-  const remainingWarranty = allocatedWarranty - claimedWarranty;
+  // 5. GARANSI (Alokasi Plafon Garansi Sesuai Ketentuan)
+  const isNoWarranty = 
+    quotation?.warrantyMonths === 0 ||
+    quotation?.warrantyFee === 0 ||
+    order?.warrantyFee === 0 ||
+    (typeof quotation?.warranty === 'string' && (quotation.warranty.toLowerCase().includes('tidak ada') || quotation.warranty === '0' || quotation.warranty === '0 Bulan')) ||
+    (typeof order?.warranty === 'string' && (order.warranty.toLowerCase().includes('tidak ada') || order.warranty === '0' || order.warranty === '0 Bulan')) ||
+    (typeof order?.notes === 'string' && order.notes.toLowerCase().includes('tidak ada garansi')) ||
+    (warrantyInfo && warrantyInfo.hasWarranty === false);
 
-  // 6. KEUNTUNGAN BERSIH & MARGIN LABA (MENGIKUTI REALISASI PEMBAYARAN)
+  const allocatedWarranty = isNoWarranty 
+    ? 0 
+    : (warrantyInfo ? warrantyInfo.allocatedWarrantyAmount : (quotation?.warrantyFee ? parseFloat(quotation.warrantyFee) : Math.round(contractSellingPrice * 0.05)));
+  const claimedWarranty = warrantyInfo ? warrantyInfo.totalClaimed : 0;
+  const remainingWarranty = Math.max(0, allocatedWarranty - claimedWarranty);
+
+  // 6. KEUNTUNGAN BERSIH & MARGIN LABA
   const grossProfit = sellingPrice - modalTotal;
   const netProfit = grossProfit - claimedWarranty;
-  const profitMargin = sellingPrice > 0 ? ((netProfit / sellingPrice) * 100) : (modalTotal + claimedWarranty > 0 ? -100 : 0);
+  const profitMargin = sellingPrice > 0 ? ((netProfit / sellingPrice) * 100) : 0;
 
-  // Status & Indikator Profit
   let profitLevel = 'GOOD';
   let profitLabel = 'Menguntungkan';
   let profitBadgeClass = 'badge-primary';
   let profitColor = '#2563eb';
 
-  if (invoiceStatus === 'Unpaid' || (totalPaidAmount === 0 && sellingPrice === 0)) {
-    profitLevel = 'UNPAID';
-    profitLabel = 'Belum Dibayar (Defisit Modal)';
-    profitBadgeClass = 'badge-danger';
-    profitColor = '#dc2626';
-  } else if (invoiceStatus === 'Partial' && netProfit < 0) {
-    profitLevel = 'PARTIAL_DEFICIT';
-    profitLabel = 'Sebagian (Belum Balik Modal)';
-    profitBadgeClass = 'badge-warning';
-    profitColor = '#d97706';
-  } else if (profitMargin >= 30) {
+  if (profitMargin >= 30) {
     profitLevel = 'HIGH';
     profitLabel = 'Sangat Menguntungkan';
     profitBadgeClass = 'badge-success';

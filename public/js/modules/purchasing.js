@@ -255,6 +255,50 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
       }
     }
 
+    // Hitung alokasi pemakaian pada BOM dan pengembalian sisa material dari Laporan Pelaksanaan Project
+    const bomList = state.bom || [];
+    const activeBoms = bomList.filter(b => b.status !== 'Rejected' && b.status !== 'Ditolak');
+
+    const reportsList = state.project_reports || [];
+    const allReports = [...reportsList];
+    (state.projects || []).forEach(p => {
+      if (p.actualUsageReport && !allReports.some(r => r.id === p.actualUsageReport.id)) {
+        allReports.push(p.actualUsageReport);
+      }
+    });
+
+    for (const mItem of masterMap.values()) {
+      const itemLower = (mItem.itemName || '').toLowerCase().trim();
+      mItem.inboundQty = mItem.qty; // Total yang dibeli / masuk dari PR
+
+      let usedInBom = 0;
+      activeBoms.forEach(b => {
+        (b.components || []).forEach(c => {
+          const cName = (c.componentName || '').toLowerCase().trim();
+          if (cName === itemLower) {
+            usedInBom += parseFloat(c.qty) || 0;
+          }
+        });
+      });
+      mItem.usedInBom = usedInBom;
+
+      let returnedQty = 0;
+      allReports.forEach(r => {
+        (r.items || []).forEach(it => {
+          const rName = (it.itemName || '').toLowerCase().trim();
+          if (rName === itemLower) {
+            const rem = parseFloat(it.remainingQty ?? it.returnedQty ?? 0) || 0;
+            if (rem > 0) returnedQty += rem;
+          }
+        });
+      });
+      mItem.returnedQty = returnedQty;
+
+      mItem.qty = Math.max(0, mItem.inboundQty - mItem.usedInBom + mItem.returnedQty);
+      mItem.totalCost = mItem.qty * mItem.unitCost;
+      mItem.status = mItem.qty > 0 ? 'Sesuai & Tersedia' : (mItem.usedInBom > 0 ? 'Terpakai di BOM (0)' : 'Habis (0)');
+    }
+
     for (const mItem of masterMap.values()) {
       await directSupabaseUpsertNativeRow('master_items', mItem);
     }
@@ -1159,6 +1203,53 @@ function renderPurchasingItemsTable() {
 
   const masterList = Array.from(masterMap.values());
 
+  // Hitung pemakaian di BOM dan pengembalian sisa material dari Laporan Project
+  const bomList = state.bom || [];
+  const activeBoms = bomList.filter(b => b.status !== 'Rejected' && b.status !== 'Ditolak');
+
+  const reportsList = state.project_reports || [];
+  const allReports = [...reportsList];
+  (state.projects || []).forEach(p => {
+    if (p.actualUsageReport && !allReports.some(r => r.id === p.actualUsageReport.id)) {
+      allReports.push(p.actualUsageReport);
+    }
+  });
+
+  masterList.forEach(mItem => {
+    const itemLower = (mItem.itemName || '').toLowerCase().trim();
+    mItem.inboundQty = mItem.qty; // Qty awal masuk dari PR
+
+    // Hitung pemakaian di BOM
+    let usedInBom = 0;
+    activeBoms.forEach(b => {
+      (b.components || []).forEach(c => {
+        const cName = (c.componentName || '').toLowerCase().trim();
+        if (cName === itemLower) {
+          usedInBom += parseFloat(c.qty) || 0;
+        }
+      });
+    });
+    mItem.usedInBom = usedInBom;
+
+    // Hitung pengembalian dari laporan pelaksanaan project
+    let returnedQty = 0;
+    allReports.forEach(r => {
+      (r.items || []).forEach(it => {
+        const rName = (it.itemName || '').toLowerCase().trim();
+        if (rName === itemLower) {
+          const rem = parseFloat(it.remainingQty ?? it.returnedQty ?? 0) || 0;
+          if (rem > 0) returnedQty += rem;
+        }
+      });
+    });
+    mItem.returnedQty = returnedQty;
+
+    // Stok Tersedia: Masuk - Terpakai BOM + Dikembalikan Laporan
+    mItem.qty = Math.max(0, mItem.inboundQty - mItem.usedInBom + mItem.returnedQty);
+    mItem.totalCost = mItem.qty * mItem.unitCost;
+    mItem.status = mItem.qty > 0 ? 'Sesuai & Tersedia' : (mItem.usedInBom > 0 ? 'Terpakai di BOM (0)' : 'Habis (0)');
+  });
+
   // Hitung KPI Stat Cards Master Barang
   const totalMasterCount = masterList.length;
   const totalQty = masterList.reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0);
@@ -1250,16 +1341,28 @@ function renderPurchasingItemsTable() {
             ${prBadges}
           </div>
         </td>
-        <td class="text-center font-bold" style="font-size: 14px; color: ${isOutOfStock ? '#dc2626' : '#15803d'};">
-          ${item.qty}
+        <td class="text-center">
+          <div class="font-bold" style="font-size: 14px; color: ${item.qty <= 0 ? (item.usedInBom > 0 ? '#b45309' : '#dc2626') : '#15803d'};">
+            ${item.qty} ${escapeAttr(item.unit)}
+          </div>
+          <div style="font-size: 10px; color: #64748b; margin-top: 2px; line-height: 1.25;">
+            <span title="Total Masuk Pengadaan PR">Masuk: <strong>${item.inboundQty}</strong></span>
+            ${item.usedInBom > 0 ? `<br><span style="color: #b45309;" title="Digunakan pada formula BOM Proyek">BOM: <strong>-${item.usedInBom}</strong></span>` : ''}
+            ${item.returnedQty > 0 ? `<br><span style="color: #15803d;" title="Dikembalikan dari sisa Laporan Pelaksanaan Proyek">Sisa: <strong>+${item.returnedQty}</strong></span>` : ''}
+          </div>
         </td>
         <td class="text-center"><span class="badge badge-outline" style="font-size: 11px;">${escapeAttr(item.unit)}</span></td>
         <td class="text-right font-mono">${formatRupiah(item.unitCost)}</td>
         <td class="text-right font-mono font-bold text-primary">${formatRupiah(item.totalCost)}</td>
         <td class="text-center">
-          <span class="badge ${isOutOfStock ? 'badge-danger' : 'badge-success'}" style="font-size: 11px; font-weight: 600;">
-            ${isOutOfStock ? '🔴 Habis (0)' : '🟢 Sesuai & Tersedia'}
+          <span class="badge ${item.qty <= 0 ? (item.usedInBom > 0 ? 'badge-warning' : 'badge-danger') : 'badge-success'}" style="font-size: 11px; font-weight: 600;">
+            ${item.qty <= 0 ? (item.usedInBom > 0 ? '🟡 Terpakai di BOM (0)' : '🔴 Habis (0)') : '🟢 Sesuai & Tersedia'}
           </span>
+          ${item.returnedQty > 0 ? `
+            <div style="font-size: 9.5px; color: #15803d; font-weight: 700; margin-top: 3px;">
+              +${item.returnedQty} Dikembalikan
+            </div>
+          ` : ''}
         </td>
         <td class="text-right">
           <div class="table-actions" style="justify-content: flex-end; gap: 4px;">
@@ -1750,7 +1853,7 @@ function openPurchasingModal(prData = null, isClone = false) {
   if (window.lucide) lucide.createIcons();
 }
 
-// Helper: Ambil daftar Master Barang unik yang berstatus 'Sesuai'
+// Helper: Ambil daftar Master Barang unik yang berstatus 'Sesuai' beserta stok tersedia riil
 function getMasterItemsList() {
   const prList = state.purchasing || [];
   const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
@@ -1774,18 +1877,58 @@ function getMasterItemsList() {
           specs: specs,
           unit: item.unit || 'Pcs',
           qty: qty,
+          inboundQty: qty,
           unitCost: unitCost,
           sourcePrId: pr.id
         });
       } else {
         const existing = masterMap.get(key);
         existing.qty += qty;
+        existing.inboundQty = existing.qty;
         if (unitCost > 0) existing.unitCost = unitCost;
       }
     });
   });
 
-  return Array.from(masterMap.values());
+  const list = Array.from(masterMap.values());
+  const bomList = state.bom || [];
+  const activeBoms = bomList.filter(b => b.status !== 'Rejected' && b.status !== 'Ditolak');
+  const reportsList = state.project_reports || [];
+  const allReports = [...reportsList];
+  (state.projects || []).forEach(p => {
+    if (p.actualUsageReport && !allReports.some(r => r.id === p.actualUsageReport.id)) {
+      allReports.push(p.actualUsageReport);
+    }
+  });
+
+  list.forEach(mItem => {
+    const itemLower = (mItem.itemName || '').toLowerCase().trim();
+    let usedInBom = 0;
+    activeBoms.forEach(b => {
+      (b.components || []).forEach(c => {
+        const cName = (c.componentName || '').toLowerCase().trim();
+        if (cName === itemLower) {
+          usedInBom += parseFloat(c.qty) || 0;
+        }
+      });
+    });
+    mItem.usedInBom = usedInBom;
+
+    let returnedQty = 0;
+    allReports.forEach(r => {
+      (r.items || []).forEach(it => {
+        const rName = (it.itemName || '').toLowerCase().trim();
+        if (rName === itemLower) {
+          const rem = parseFloat(it.remainingQty ?? it.returnedQty ?? 0) || 0;
+          if (rem > 0) returnedQty += rem;
+        }
+      });
+    });
+    mItem.returnedQty = returnedQty;
+    mItem.qty = Math.max(0, mItem.inboundQty - mItem.usedInBom + mItem.returnedQty);
+  });
+
+  return list;
 }
 
 function onSelectMasterItemName(inputEl) {
@@ -2170,4 +2313,7 @@ function duplicateAndReapplyPR(prId) {
   openPurchasingModal(clonedData, true);
   showToast(`Data PR ${pr.id} berhasil disalin! Silakan sesuaikan rincian dan klik 'Ajukan Pengadaan Baru'.`, 'info');
 }
+
+// Global window exposure
+window.getMasterItemsList = getMasterItemsList;
 

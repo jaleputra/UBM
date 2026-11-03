@@ -26,6 +26,7 @@ Object.assign(state, {
   activity_logs: state.activity_logs || [],
   partnerships: state.partnerships || [],
   service_expenses: state.service_expenses || [],
+  project_finances: state.project_finances || [],
   roles: state.roles || [],
   users: (function() {
     try {
@@ -289,6 +290,7 @@ async function loadAllData() {
       fetchResource('activity_logs'),
       fetchResource('partnerships'),
       fetchResource('service_expenses'),
+      fetchResource('project_finances'),
       fetchResource('roles'),
       fetchResource('users'),
       fetchResource('settings')
@@ -502,11 +504,10 @@ function updateSidebarBadges() {
 
   const badgeFinance = document.getElementById('badge-finance-count');
   if (badgeFinance) {
-    const completedCount = (state.projects || []).filter(p => {
-      const orderExists = (state.orders || []).some(o => o.id === p.orderId || o.id === p.id);
-      return orderExists && (p.status === 'Completed' || p.progressPercent === 100 || (p.milestones && p.milestones.length > 0 && p.milestones.every(m => m.status === 'Completed')));
-    }).length;
-    badgeFinance.textContent = completedCount || (state.projects || []).length || 0;
+    const list = (state.project_finances && state.project_finances.length > 0)
+      ? state.project_finances
+      : (typeof getAllProjectsForFinance === 'function' ? getAllProjectsForFinance() : ((state.projects && state.projects.length) ? state.projects : (state.orders || [])));
+    badgeFinance.textContent = list.length || 0;
   }
 
   if (typeof updateBOMTabBadges === 'function') {

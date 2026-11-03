@@ -500,6 +500,70 @@ ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS report JSONB DEFAULT '
 ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- ---------------------------------------------------------
+-- 17. TABLE: project_finances (Keuangan & Profitabilitas Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.project_finances (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    quotation_id VARCHAR(50),
+    invoice_id VARCHAR(50),
+    project_name VARCHAR(255) NOT NULL,
+    customer_name VARCHAR(255) NOT NULL,
+    project_lead VARCHAR(150),
+    status VARCHAR(50) DEFAULT 'Planning',
+    contract_selling_price NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    selling_price NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    material_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    labor_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    overhead_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    modal_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    allocated_warranty NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    claimed_warranty NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    remaining_warranty NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    gross_profit NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    net_profit NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    profit_margin NUMERIC(6, 2) NOT NULL DEFAULT 0,
+    profit_level VARCHAR(50) DEFAULT 'GOOD',
+    invoice_status VARCHAR(50) DEFAULT 'Unpaid',
+    invoice_grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    total_paid_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    balance_due NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    is_custom_cost BOOLEAN DEFAULT FALSE,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS project_id VARCHAR(50);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS order_id VARCHAR(50);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS quotation_id VARCHAR(50);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS invoice_id VARCHAR(50);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS project_lead VARCHAR(150);
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Planning';
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS contract_selling_price NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS selling_price NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS material_cost NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS labor_cost NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS overhead_cost NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS modal_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS allocated_warranty NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS claimed_warranty NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS remaining_warranty NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS gross_profit NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS net_profit NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS profit_margin NUMERIC(6, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS profit_level VARCHAR(50) DEFAULT 'GOOD';
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS invoice_status VARCHAR(50) DEFAULT 'Unpaid';
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS invoice_grand_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS total_paid_amount NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS balance_due NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS is_custom_cost BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.project_finances ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- ---------------------------------------------------------
 -- 17. TABLE: roles (Master Role & Matriks Hak Akses Pengguna)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.roles (
@@ -707,6 +771,10 @@ CREATE INDEX IF NOT EXISTS idx_project_reports_order_id ON public.project_report
 CREATE INDEX IF NOT EXISTS idx_project_reports_project_id ON public.project_reports(project_id);
 CREATE INDEX IF NOT EXISTS idx_partnerships_order_id ON public.partnerships(order_id);
 CREATE INDEX IF NOT EXISTS idx_service_expenses_order_id ON public.service_expenses(order_id);
+CREATE INDEX IF NOT EXISTS idx_project_finances_project_id ON public.project_finances(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_finances_order_id ON public.project_finances(order_id);
+CREATE INDEX IF NOT EXISTS idx_project_finances_status ON public.project_finances(status);
+CREATE INDEX IF NOT EXISTS idx_project_finances_profit_level ON public.project_finances(profit_level);
 CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 
@@ -742,6 +810,7 @@ ALTER TABLE public.warranty_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partnerships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_finances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
@@ -799,6 +868,9 @@ CREATE POLICY "Allow all access to service_expenses" ON public.service_expenses 
 
 DROP POLICY IF EXISTS "Allow all access to activity_logs" ON public.activity_logs;
 CREATE POLICY "Allow all access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to project_finances" ON public.project_finances;
+CREATE POLICY "Allow all access to project_finances" ON public.project_finances FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all access to roles" ON public.roles;
 CREATE POLICY "Allow all access to roles" ON public.roles FOR ALL USING (true) WITH CHECK (true);

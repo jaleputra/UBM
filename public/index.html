@@ -1126,27 +1126,51 @@
               </div>
             </div>
 
-            <!-- MILESTONES CARD -->
-            <div class="card" style="border: 1px solid var(--border-color); padding: 18px; margin-bottom: 20px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
-                <div>
-                  <h3 style="font-size: 15px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
-                    <i data-lucide="calendar-range" style="color: #4f46e5;"></i> Kalender Blok & Tahapan Kerja Milestone Project
-                  </h3>
-                  <p style="font-size: 11.5px; color: var(--text-muted); margin: 3px 0 0 0;">
-                    Setiap milestone memiliki <strong>blok warna tersendiri</strong>. Klik pada blok warna untuk membuka detail sub-task, laporan teknis, dan tautan hasil kerja.
-                  </p>
+            <!-- MILESTONES CARD (COMPACT DESIGN) -->
+            <div class="card" style="border: 1px solid var(--border-color); padding: 12px 16px; margin-bottom: 14px; border-radius: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <div>
+                    <h3 style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 6px;">
+                      <i data-lucide="calendar-range" style="color: #4f46e5; width: 16px; height: 16px;"></i>
+                      Kalender Blok &amp; Tahapan Kerja Milestone
+                    </h3>
+                    <p style="font-size: 11px; color: var(--text-muted); margin: 1px 0 0 0;">
+                      Klik baris tahapan untuk rincian sub-task, laporan teknis, dan tautan hasil kerja.
+                    </p>
+                  </div>
+
+                  <!-- COMPACT VIEW SWITCHER (DAFTAR TAHAP vs KALENDER BULAN) -->
+                  <div style="display: inline-flex; background: #f1f5f9; padding: 2px; border-radius: 6px; border: 1px solid #e2e8f0; gap: 2px;">
+                    <button type="button" id="tab-timeline-view-blocks" class="btn btn-xs" style="padding: 3px 9px; font-size: 11px; font-weight: 700; border-radius: 4px; border: none; background: #ffffff; color: #4f46e5; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: inline-flex; align-items: center; gap: 4px;" onclick="switchTimelineTabMode('blocks')">
+                      <i data-lucide="list-todo" style="width: 12px; height: 12px;"></i> Daftar Tahap (<span id="timeline-blocks-count-badge">0</span>)
+                    </button>
+                    <button type="button" id="tab-timeline-view-calendar" class="btn btn-xs" style="padding: 3px 9px; font-size: 11px; font-weight: 600; border-radius: 4px; border: none; background: transparent; color: #64748b; display: inline-flex; align-items: center; gap: 4px;" onclick="switchTimelineTabMode('calendar')">
+                      <i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Kalender Bulan
+                    </button>
+                  </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-primary" onclick="addNewMilestoneInteractive()"><i data-lucide="plus"></i> + Tambah Milestone</button>
+
+                <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" id="btn-timeline-add-component" class="btn btn-xs" style="display: none; background: #059669; color: #ffffff; border-color: #059669; font-weight: 700; padding: 4px 10px; border-radius: 5px; align-items: center; gap: 4px; font-size: 11px;" onclick="openAddProjectComponentModal()" title="Tambah Komponen Tambahan ke BOM Proyek">
+                    <i data-lucide="boxes" style="width: 13px; height: 13px;"></i> + Tambah Komponen
+                  </button>
+                  <button type="button" class="btn btn-xs btn-primary" style="padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" onclick="addNewMilestoneInteractive()">
+                    <i data-lucide="plus" style="width: 13px; height: 13px;"></i> + Tambah Milestone
+                  </button>
+                </div>
               </div>
 
-              <!-- 1. HORIZONTAL CALENDAR BLOCKS CONTAINER (BERBEDA WARNA SETIAP MILESTONE) -->
-              <div id="timeline-calendar-blocks" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px;">
+              <!-- BOM COMPONENT STATUS BANNER (AKTIF SAAT BOM DISETUJUI - SLIM BAR) -->
+              <div id="timeline-bom-component-info" style="margin-bottom: 8px; display: none;"></div>
+
+              <!-- 1. COMPACT HORIZONTAL CALENDAR BLOCKS CONTAINER -->
+              <div id="timeline-calendar-blocks" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px;">
                 <!-- Populated dynamically via projects.js -->
               </div>
 
-              <!-- 2. MONTHLY CALENDAR GRID (KALENDER BULANAN INTERAKTIF DENGAN TIKET WARNA) -->
-              <div id="timeline-month-calendar" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 18px; margin-bottom: 8px;">
+              <!-- 2. MONTHLY CALENDAR GRID (KALENDER BULANAN COMPACT) -->
+              <div id="timeline-month-calendar" style="display: none; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 6px;">
                 <!-- Monthly day-cells with colored milestone tags -->
               </div>
 
@@ -1356,7 +1380,10 @@
                     </h3>
                     <span class="text-muted font-sm" style="font-size: 11px;">Pilih bahan dan komponen langsung dari data Inventory</span>
                   </div>
-                  <div id="bom-components-action-btns" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <div id="bom-components-action-btns" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button type="button" class="btn btn-sm btn-success" id="btn-bom-add-component" onclick="openAddBOMComponentModal()" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" title="Tambah komponen yang diperlukan tanpa merubah komponen sebelumnya">
+                      <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i> + Tambah Komponen
+                    </button>
                     <button type="button" class="btn btn-sm btn-primary" onclick="openPRPickerModal()" title="Pilih bahan dan komponen dari Inventory">
                       <i data-lucide="boxes"></i> Inventory
                     </button>
@@ -1367,6 +1394,11 @@
                 </div>
 
                 <div id="page-bom-components-list"></div>
+                <div id="bom-components-bottom-add-btn" style="margin-top: 10px; display: flex;">
+                  <button type="button" class="btn btn-sm btn-outline" onclick="openAddBOMComponentModal()" style="color: #059669; border-color: #a7f3d0; background: #f0fdf4; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" title="Tambah komponen yang diperlukan tanpa merubah komponen sebelumnya">
+                    <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i> + Tambah Komponen Baru
+                  </button>
+                </div>
               </div>
 
               <!-- Bottom Action Bar -->
@@ -2181,6 +2213,7 @@
             <!-- ACTION & FILTER BAR -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="filter-finance-search" class="form-control-sm" placeholder="🔍 Cari nama project, pelanggan, ID..." oninput="filterFinanceTable()" style="height: 36px; min-width: 250px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 6px; padding: 0 12px; font-size: 13px;">
                 <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
                   <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
                   <option value="PAID">💵 Lunas (Invoice Paid)</option>
@@ -4036,18 +4069,18 @@
   <script src="js/modules/logs.js?v=20261029_1"></script>
   <script src="js/modules/quotations.js?v=20261102_2"></script>
   <script src="js/modules/orders.js?v=20261102_3"></script>
-  <script src="js/modules/projects.js?v=20261102_5"></script>
-  <script src="js/modules/bom.js?v=20261102_3"></script>
-  <script src="js/modules/purchasing.js?v=20261029_1"></script>
+  <script src="js/modules/projects.js?v=20261103_2"></script>
+  <script src="js/modules/bom.js?v=20261103_2"></script>
+  <script src="js/modules/purchasing.js?v=20261103_1"></script>
   <script src="js/modules/po.js?v=20261029_1"></script>
   <script src="js/modules/delivery.js?v=20261029_1"></script>
   <script src="js/modules/invoices.js?v=20261029_1"></script>
   <script src="js/modules/bast.js?v=20261029_1"></script>
-  <script src="js/modules/project_reports.js?v=20261102_3"></script>
-  <script src="js/modules/service.js?v=20261029_1"></script>
+  <script src="js/modules/project_reports.js?v=20261103_1"></script>
+  <script src="js/modules/service.js?v=20261103_1"></script>
   <script src="js/modules/maintenance.js?v=20261029_1"></script>
-  <script src="js/modules/finance.js?v=20261102_3"></script>
+  <script src="js/modules/finance.js?v=20261103_4"></script>
   <script src="js/modules/settings.js?v=20261102_5"></script>
-  <script src="js/app.js?v=20261102_5"></script>
+  <script src="js/app.js?v=20261103_4"></script>
 </body>
 </html>

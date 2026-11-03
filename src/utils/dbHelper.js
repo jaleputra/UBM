@@ -44,6 +44,7 @@ const DEFAULT_SCHEMA = {
   users: [],
   partnerships: [],
   service_expenses: [],
+  project_finances: [],
   settings: {}
 };
 
@@ -394,6 +395,28 @@ function prepareNativeTablePayload(resourceName, rawItem) {
     item.status = item.status || 'Aktif';
     item.avatar = item.avatar || 'US';
     item.permissions = (item.permissions && typeof item.permissions === 'object') ? item.permissions : {};
+  } else if (resourceName === 'project_finances') {
+    item.projectName = item.projectName || 'Project UBM';
+    item.customerName = item.customerName || '-';
+    item.status = item.status || 'Planning';
+    item.contractSellingPrice = Number(item.contractSellingPrice ?? 0);
+    item.sellingPrice = Number(item.sellingPrice ?? item.contractSellingPrice ?? 0);
+    item.materialCost = Number(item.materialCost ?? 0);
+    item.laborCost = Number(item.laborCost ?? 0);
+    item.overheadCost = Number(item.overheadCost ?? 0);
+    item.modalTotal = Number(item.modalTotal ?? (item.materialCost + item.laborCost + item.overheadCost) ?? 0);
+    item.allocatedWarranty = Number(item.allocatedWarranty ?? 0);
+    item.claimedWarranty = Number(item.claimedWarranty ?? 0);
+    item.remainingWarranty = Number(item.remainingWarranty ?? Math.max(0, item.allocatedWarranty - item.claimedWarranty) ?? 0);
+    item.grossProfit = Number(item.grossProfit ?? (item.sellingPrice - item.modalTotal) ?? 0);
+    item.netProfit = Number(item.netProfit ?? (item.grossProfit - item.claimedWarranty) ?? 0);
+    item.profitMargin = Number(item.profitMargin ?? 0);
+    item.profitLevel = item.profitLevel || 'GOOD';
+    item.invoiceStatus = item.invoiceStatus || 'Unpaid';
+    item.invoiceGrandTotal = Number(item.invoiceGrandTotal ?? item.contractSellingPrice ?? 0);
+    item.totalPaidAmount = Number(item.totalPaidAmount ?? 0);
+    item.balanceDue = Number(item.balanceDue ?? Math.max(0, item.invoiceGrandTotal - item.totalPaidAmount) ?? 0);
+    item.isCustomCost = Boolean(item.isCustomCost);
   } else if (resourceName === 'settings') {
     item.id = item.id || 'current';
   }

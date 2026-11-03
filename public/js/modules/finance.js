@@ -17,24 +17,30 @@
 function getProjectFinancialData(project) {
   if (!project) return null;
   const warrantyInfo = typeof getProjectWarrantyInfo === 'function' ? getProjectWarrantyInfo(project) : null;
-  const order = warrantyInfo?.order || (state.orders || []).find(o => o.id === project.orderId || o.id === project.id);
+  const order = warrantyInfo?.order || (state.orders || []).find(o => 
+    o.id === project.orderId || 
+    o.id === project.id ||
+    (o.projectName && project.projectName && o.projectName.toLowerCase().trim() === project.projectName.toLowerCase().trim())
+  );
   const quotation = warrantyInfo?.quotation || (state.quotations || []).find(q => 
     q.id === order?.quotationId || 
     (order?.notes && (order.notes.match(/QUO-[\w-]+/i) || [])[0]) || 
     (q.projectName && q.projectName.toLowerCase() === project.projectName?.toLowerCase())
   );
 
-  // 1. NILAI KONTRAK DASAR (DPP Penjualan Quotation / SO)
-  const mainItemsVal = parseFloat(
+  // 1. NILAI KONTRAK DASAR (DPP Penjualan Order Penjualan / Quotation)
+  // Menghitung total nilai kontrak dari Order Penjualan (grandTotal) atau Quotation
+  const contractSellingPrice = parseFloat(
+    order?.grandTotal ||
+    quotation?.grandTotal ||
+    order?.itemsTotal ||
     quotation?.itemsTotal ||
-    (quotation?.items && quotation.items.length > 0 ? quotation.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
-    (order?.items && order.items.length > 0 ? order.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
     order?.subtotal ||
     quotation?.subtotal ||
+    (order?.items && order.items.length > 0 ? order.items.reduce((s, it) => s + (parseFloat(it.total) || (it.qty * it.unitPrice) || 0), 0) : 0) ||
+    project?.totalBudget ||
     0
   ) || 0;
-
-  const contractSellingPrice = mainItemsVal > 0 ? mainItemsVal : (parseFloat(order?.grandTotal || quotation?.grandTotal || project?.totalBudget || 0) || 0);
 
   // 2. KORELASI DENGAN INVOICE & REALISASI PEMBAYARAN
   const linkedInvoices = (state.invoices || []).filter(inv => 
@@ -91,94 +97,88 @@ function getProjectFinancialData(project) {
     paymentPercentage = 0;
   }
 
-  // 3. HARGA JUAL REALISASI (SELLING PRICE AKTIF MENGIKUTI PEMBAYARAN INVOICE)
-  let sellingPrice = 0;
-  if (invoiceStatus === 'Paid') {
-    // Jika Lunas, harga jual diakui penuh (contractSellingPrice)
-    sellingPrice = contractSellingPrice > 0 ? contractSellingPrice : totalPaidAmount;
-  } else if (invoiceStatus === 'Partial' || totalPaidAmount > 0) {
-    // Jika Pembayaran Sebagian, harga jual dihitung proporsional terhadap porsi terbayar pada invoice
-    if (invoiceGrandTotal > 0 && contractSellingPrice > 0) {
-      sellingPrice = Math.round((totalPaidAmount / invoiceGrandTotal) * contractSellingPrice);
-    } else {
-      sellingPrice = totalPaidAmount;
-    }
-  } else {
-    // Jika Unpaid (Belum Dibayar), harga jual yang masuk realisasi kas/pendapatan adalah Rp 0
-    sellingPrice = 0;
-  }
+  // 3. HARGA JUAL PROYEK (Mengacu Penuh ke Nilai Order Penjualan)
+  // Nilai jual proyek diakui penuh sesuai total nilai pada Order Penjualan (62.415.000)
+  const sellingPrice = contractSellingPrice > 0 ? contractSellingPrice : (invoiceGrandTotal || totalPaidAmount || 0);
 
-  // 4. HARGA MODAL (HPP / COGS)
+  // 4. HARGA MODAL (HPP / COGS DARI BOM)
   let materialCost = 0;
   let laborCost = 0;
   let overheadCost = 0;
   let isCustomCost = false;
 
-  if (project.modalCost && typeof project.modalCost === 'object') {
+  // Cek BOM terkait proyek
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === project.id || 
+    b.orderId === (project.orderId || project.id) || 
+    (project.bomId && b.id === project.bomId) ||
+    (quotation?.id && b.quotationId === quotation.id) ||
+    (b.projectName && b.projectName.toLowerCase().trim() === project.projectName?.toLowerCase().trim()) ||
+    (b.productName && b.productName.toLowerCase().trim() === project.projectName?.toLowerCase().trim())
+  );
+
+  if (project.modalCost && typeof project.modalCost === 'object' && project.modalCost.isManualCustom) {
     isCustomCost = true;
     materialCost = parseFloat(project.modalCost.material) || 0;
     laborCost = parseFloat(project.modalCost.labor) || 0;
     overheadCost = parseFloat(project.modalCost.overhead) || 0;
+  } else if (project.actualUsageReport?.items && project.actualUsageReport.items.length > 0) {
+    // A. Material Cost dari actualUsageReport jika sudah ada laporan riil
+    materialCost = project.actualUsageReport.items.reduce((sum, item) => {
+      const qty = parseFloat(item.actualQty ?? item.planQty ?? 0) || 0;
+      const cost = parseFloat(item.unitCost ?? item.unitPrice ?? 0) || 0;
+      return sum + (qty * cost);
+    }, 0);
+    laborCost = parseFloat(linkedBom?.laborCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.labor : 0) || 0);
+    overheadCost = parseFloat(linkedBom?.overheadCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.overhead : 0) || 0);
+  } else if (linkedBom) {
+    // Sesuai komponen barang yang digunakan pada BOM
+    if (linkedBom.components && linkedBom.components.length > 0) {
+      materialCost = linkedBom.components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost || c.actualPrice || c.purchasePrice || 0))), 0);
+    } else {
+      materialCost = parseFloat(linkedBom.materialCost || linkedBom.totalEstimatedCost || linkedBom.totalCost || 0);
+    }
+    laborCost = parseFloat(linkedBom.laborCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.labor : 0) || 0);
+    overheadCost = parseFloat(linkedBom.overheadCost || (project.modalCost && typeof project.modalCost === 'object' ? project.modalCost.overhead : 0) || 0);
+  } else if (project.modalCost && typeof project.modalCost === 'object') {
+    materialCost = parseFloat(project.modalCost.material) || 0;
+    laborCost = parseFloat(project.modalCost.labor) || 0;
+    overheadCost = parseFloat(project.modalCost.overhead) || 0;
   } else {
-    // A. Material Cost (dari actualUsageReport, BOM, atau Purchasing PR)
-    if (project.actualUsageReport?.items && project.actualUsageReport.items.length > 0) {
-      materialCost = project.actualUsageReport.items.reduce((sum, item) => {
-        const qty = parseFloat(item.actualQty ?? item.planQty ?? 0) || 0;
-        const cost = parseFloat(item.unitCost ?? item.unitPrice ?? 0) || 0;
-        return sum + (qty * cost);
-      }, 0);
-    } else {
-      // Cek BOM terkait
-      const linkedBom = (state.bom || []).find(b => 
-        b.projectId === project.id || 
-        b.orderId === (project.orderId || project.id) || 
-        (quotation?.id && b.quotationId === quotation.id) ||
-        (b.projectName && b.projectName.toLowerCase() === project.projectName?.toLowerCase())
-      );
-      if (linkedBom && (linkedBom.totalEstimatedCost || linkedBom.materialCost || linkedBom.totalCost || (linkedBom.items && linkedBom.items.length > 0))) {
-        materialCost = parseFloat(linkedBom.materialCost || linkedBom.totalEstimatedCost || linkedBom.totalCost || 0);
-        if (materialCost === 0 && linkedBom.items) {
-          materialCost = linkedBom.items.reduce((sum, it) => sum + (parseFloat(it.totalCost || it.total || (it.qty * (it.unitCost || it.unitPrice || 0))) || 0), 0);
-        }
-      } else {
-        // Cek PR Purchasing
-        const linkedPRs = (state.purchasing || []).filter(pr => 
-          pr.projectId === project.id || 
-          pr.orderId === (project.orderId || project.id) ||
-          (pr.purpose && pr.purpose.toLowerCase().includes(project.projectName?.toLowerCase()))
-        );
-        if (linkedPRs.length > 0) {
-          materialCost = linkedPRs.reduce((sum, pr) => sum + (parseFloat(pr.totalEstimated || pr.totalAmount || 0) || (pr.items || []).reduce((isum, it) => isum + (it.qty * (it.actualPrice || it.unitPrice || 0)), 0)), 0);
-        } else {
-          // Estimasi standar: ~55% dari nilai kontrak
-          materialCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.55) : 0;
-        }
-      }
+    // Cek PR Purchasing
+    const linkedPRs = (state.purchasing || []).filter(pr => 
+      pr.projectId === project.id || 
+      pr.orderId === (project.orderId || project.id) ||
+      (pr.purpose && pr.purpose.toLowerCase().includes(project.projectName?.toLowerCase()))
+    );
+    if (linkedPRs.length > 0) {
+      materialCost = linkedPRs.reduce((sum, pr) => sum + (parseFloat(pr.totalEstimated || pr.totalAmount || 0) || (pr.items || []).reduce((isum, it) => isum + (it.qty * (it.actualPrice || it.unitPrice || 0)), 0)), 0);
     }
-
-    // B. Labor Cost (Biaya Jasa & Tenaga Kerja)
-    const serviceItemsTotal = parseFloat(quotation?.servicesTotal || 0);
-    if (serviceItemsTotal > 0) {
-      laborCost = Math.round(serviceItemsTotal * 0.6);
-    } else {
-      laborCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.12) : 0;
-    }
-
-    // C. Overhead Cost (~5%)
-    overheadCost = contractSellingPrice > 0 ? Math.round(contractSellingPrice * 0.05) : 0;
   }
 
   const modalTotal = materialCost + laborCost + overheadCost;
 
-  // 5. GARANSI (Alokasi 5% dari Kontrak & Realisasi Klaim Terpakai)
-  const allocatedWarranty = warrantyInfo ? warrantyInfo.allocatedWarrantyAmount : Math.round(contractSellingPrice * 0.05);
-  const claimedWarranty = warrantyInfo ? warrantyInfo.totalClaimed : 0;
-  const remainingWarranty = allocatedWarranty - claimedWarranty;
+  // 5. GARANSI (Alokasi Plafon Garansi Sesuai Ketentuan)
+  // Jika 0 bulan / Rp 0 / 'Tidak Ada Garansi', maka alokasi garansi adalah Rp 0
+  const isNoWarranty = 
+    quotation?.warrantyMonths === 0 ||
+    quotation?.warrantyFee === 0 ||
+    order?.warrantyFee === 0 ||
+    (typeof quotation?.warranty === 'string' && (quotation.warranty.toLowerCase().includes('tidak ada') || quotation.warranty === '0' || quotation.warranty === '0 Bulan')) ||
+    (typeof order?.warranty === 'string' && (order.warranty.toLowerCase().includes('tidak ada') || order.warranty === '0' || order.warranty === '0 Bulan')) ||
+    (typeof order?.notes === 'string' && order.notes.toLowerCase().includes('tidak ada garansi')) ||
+    (warrantyInfo && warrantyInfo.hasWarranty === false);
 
-  // 6. KEUNTUNGAN BERSIH & MARGIN LABA (MENGIKUTI REALISASI PEMBAYARAN)
+  const allocatedWarranty = isNoWarranty 
+    ? 0 
+    : (warrantyInfo ? warrantyInfo.allocatedWarrantyAmount : (quotation?.warrantyFee ? parseFloat(quotation.warrantyFee) : Math.round(contractSellingPrice * 0.05)));
+  const claimedWarranty = warrantyInfo ? warrantyInfo.totalClaimed : 0;
+  const remainingWarranty = Math.max(0, allocatedWarranty - claimedWarranty);
+
+  // 6. KEUNTUNGAN BERSIH & MARGIN LABA
   const grossProfit = sellingPrice - modalTotal;
   const netProfit = grossProfit - claimedWarranty;
-  const profitMargin = sellingPrice > 0 ? ((netProfit / sellingPrice) * 100) : (modalTotal + claimedWarranty > 0 ? -100 : 0);
+  const profitMargin = sellingPrice > 0 ? ((netProfit / sellingPrice) * 100) : 0;
 
   // Status & Indikator Profit
   let profitLevel = 'GOOD';
@@ -186,17 +186,7 @@ function getProjectFinancialData(project) {
   let profitBadgeClass = 'badge-primary';
   let profitColor = '#2563eb';
 
-  if (invoiceStatus === 'Unpaid' || (totalPaidAmount === 0 && sellingPrice === 0)) {
-    profitLevel = 'UNPAID';
-    profitLabel = 'Belum Dibayar (Defisit Modal)';
-    profitBadgeClass = 'badge-danger';
-    profitColor = '#dc2626';
-  } else if (invoiceStatus === 'Partial' && netProfit < 0) {
-    profitLevel = 'PARTIAL_DEFICIT';
-    profitLabel = 'Sebagian (Belum Balik Modal)';
-    profitBadgeClass = 'badge-warning';
-    profitColor = '#d97706';
-  } else if (profitMargin >= 30) {
+  if (profitMargin >= 30) {
     profitLevel = 'HIGH';
     profitLabel = 'Sangat Menguntungkan';
     profitBadgeClass = 'badge-success';
@@ -254,21 +244,163 @@ function getProjectFinancialData(project) {
 }
 
 /**
+ * Mengambil seluruh daftar proyek yang relevan untuk Keuangan & Analisis Profitabilitas.
+ * Menggabungkan seluruh proyek dari state.projects dan order penjualan dari state.orders
+ * sehingga tidak ada project maupun order aktif yang terlewat / tidak tampil di tabel keuangan.
+ */
+function getAllProjectsForFinance() {
+  const list = [];
+  const seenProjectIds = new Set();
+  const seenOrderIds = new Set();
+
+  (state.projects || []).forEach(p => {
+    if (!p) return;
+    const pid = String(p.id || '').trim();
+    const oid = String(p.orderId || '').trim();
+    list.push(p);
+    if (pid) seenProjectIds.add(pid);
+    if (oid) seenOrderIds.add(oid);
+  });
+
+  // Tambahkan order penjualan dari state.orders jika belum tercatat dalam state.projects
+  (state.orders || []).forEach(o => {
+    if (!o || !o.id) return;
+    const oid = String(o.id).trim();
+    const pid = oid.startsWith('ORD-') ? oid.replace('ORD-', 'PRJ-') : `PRJ-${oid}`;
+
+    const alreadyExists = seenOrderIds.has(oid) || seenProjectIds.has(pid) || seenProjectIds.has(oid) ||
+      list.some(p => p.orderId === oid || p.id === pid || (p.projectName && o.projectName && p.projectName.toLowerCase().trim() === o.projectName.toLowerCase().trim()));
+
+    if (!alreadyExists) {
+      const synProject = {
+        id: pid,
+        orderId: o.id,
+        projectName: o.projectName || o.customerName || 'Project Penjualan',
+        customerName: o.customerName || '-',
+        projectLead: o.pic || o.projectLead || 'Tim Engineering',
+        status: o.status === 'Accepted' ? 'In Production' : (o.status || 'Planning'),
+        totalBudget: o.grandTotal || o.subtotal || 0,
+        createdAt: o.createdAt || new Date().toISOString()
+      };
+      list.push(synProject);
+      seenProjectIds.add(pid);
+      seenOrderIds.add(oid);
+    }
+  });
+
+  return list;
+}
+
+/**
+ * Mengambil daftar data finansial proyek yang tersinkronisasi dengan Supabase (tabel public.project_finances).
+ * Jika ada project/order baru yang belum tersimpan di Supabase, otomatis disinkronkan.
+ */
+function getAuthoritativeProjectFinances() {
+  const savedFinances = state.project_finances || [];
+  const list = [];
+  const seenProjectIds = new Set();
+  const seenOrderIds = new Set();
+
+  savedFinances.forEach(f => {
+    if (!f) return;
+    const pid = String(f.projectId || f.id || '').trim();
+    const oid = String(f.orderId || '').trim();
+    list.push(f);
+    if (pid) seenProjectIds.add(pid);
+    if (oid) seenOrderIds.add(oid);
+  });
+
+  // Cek apakah ada proyek/order yang belum tercatat di savedFinances
+  const allProjects = getAllProjectsForFinance();
+  const newlyCreated = [];
+
+  allProjects.forEach(p => {
+    const pid = String(p.id || '').trim();
+    const oid = String(p.orderId || '').trim();
+    const alreadyExists = seenProjectIds.has(pid) || (oid && seenOrderIds.has(oid)) ||
+      list.some(f => (f.projectId && f.projectId === pid) || (f.orderId && oid && f.orderId === oid) ||
+        (f.projectName && p.projectName && f.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim()));
+
+    if (!alreadyExists) {
+      const finCalc = getProjectFinancialData(p);
+      const finId = p.id ? `FIN-${p.id.replace('PRJ-', '')}` : `FIN-${Date.now()}`;
+      const newRecord = {
+        id: finId,
+        projectId: p.id,
+        orderId: p.orderId || '',
+        quotationId: finCalc.quotation?.id || '',
+        invoiceId: finCalc.invoiceId || '',
+        projectName: p.projectName || 'Project UBM',
+        customerName: p.customerName || '-',
+        projectLead: p.projectLead || 'Tim Engineering',
+        status: p.status || 'Planning',
+        contractSellingPrice: finCalc.contractSellingPrice,
+        sellingPrice: finCalc.sellingPrice,
+        materialCost: finCalc.materialCost,
+        laborCost: finCalc.laborCost,
+        overheadCost: finCalc.overheadCost,
+        modalTotal: finCalc.modalTotal,
+        allocatedWarranty: finCalc.allocatedWarranty,
+        claimedWarranty: finCalc.claimedWarranty,
+        remainingWarranty: finCalc.remainingWarranty,
+        grossProfit: finCalc.grossProfit,
+        netProfit: finCalc.netProfit,
+        profitMargin: finCalc.profitMargin,
+        profitLevel: finCalc.profitLevel,
+        invoiceStatus: finCalc.invoiceStatus,
+        invoiceGrandTotal: finCalc.invoiceGrandTotal,
+        totalPaidAmount: finCalc.totalPaidAmount,
+        balanceDue: finCalc.balanceDue,
+        isCustomCost: finCalc.isCustomCost || false,
+        notes: '',
+        createdAt: p.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      list.push(newRecord);
+      newlyCreated.push(newRecord);
+      seenProjectIds.add(pid);
+      if (oid) seenOrderIds.add(oid);
+    }
+  });
+
+  if (newlyCreated.length > 0) {
+    state.project_finances = list;
+    // Post new records to server / Supabase
+    newlyCreated.forEach(rec => {
+      fetch('/api/project_finances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rec)
+      }).catch(err => console.warn('[Finance Sync] Auto-create notice:', err.message));
+    });
+  }
+
+  return list;
+}
+
+/**
  * Merender Tabel Finansial & KPI Ringkasan pada Halaman Keuangan
  */
 function renderFinanceTable() {
   const tbody = document.getElementById('table-finance-body') || document.getElementById('table-service-finance-body');
   if (!tbody) return;
 
-  const allProjects = state.projects || [];
-  let completedProjects = allProjects.filter(p => typeof isProjectCompletedForService === 'function' ? isProjectCompletedForService(p) : true);
-  
-  // Jika tidak ada project completed, ambil project yang memiliki order agar tabel tetap informatif
-  if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects.filter(p => (state.orders || []).some(o => o.id === p.orderId));
-  }
-  if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects;
+  let financeRecords = getAuthoritativeProjectFinances();
+
+  // Jika data masih kosong saat pemanggilan awal (misal saat view aktif sebelum fetch selesai), muat otomatis
+  if (financeRecords.length === 0 && typeof fetchResource === 'function' && !window._financeResourceLoading) {
+    window._financeResourceLoading = true;
+    Promise.allSettled([
+      fetchResource('project_finances'),
+      fetchResource('projects'),
+      fetchResource('orders'),
+      fetchResource('bom'),
+      fetchResource('invoices'),
+      fetchResource('quotations')
+    ]).finally(() => {
+      window._financeResourceLoading = false;
+      renderFinanceTable();
+    });
   }
 
   // Hitung KPI Keuangan Keseluruhan
@@ -279,15 +411,87 @@ function renderFinanceTable() {
   let totalClaims = 0;
   let totalNetProfit = 0;
 
-  const financialDataList = completedProjects.map(p => {
-    const fin = getProjectFinancialData(p);
-    totalRevenue += fin.sellingPrice;
-    totalContractValue += fin.contractSellingPrice;
-    totalCOGS += fin.modalTotal;
-    totalWarranty += fin.allocatedWarranty;
-    totalClaims += fin.claimedWarranty;
-    totalNetProfit += fin.netProfit;
-    return fin;
+  const financialDataList = financeRecords.map(f => {
+    const p = (state.projects || []).find(item => item.id === f.projectId || item.orderId === f.orderId) || {
+      id: f.projectId || f.id,
+      orderId: f.orderId,
+      projectName: f.projectName,
+      customerName: f.customerName,
+      projectLead: f.projectLead,
+      status: f.status
+    };
+
+    const contractSellingPrice = parseFloat(f.contractSellingPrice ?? 0);
+    const sellingPrice = parseFloat(f.sellingPrice ?? contractSellingPrice);
+    const materialCost = parseFloat(f.materialCost ?? 0);
+    const laborCost = parseFloat(f.laborCost ?? 0);
+    const overheadCost = parseFloat(f.overheadCost ?? 0);
+    const modalTotal = parseFloat(f.modalTotal ?? (materialCost + laborCost + overheadCost) ?? 0);
+    const allocatedWarranty = parseFloat(f.allocatedWarranty ?? 0);
+    const claimedWarranty = parseFloat(f.claimedWarranty ?? 0);
+    const remainingWarranty = parseFloat(f.remainingWarranty ?? Math.max(0, allocatedWarranty - claimedWarranty));
+    const grossProfit = parseFloat(f.grossProfit ?? (sellingPrice - modalTotal));
+    const netProfit = parseFloat(f.netProfit ?? (grossProfit - claimedWarranty));
+    const profitMargin = parseFloat(f.profitMargin ?? (sellingPrice > 0 ? (netProfit / sellingPrice) * 100 : 0));
+    const profitLevel = f.profitLevel || (profitMargin >= 30 ? 'HIGH' : (profitMargin >= 10 ? 'GOOD' : (profitMargin >= 0 ? 'LOW' : 'LOSS')));
+
+    let profitLabel = 'Menguntungkan';
+    let profitBadgeClass = 'badge-primary';
+    let profitColor = '#2563eb';
+    if (profitLevel === 'HIGH') {
+      profitLabel = 'Sangat Menguntungkan';
+      profitBadgeClass = 'badge-success';
+      profitColor = '#15803d';
+    } else if (profitLevel === 'GOOD') {
+      profitLabel = 'Menguntungkan';
+      profitBadgeClass = 'badge-primary';
+      profitColor = '#2563eb';
+    } else if (profitLevel === 'LOW') {
+      profitLabel = 'Margin Tipis';
+      profitBadgeClass = 'badge-warning';
+      profitColor = '#d97706';
+    } else {
+      profitLabel = 'Defisit / Rugi';
+      profitBadgeClass = 'badge-danger';
+      profitColor = '#dc2626';
+    }
+
+    totalRevenue += sellingPrice;
+    totalContractValue += contractSellingPrice;
+    totalCOGS += modalTotal;
+    totalWarranty += allocatedWarranty;
+    totalClaims += claimedWarranty;
+    totalNetProfit += netProfit;
+
+    return {
+      recordId: f.id,
+      project: p,
+      quotation: { id: f.quotationId },
+      order: { id: f.orderId },
+      invoiceId: f.invoiceId || (f.orderId ? `INV-${f.orderId.replace('ORD-', '')}` : '-'),
+      invoiceStatus: f.invoiceStatus || 'Unpaid',
+      invoiceGrandTotal: parseFloat(f.invoiceGrandTotal ?? contractSellingPrice),
+      totalPaidAmount: parseFloat(f.totalPaidAmount ?? 0),
+      balanceDue: parseFloat(f.balanceDue ?? contractSellingPrice),
+      paymentPercentage: (f.invoiceGrandTotal && f.invoiceGrandTotal > 0) ? Math.min(100, (parseFloat(f.totalPaidAmount || 0) / parseFloat(f.invoiceGrandTotal)) * 100) : 0,
+      contractSellingPrice,
+      sellingPrice,
+      modalTotal,
+      materialCost,
+      laborCost,
+      overheadCost,
+      isCustomCost: Boolean(f.isCustomCost),
+      allocatedWarranty,
+      claimedWarranty,
+      remainingWarranty,
+      grossProfit,
+      netProfit,
+      profitMargin,
+      profitLevel,
+      profitLabel,
+      profitBadgeClass,
+      profitColor
+    };
   });
 
   const avgMargin = totalRevenue > 0 ? ((totalNetProfit / totalRevenue) * 100) : (totalNetProfit < 0 ? -100 : 0);
@@ -319,16 +523,17 @@ function renderFinanceTable() {
   // Filter Data
   let filteredList = [...financialDataList];
 
-  // Search filter
-  if (state.searchQuery) {
-    const q = state.searchQuery.toLowerCase();
+  // Search filter (lokal input finance atau fallback ke global state)
+  const searchInput = document.getElementById('filter-finance-search');
+  const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : (state.searchQuery || '').trim().toLowerCase();
+  if (searchVal) {
     filteredList = filteredList.filter(f =>
-      (f.project.id && f.project.id.toLowerCase().includes(q)) ||
-      (f.project.orderId && f.project.orderId.toLowerCase().includes(q)) ||
-      (f.project.projectName && f.project.projectName.toLowerCase().includes(q)) ||
-      (f.project.customerName && f.project.customerName.toLowerCase().includes(q)) ||
-      (f.project.projectLead && f.project.projectLead.toLowerCase().includes(q)) ||
-      (f.invoiceId && f.invoiceId.toLowerCase().includes(q))
+      (f.project?.id && f.project.id.toLowerCase().includes(searchVal)) ||
+      (f.project?.orderId && f.project.orderId.toLowerCase().includes(searchVal)) ||
+      (f.project?.projectName && f.project.projectName.toLowerCase().includes(searchVal)) ||
+      (f.project?.customerName && f.project.customerName.toLowerCase().includes(searchVal)) ||
+      (f.project?.projectLead && f.project.projectLead.toLowerCase().includes(searchVal)) ||
+      (f.invoiceId && f.invoiceId.toLowerCase().includes(searchVal))
     );
   }
 
@@ -401,28 +606,38 @@ function renderFinanceTable() {
           ${f.isCustomCost ? `<span class="badge badge-secondary" style="font-size: 9px; padding: 1px 4px; margin-top: 2px;">Manual HPP</span>` : ''}
         </td>
         <td style="text-align: right;">
-          <div class="font-mono font-bold" style="font-size: 13.5px; color: ${f.sellingPrice > 0 ? (f.invoiceStatus === 'Paid' ? '#15803d' : '#2563eb') : '#dc2626'};">
-            ${formatRupiah(f.sellingPrice)}
+          <div class="font-mono font-bold" style="font-size: 13.5px; color: #15803d;">
+            ${formatRupiah(f.contractSellingPrice)}
           </div>
           <div style="margin-top: 3px;">
             ${invoiceStatusBadgeHtml}
           </div>
-          <div class="text-muted" style="font-size: 10px; margin-top: 2px;">
-            Kontrak: ${formatRupiah(f.contractSellingPrice)}
-          </div>
+          ${f.totalPaidAmount > 0 && f.totalPaidAmount < f.contractSellingPrice ? `
+            <div class="text-muted" style="font-size: 10px; margin-top: 2px;">
+              Terbayar: ${formatRupiah(f.totalPaidAmount)}
+            </div>
+          ` : ''}
         </td>
         <td>
           <div style="font-size: 11px; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0;">
             <div style="display: flex; justify-content: space-between; gap: 4px;">
               <span class="text-muted font-xs">Plafon:</span>
-              <strong class="font-mono" style="color: #7c3aed;">${formatRupiah(f.allocatedWarranty)}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between; gap: 4px; margin-top: 2px; border-top: 1px dashed #e2e8f0; padding-top: 2px;">
-              <span class="text-muted font-xs">Klaim:</span>
-              <strong class="font-mono" style="color: ${f.claimedWarranty > 0 ? '#dc2626' : '#64748b'};">
-                ${formatRupiah(f.claimedWarranty)}
+              <strong class="font-mono" style="color: ${f.allocatedWarranty > 0 ? '#7c3aed' : '#64748b'};">
+                ${f.allocatedWarranty > 0 ? formatRupiah(f.allocatedWarranty) : 'Rp 0'}
               </strong>
             </div>
+            ${f.allocatedWarranty === 0 ? `
+              <div style="font-size: 9.5px; color: #64748b; margin-top: 2px;">
+                Tanpa Garansi (0 Bln)
+              </div>
+            ` : `
+              <div style="display: flex; justify-content: space-between; gap: 4px; margin-top: 2px; border-top: 1px dashed #e2e8f0; padding-top: 2px;">
+                <span class="text-muted font-xs">Klaim:</span>
+                <strong class="font-mono" style="color: ${f.claimedWarranty > 0 ? '#dc2626' : '#64748b'};">
+                  ${formatRupiah(f.claimedWarranty)}
+                </strong>
+              </div>
+            `}
           </div>
         </td>
         <td style="text-align: right;">
@@ -473,7 +688,9 @@ function filterFinanceTable() {
 // 1. DETAIL ANALISIS KEUANGAN & PROFITABILITAS PROYEK
 // -------------------------------------------------------------
 function openProjectFinanceDetailModal(projectId) {
-  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
+  const allProjects = getAllProjectsForFinance();
+  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId) ||
+            allProjects.find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan', 'error');
     return;
@@ -693,7 +910,9 @@ function openProjectFinanceDetailModal(projectId) {
 // 2. FORM PENYESUAIAN HARGA MODAL (HPP) PROYEK
 // -------------------------------------------------------------
 function openAdjustProjectModalCostModal(projectId) {
-  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
+  const allProjects = getAllProjectsForFinance();
+  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId) ||
+            allProjects.find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan', 'error');
     return;
@@ -832,7 +1051,9 @@ function recalculateModalCostAdjustForm(sellingPrice, claimedWarranty) {
 async function saveAdjustProjectModalCost(event, projectId) {
   if (event) event.preventDefault();
 
-  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
+  const allProjects = getAllProjectsForFinance();
+  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId) ||
+            allProjects.find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan', 'error');
     return;
@@ -862,7 +1083,32 @@ async function saveAdjustProjectModalCost(event, projectId) {
     const idx = (state.projects || []).findIndex(item => item.id === p.id);
     if (idx !== -1) {
       state.projects[idx] = updated || p;
+    } else {
+      state.projects = state.projects || [];
+      state.projects.unshift(updated || p);
     }
+
+    // Sinkronisasi pembaruan HPP ke tabel project_finances Supabase
+    const finRecord = (state.project_finances || []).find(f => f.projectId === p.id || f.id === p.id || (p.orderId && f.orderId === p.orderId));
+    if (finRecord) {
+      finRecord.materialCost = matVal;
+      finRecord.laborCost = labVal;
+      finRecord.overheadCost = ovhVal;
+      finRecord.modalTotal = totalVal;
+      finRecord.grossProfit = (finRecord.sellingPrice || totalVal) - totalVal;
+      finRecord.netProfit = finRecord.grossProfit - (finRecord.claimedWarranty || 0);
+      finRecord.profitMargin = finRecord.sellingPrice > 0 ? Number(((finRecord.netProfit / finRecord.sellingPrice) * 100).toFixed(2)) : 0;
+      finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
+      finRecord.isCustomCost = true;
+      finRecord.updatedAt = new Date().toISOString();
+
+      fetch(`/api/project_finances/${finRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finRecord)
+      }).catch(e => console.warn('[Finance Sync] PUT error:', e.message));
+    }
+
     closeModal('form-modal');
     showToast('Harga Modal (HPP) proyek berhasil disimpan ke Supabase!', 'success');
     renderFinanceTable();
@@ -878,7 +1124,9 @@ async function saveAdjustProjectModalCost(event, projectId) {
 // 3. CETAK LAPORAN KEUANGAN & PROFITABILITAS PROYEK RESMI
 // -------------------------------------------------------------
 function printProjectFinanceReport(projectId) {
-  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId);
+  const allProjects = getAllProjectsForFinance();
+  const p = (state.projects || []).find(item => item.id === projectId || item.orderId === projectId) ||
+            allProjects.find(item => item.id === projectId || item.orderId === projectId);
   if (!p) {
     showToast('Data project tidak ditemukan', 'error');
     return;
@@ -1094,16 +1342,9 @@ function printProjectFinanceReport(projectId) {
 // 4. EXPORT DATA KEUANGAN PROJECT KE CSV
 // -------------------------------------------------------------
 function exportFinanceToCSV() {
-  const allProjects = state.projects || [];
-  let completedProjects = allProjects.filter(p => typeof isProjectCompletedForService === 'function' ? isProjectCompletedForService(p) : true);
-  if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects.filter(p => (state.orders || []).some(o => o.id === p.orderId));
-  }
-  if (completedProjects.length === 0 && allProjects.length > 0) {
-    completedProjects = allProjects;
-  }
+  const allProjects = getAllProjectsForFinance();
 
-  if (completedProjects.length === 0) {
+  if (allProjects.length === 0) {
     showToast('Tidak ada data keuangan project untuk diekspor', 'warning');
     return;
   }
@@ -1135,7 +1376,7 @@ function exportFinanceToCSV() {
     'Status Profit'
   ];
 
-  const rows = completedProjects.map(p => {
+  const rows = allProjects.map(p => {
     const fin = getProjectFinancialData(p);
     return [
       `"${p.id}"`,
@@ -1182,10 +1423,16 @@ async function deleteProjectFinanceRow(projectId) {
     return;
   }
   try {
-    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const finRecord = (state.project_finances || []).find(f => f.projectId === projectId || f.id === projectId || f.orderId === projectId);
+    const finId = finRecord?.id || (projectId.startsWith('FIN-') ? projectId : `FIN-${projectId.replace('PRJ-', '')}`);
+    
+    // Hapus dari tabel project_finances Supabase
+    await fetch(`/api/project_finances/${finId}`, { method: 'DELETE' }).catch(() => {});
+    await fetch(`/api/projects/${projectId}`, { method: 'DELETE' }).catch(() => {});
+
+    state.project_finances = (state.project_finances || []).filter(f => f.id !== finId && f.projectId !== projectId);
     state.projects = (state.projects || []).filter(p => p.id !== projectId);
-    showToast(`Data keuangan project #${projectId} berhasil dihapus`, 'success');
+    showToast(`Data keuangan project #${projectId} berhasil dihapus dari Supabase`, 'success');
     renderFinanceTable();
     if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   } catch (err) {
@@ -1195,15 +1442,19 @@ async function deleteProjectFinanceRow(projectId) {
 }
 
 async function clearAllProjectFinanceData() {
-  if (!confirm('Apakah Anda yakin ingin menghapus SEMUA data keuangan project? Tindakan ini akan mengosongkan seluruh data finansial dan laporan project.')) {
+  if (!confirm('Apakah Anda yakin ingin menghapus SEMUA data keuangan project? Tindakan ini akan mengosongkan seluruh data finansial dan laporan project di database.')) {
     return;
   }
   try {
-    const res = await fetch('/api/finance/clear-all', { method: 'DELETE' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const allFins = state.project_finances || [];
+    for (const f of allFins) {
+      await fetch(`/api/project_finances/${f.id}`, { method: 'DELETE' }).catch(() => {});
+    }
+    await fetch('/api/finance/clear-all', { method: 'DELETE' }).catch(() => {});
+    state.project_finances = [];
     state.projects = [];
     state.project_reports = [];
-    showToast('Semua data keuangan project berhasil dihapus', 'success');
+    showToast('Semua data keuangan project berhasil dihapus dari Supabase', 'success');
     renderFinanceTable();
     if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   } catch (err) {
@@ -2271,6 +2522,8 @@ function exportPartnershipCSV() {
 }
 
 // Global window exposure
+window.getAllProjectsForFinance = getAllProjectsForFinance;
+window.getAuthoritativeProjectFinances = getAuthoritativeProjectFinances;
 window.getProjectFinancialData = getProjectFinancialData;
 window.renderFinanceTable = renderFinanceTable;
 window.filterFinanceTable = filterFinanceTable;

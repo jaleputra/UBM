@@ -1161,6 +1161,26 @@ function renderTimelineWorkspace(orderId) {
     addMsBtn.style.display = isLead ? 'inline-flex' : 'none';
   }
 
+  // Cek apakah BOM proyek ini sudah disetujui (Accepted / Approved)
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === activeProj.id || 
+    b.orderId === (activeProj.orderId || activeProj.id) ||
+    (activeProj.bomId && b.id === activeProj.bomId) ||
+    (b.projectName && activeProj.projectName && b.projectName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim()) ||
+    (b.productName && activeProj.projectName && b.productName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim())
+  );
+
+  const isBomApproved = linkedBom && (linkedBom.status === 'Accepted' || linkedBom.status === 'Approved' || linkedBom.status === 'Disetujui');
+
+  const addCompBtn = document.getElementById('btn-timeline-add-component');
+  if (addCompBtn) {
+    if (isBomApproved) {
+      addCompBtn.style.display = 'inline-flex';
+    } else {
+      addCompBtn.style.display = 'none';
+    }
+  }
+
   if (statusSelect) statusSelect.disabled = !isLead;
   if (startInput) startInput.disabled = !isLead;
   if (dueInput) dueInput.disabled = !isLead;
@@ -1169,7 +1189,9 @@ function renderTimelineWorkspace(orderId) {
   // Render Visual Calendar Blocks with different color themes & Month Calendar
   renderMilestoneCalendarBlocks(project);
   renderTimelineMonthCalendar(project);
+  renderTimelineBOMComponentInfo(activeProj, linkedBom, isBomApproved);
   syncTimelineMilestonesHiddenList(project);
+  switchTimelineTabMode('blocks');
 
   calculateTimelineProgress();
   if (window.lucide) lucide.createIcons();
@@ -1179,6 +1201,50 @@ function renderTimelineWorkspace(orderId) {
 // KALENDER BLOK WARNA & DETAIL MODAL MILESTONE (SUBTASK, LAPORAN, LINK)
 // -------------------------------------------------------------
 let currentActiveProjectData = null;
+let currentTimelineTabMode = 'blocks';
+
+function switchTimelineTabMode(mode) {
+  currentTimelineTabMode = mode;
+  const blocksContainer = document.getElementById('timeline-calendar-blocks');
+  const monthContainer = document.getElementById('timeline-month-calendar');
+  const btnBlocks = document.getElementById('tab-timeline-view-blocks');
+  const btnCalendar = document.getElementById('tab-timeline-view-calendar');
+
+  if (mode === 'calendar') {
+    if (blocksContainer) blocksContainer.style.display = 'none';
+    if (monthContainer) monthContainer.style.display = 'block';
+    if (btnBlocks) {
+      btnBlocks.style.background = 'transparent';
+      btnBlocks.style.color = '#64748b';
+      btnBlocks.style.boxShadow = 'none';
+      btnBlocks.style.fontWeight = '600';
+    }
+    if (btnCalendar) {
+      btnCalendar.style.background = '#ffffff';
+      btnCalendar.style.color = '#4f46e5';
+      btnCalendar.style.boxShadow = '0 1px 2px rgba(0,0,0,0.06)';
+      btnCalendar.style.fontWeight = '700';
+    }
+  } else {
+    // Default: 'blocks'
+    if (blocksContainer) blocksContainer.style.display = 'flex';
+    if (monthContainer) monthContainer.style.display = 'none';
+    if (btnBlocks) {
+      btnBlocks.style.background = '#ffffff';
+      btnBlocks.style.color = '#4f46e5';
+      btnBlocks.style.boxShadow = '0 1px 2px rgba(0,0,0,0.06)';
+      btnBlocks.style.fontWeight = '700';
+    }
+    if (btnCalendar) {
+      btnCalendar.style.background = 'transparent';
+      btnCalendar.style.color = '#64748b';
+      btnCalendar.style.boxShadow = 'none';
+      btnCalendar.style.fontWeight = '600';
+    }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+window.switchTimelineTabMode = switchTimelineTabMode;
 
 const MILESTONE_THEMES = [
   {
@@ -1266,21 +1332,25 @@ function renderMilestoneCalendarBlocks(project) {
     });
   }
 
+  // Update badge jumlah tahapan pada switcher tab
+  const badgeCount = document.getElementById('timeline-blocks-count-badge');
+  if (badgeCount) badgeCount.textContent = milestones.length;
+
   if (milestones.length === 0) {
     if (!isLead) {
       container.innerHTML = `
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 28px; text-align: center; color: #64748b;">
-          <i data-lucide="check-circle-2" style="width: 28px; height: 28px; margin-bottom: 6px; color: #94a3b8;"></i>
-          <div style="font-weight: 700; font-size: 13.5px; color: #334155;">Belum Ada Task yang Ditugaskan Kepada Anda</div>
-          <div style="font-size: 12px; margin-top: 4px; color: #64748b;">Anda hanya dapat melihat task/tahapan kerja yang ditugaskan secara resmi oleh Project Lead (${escapeHtml(project?.projectLead || 'Lead Project')}).</div>
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 18px; text-align: center; color: #64748b;">
+          <i data-lucide="check-circle-2" style="width: 22px; height: 22px; margin-bottom: 4px; color: #94a3b8;"></i>
+          <div style="font-weight: 700; font-size: 12.5px; color: #334155;">Belum Ada Task yang Ditugaskan Kepada Anda</div>
+          <div style="font-size: 11px; margin-top: 2px; color: #64748b;">Anda hanya dapat melihat task/tahapan yang ditugaskan secara resmi oleh Project Lead.</div>
         </div>
       `;
     } else {
       container.innerHTML = `
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 24px; text-align: center; color: #64748b;">
-          <i data-lucide="calendar" style="width: 28px; height: 28px; margin-bottom: 6px; color: #94a3b8;"></i>
-          <div style="font-weight: 600; font-size: 13px;">Belum ada tahapan kerja atau milestone terdaftar.</div>
-          <div style="font-size: 11.5px; margin-top: 4px;">Klik tombol <strong>"+ Tambah Milestone"</strong> di atas untuk membuat tahapan kerja baru.</div>
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 16px; text-align: center; color: #64748b;">
+          <i data-lucide="calendar" style="width: 22px; height: 22px; margin-bottom: 4px; color: #94a3b8;"></i>
+          <div style="font-weight: 600; font-size: 12.5px;">Belum ada tahapan kerja atau milestone terdaftar.</div>
+          <div style="font-size: 11px; margin-top: 2px;">Klik tombol <strong>"+ Tambah Milestone"</strong> di atas untuk membuat tahapan kerja baru.</div>
         </div>
       `;
     }
@@ -1302,92 +1372,89 @@ function renderMilestoneCalendarBlocks(project) {
     const hasLink = Boolean(ms.report?.reportUrl && ms.report.reportUrl.trim());
     const images = ms.report?.images || [];
     const comments = ms.comments || [];
+    const addComps = ms.additionalComponents || [];
 
     const isCompleted = ms.status === 'Completed';
     const isInProgress = ms.status === 'In Progress';
     const statusBg = isCompleted ? '#10b981' : isInProgress ? '#f59e0b' : '#64748b';
+    const statusText = isCompleted ? 'Selesai' : isInProgress ? 'Berjalan' : 'Rencana';
 
     return `
-      <div class="milestone-color-block" id="block-${msId}" onclick="openMilestoneDetailModal('${msId}')"
-           style="background: #ffffff; border: 1px solid ${theme.border}; border-left: 7px solid ${theme.primary}; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05);"
-           onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 14px rgba(0,0,0,0.08)';"
-           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)';">
+      <div class="milestone-compact-row" id="block-${msId}" onclick="openMilestoneDetailModal('${msId}')"
+           style="background: #ffffff; border: 1px solid ${theme.border}; border-left: 5px solid ${theme.primary}; border-radius: 6px; padding: 8px 12px; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.03); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;"
+           onmouseover="this.style.background='${theme.lightBg}'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06)';"
+           onmouseout="this.style.background='#ffffff'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.03)';">
         
-        <!-- TOP HEADER BAR WITH THEME ACCENT -->
-        <div style="padding: 12px 18px; background: ${theme.lightBg}; border-bottom: 1px solid ${theme.border}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="background: ${theme.gradient}; color: #ffffff; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.3px;">
-              Tahap ${idx + 1}
-            </span>
-            <span style="font-weight: 800; font-size: 14px; color: #0f172a;">
-              ${escapeHtml(ms.title || 'Tahapan Kerja')}
-            </span>
-            <span style="background: ${statusBg}; color: #ffffff; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px;">
-              ${ms.status === 'Completed' ? '🟢 Completed' : (ms.status === 'In Progress' ? '🟡 In Progress' : '⚪ Pending (Belum Mulai)')}
-            </span>
-          </div>
-
-          <div style="display: flex; align-items: center; gap: 14px;">
-            <div style="font-size: 11.5px; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 5px;">
-              <i data-lucide="calendar" style="width: 13px; height: 13px; color: ${theme.primary};"></i>
-              ${ms.startDate || '-'} s/d ${ms.dueDate || '-'}
-            </div>
-            <div style="font-size: 11.5px; color: #475569; display: flex; align-items: center; gap: 5px;">
-              <i data-lucide="user" style="width: 13px; height: 13px; color: ${theme.primary};"></i>
-              <strong>${escapeHtml(ms.pic || 'Belum ada PIC')}</strong>
-            </div>
-          </div>
+        <!-- LEFT: TAHAP BADGE + TITLE + STATUS -->
+        <div style="display: flex; align-items: center; gap: 8px; min-width: 200px; flex: 1 1 auto;">
+          <span style="background: ${theme.gradient}; color: #ffffff; font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.3px; flex-shrink: 0;">
+            T${idx + 1}
+          </span>
+          <span style="font-weight: 700; font-size: 12.5px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px;" title="${escapeAttr(ms.title || 'Tahapan Kerja')}">
+            ${escapeHtml(ms.title || 'Tahapan Kerja')}
+          </span>
+          <span style="background: ${statusBg}; color: #ffffff; font-size: 9.5px; font-weight: 700; padding: 1.5px 7px; border-radius: 999px; flex-shrink: 0;">
+            ${statusText}
+          </span>
         </div>
 
-        <!-- DETAILS PILLS & TEASERS (SUBTASK, LAPORAN, LINK, FOTO) -->
-        <div style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #ffffff;">
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <!-- Subtask Badge -->
-            <span class="badge" style="background: ${totalSubtasks > 0 && completedSubtasks === totalSubtasks ? '#dcfce7' : '#f1f5f9'}; color: ${totalSubtasks > 0 && completedSubtasks === totalSubtasks ? '#15803d' : '#334155'}; font-size: 11px; padding: 4px 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-              <i data-lucide="check-square" style="width: 12px; height: 12px; color: ${theme.primary};"></i>
-              Sub-Task: <strong>${completedSubtasks}/${totalSubtasks}</strong> Selesai
-            </span>
+        <!-- CENTER: DATE + PIC + SUBTASKS + BADGES -->
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <!-- Dates -->
+          <span style="font-size: 11px; color: #475569; display: inline-flex; align-items: center; gap: 3px;" title="Periode Pelaksanaan">
+            <i data-lucide="calendar" style="width: 12px; height: 12px; color: ${theme.primary};"></i>
+            ${ms.startDate || '-'} &rarr; ${ms.dueDate || '-'}
+          </span>
 
-            <!-- Link Badge -->
+          <!-- PIC -->
+          <span style="font-size: 11px; color: #334155; display: inline-flex; align-items: center; gap: 3px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="PIC: ${escapeAttr(ms.pic || 'Belum ada PIC')}">
+            <i data-lucide="user" style="width: 12px; height: 12px; color: ${theme.primary};"></i>
+            <strong>${escapeHtml(ms.pic || '-')}</strong>
+          </span>
+
+          <!-- Subtask Count -->
+          <span class="badge" style="background: ${totalSubtasks > 0 && completedSubtasks === totalSubtasks ? '#dcfce7' : '#f1f5f9'}; color: ${totalSubtasks > 0 && completedSubtasks === totalSubtasks ? '#15803d' : '#334155'}; font-size: 10px; padding: 2px 5px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Subtask Selesai: ${completedSubtasks}/${totalSubtasks}">
+            <i data-lucide="check-square" style="width: 11px; height: 11px; color: ${theme.primary};"></i>
+            ${completedSubtasks}/${totalSubtasks}
+          </span>
+
+          <!-- Quick Indicators (Link, Photos, Comments, Additional Components) -->
+          <div style="display: flex; align-items: center; gap: 5px;">
             ${hasLink ? `
-              <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 11px; padding: 4px 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" onclick="event.stopPropagation(); window.open('${escapeAttr(ms.report.reportUrl)}', '_blank');" title="Klik untuk membuka link">
+              <span title="Buka Link CAD / Dokumen" onclick="event.stopPropagation(); window.open('${escapeAttr(ms.report.reportUrl)}', '_blank');" style="color: #0284c7; cursor: pointer; display: inline-flex; align-items: center;">
                 <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
-                Link Dokumen / CAD ↗
-              </span>
-            ` : '<span style="font-size: 11px; color: #94a3b8;"><i data-lucide="link" style="width: 11px; height: 11px; display: inline;"></i> Tanpa link</span>'}
-
-            <!-- Report Teaser -->
-            ${hasReport ? `
-              <span class="badge" style="background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; font-size: 11px; padding: 4px 8px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeAttr(ms.report.description)}">
-                <i data-lucide="file-text" style="width: 12px; height: 12px; color: ${theme.primary};"></i>
-                ${escapeHtml(ms.report.description)}
               </span>
             ` : ''}
 
-            <!-- Photos & Comments -->
             ${images.length > 0 ? `
-              <span class="badge" style="background: #fdf4ff; color: #9333ea; font-size: 11px; padding: 4px 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                <i data-lucide="image" style="width: 12px; height: 12px;"></i> ${images.length} Foto
+              <span title="${images.length} Foto Hasil Kerja" style="color: #9333ea; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;">
+                <i data-lucide="image" style="width: 11px; height: 11px;"></i>${images.length}
               </span>
             ` : ''}
 
             ${comments.length > 0 ? `
-              <span class="badge" style="background: #f0fdfa; color: #0f766e; font-size: 11px; padding: 4px 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                <i data-lucide="message-square" style="width: 12px; height: 12px;"></i> ${comments.length} Diskusi
+              <span title="${comments.length} Catatan Diskusi" style="color: #0f766e; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;">
+                <i data-lucide="message-square" style="width: 11px; height: 11px;"></i>${comments.length}
+              </span>
+            ` : ''}
+
+            ${addComps.length > 0 ? `
+              <span title="${addComps.length} Komponen Tambahan Tahap Ini" style="color: #059669; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 2px;">
+                <i data-lucide="boxes" style="width: 11px; height: 11px;"></i>+${addComps.length}
               </span>
             ` : ''}
           </div>
-
-          <!-- Action CTA -->
-          <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: ${theme.primary};">
-            <span>Buka Detail Subtask, Laporan & Link</span>
-            <i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i>
-          </div>
         </div>
 
-        <!-- BOTTOM THIN PROGRESS BAR -->
-        <div style="background: #f1f5f9; height: 6px; width: 100%;">
-          <div style="background: ${theme.gradient}; height: 100%; width: ${subtaskPercent}%; transition: width 0.3s ease;"></div>
+        <!-- RIGHT: MINI PROGRESS BAR & ARROW -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+          <div style="width: 50px; height: 5px; background: #e2e8f0; border-radius: 999px; overflow: hidden;" title="Progres Subtask: ${subtaskPercent}%">
+            <div style="width: ${subtaskPercent}%; height: 100%; background: ${theme.primary}; border-radius: 999px; transition: width 0.3s ease;"></div>
+          </div>
+          <span style="font-size: 10.5px; font-weight: 700; color: #475569; min-width: 28px; text-align: right; font-family: monospace;">
+            ${subtaskPercent}%
+          </span>
+          <i data-lucide="chevron-right" style="width: 14px; height: 14px; color: #94a3b8;"></i>
         </div>
       </div>
     `;
@@ -1491,7 +1558,7 @@ function renderTimelineMonthCalendar(project) {
   let cellsHtml = '';
   // Empty cells before start of month
   for (let i = 0; i < firstDayIndex; i++) {
-    cellsHtml += '<div style="min-height: 72px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 6px; opacity: 0.5;"></div>';
+    cellsHtml += '<div style="min-height: 40px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 4px; opacity: 0.5;"></div>';
   }
 
   // Days of month
@@ -1516,14 +1583,14 @@ function renderTimelineMonthCalendar(project) {
     const hasEvents = activeMilestones.length > 0;
 
     cellsHtml += `
-      <div style="min-height: 72px; background: #ffffff; border: 1px solid ${hasEvents ? '#cbd5e1' : '#e2e8f0'}; border-radius: 6px; padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; overflow: hidden;">
-        <div style="font-size: 11px; font-weight: 700; color: ${hasEvents ? '#0f172a' : '#64748b'}; text-align: right;">
+      <div style="min-height: 42px; background: #ffffff; border: 1px solid ${hasEvents ? '#cbd5e1' : '#e2e8f0'}; border-radius: 4px; padding: 2px 4px; display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+        <div style="font-size: 10px; font-weight: 700; color: ${hasEvents ? '#0f172a' : '#64748b'}; text-align: right; line-height: 1;">
           ${d}
         </div>
-        <div style="display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 48px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 28px;">
           ${activeMilestones.map(({ ms, idx, theme }) => `
             <div onclick="event.stopPropagation(); openMilestoneDetailModal('${ms.id}')"
-                 style="background: ${theme.gradient}; color: #ffffff; font-size: 9.5px; font-weight: 700; padding: 2px 5px; border-radius: 3px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;"
+                 style="background: ${theme.gradient}; color: #ffffff; font-size: 8.5px; font-weight: 700; padding: 1px 4px; border-radius: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;"
                  title="Tahap ${idx + 1}: ${escapeAttr(ms.title)} (${ms.startDate} s/d ${ms.dueDate})">
               T${idx + 1}: ${escapeHtml(ms.title)}
             </div>
@@ -1534,49 +1601,44 @@ function renderTimelineMonthCalendar(project) {
   }
 
   container.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <div style="font-weight: 800; font-size: 13.5px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-          <i data-lucide="calendar" style="width: 16px; height: 16px; color: #4f46e5;"></i>
-          Kalender Bulanan:
-        </div>
-
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <!-- Month & Year Controls -->
-        <div style="display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 6px;">
-          <button type="button" class="btn btn-sm btn-outline" style="padding: 2px 7px; font-size: 11px; height: 26px; display: inline-flex; align-items: center;" onclick="changeTimelineMonth(-1)" title="Bulan Sebelumnya">
-            <i data-lucide="chevron-left" style="width: 13px; height: 13px;"></i>
+        <div style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 2px 6px; border-radius: 6px;">
+          <button type="button" class="btn btn-xs btn-outline" style="padding: 1px 5px; font-size: 10px; height: 22px; display: inline-flex; align-items: center;" onclick="changeTimelineMonth(-1)" title="Bulan Sebelumnya">
+            <i data-lucide="chevron-left" style="width: 12px; height: 12px;"></i>
           </button>
           
-          <select id="timeline-month-select" class="form-control form-control-sm" style="font-weight: 700; font-size: 12px; height: 26px; padding: 1px 6px; width: auto; color: #4f46e5; border-color: #c7d2fe; background: #ffffff;" onchange="handleTimelineMonthSelectChange()">
+          <select id="timeline-month-select" class="form-control form-control-sm" style="font-weight: 700; font-size: 11px; height: 22px; padding: 0 4px; width: auto; color: #4f46e5; border-color: #c7d2fe; background: #ffffff;" onchange="handleTimelineMonthSelectChange()">
             ${monthOptionsHtml}
           </select>
           
-          <select id="timeline-year-select" class="form-control form-control-sm" style="font-weight: 700; font-size: 12px; height: 26px; padding: 1px 6px; width: auto; color: #4f46e5; border-color: #c7d2fe; background: #ffffff;" onchange="handleTimelineMonthSelectChange()">
+          <select id="timeline-year-select" class="form-control form-control-sm" style="font-weight: 700; font-size: 11px; height: 22px; padding: 0 4px; width: auto; color: #4f46e5; border-color: #c7d2fe; background: #ffffff;" onchange="handleTimelineMonthSelectChange()">
             ${yearOptionsHtml}
           </select>
 
-          <button type="button" class="btn btn-sm btn-outline" style="padding: 2px 7px; font-size: 11px; height: 26px; display: inline-flex; align-items: center;" onclick="changeTimelineMonth(1)" title="Bulan Berikutnya">
-            <i data-lucide="chevron-right" style="width: 13px; height: 13px;"></i>
+          <button type="button" class="btn btn-xs btn-outline" style="padding: 1px 5px; font-size: 10px; height: 22px; display: inline-flex; align-items: center;" onclick="changeTimelineMonth(1)" title="Bulan Berikutnya">
+            <i data-lucide="chevron-right" style="width: 12px; height: 12px;"></i>
           </button>
 
-          <button type="button" class="btn btn-sm btn-ghost" style="padding: 2px 8px; font-size: 11px; height: 26px; font-weight: 600; color: #4f46e5; display: inline-flex; align-items: center; gap: 4px;" onclick="resetTimelineMonthToProject()" title="Kembali ke Bulan Project">
-            <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i> Bulan Project
+          <button type="button" class="btn btn-xs btn-ghost" style="padding: 1px 6px; font-size: 10.5px; height: 22px; font-weight: 600; color: #4f46e5; display: inline-flex; align-items: center; gap: 3px;" onclick="resetTimelineMonthToProject()" title="Kembali ke Bulan Project">
+            <i data-lucide="rotate-ccw" style="width: 11px; height: 11px;"></i> Bulan Project
           </button>
         </div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted);">
-        <span>💡 Klik blok warna pada tanggal kalender untuk membuka rincian subtask & laporan</span>
+      <div style="font-size: 10.5px; color: var(--text-muted);">
+        <span>💡 Klik tiket warna pada tanggal untuk detail</span>
       </div>
     </div>
 
     <!-- Day Header -->
-    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; margin-bottom: 6px;">
-      ${dayHeaders.map(dh => `<div style="font-weight: 700; font-size: 11px; color: #64748b; padding: 4px;">${dh}</div>`).join('')}
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; margin-bottom: 4px;">
+      ${dayHeaders.map(dh => `<div style="font-weight: 700; font-size: 10.5px; color: #64748b; padding: 2px;">${dh}</div>`).join('')}
     </div>
 
     <!-- Month Grid -->
-    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;">
+    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
       ${cellsHtml}
     </div>
   `;
@@ -1821,7 +1883,39 @@ function openMilestoneDetailModal(msId) {
         </div>
       </div>
 
-      <!-- 4. FOOTER ACTIONS -->
+      <!-- 4. KOMPONEN & MATERIAL TAMBAHAN UNTUK TAHAP INI -->
+      <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+          <div style="font-weight: 700; font-size: 12.5px; color: #0f172a; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="boxes" style="width: 15px; height: 15px; color: #059669;"></i>
+            Komponen & Material Tambahan untuk Tahap Ini
+          </div>
+          <button type="button" class="btn btn-xs btn-outline" style="color: #059669; border-color: #a7f3d0; background: #ecfdf5; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" onclick="closeModal('milestone-detail-modal'); openAddProjectComponentModal('${escapeAttr(ms.title || ms.name)}')">
+            <i data-lucide="plus"></i> + Tambah Komponen Tahap Ini
+          </button>
+        </div>
+        ${Array.isArray(ms.additionalComponents) && ms.additionalComponents.length > 0 ? `
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${ms.additionalComponents.map(ac => `
+              <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 12px;">
+                <div>
+                  <strong>${escapeHtml(ac.componentName || ac.itemName)}</strong> &bull; <span class="font-mono font-bold text-primary">${ac.qty} ${ac.unit || 'Pcs'}</span>
+                  ${ac.notes ? `<span class="text-muted font-xs"> (${escapeHtml(ac.notes)})</span>` : ''}
+                </div>
+                <div class="font-mono text-success font-bold" style="font-size: 11.5px;">
+                  ${typeof formatRupiah === 'function' ? formatRupiah(ac.subtotal || (ac.qty * (ac.unitCost || 0))) : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div style="font-size: 11.5px; color: #64748b; font-style: italic;">
+            Belum ada komponen tambahan yang dialokasikan khusus pada tahapan ini. Klik tombol di atas untuk menambah komponen.
+          </div>
+        `}
+      </div>
+
+      <!-- 5. FOOTER ACTIONS -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color);">
         ${isLead ? `
           <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteCurrentMilestoneModal('${msId}')" style="color: #ef4444;">
@@ -3560,3 +3654,617 @@ function triggerAssignmentGmailCompose() {
   window.open(gmailUrl, '_blank');
 }
 window.triggerAssignmentGmailCompose = triggerAssignmentGmailCompose;
+
+// =========================================================================
+// PENAMBAHAN KOMPONEN TAMBAHAN KE BOM DARI TIMELINE & MILESTONE PROJECT
+// (Aktif Saat BOM Berstatus Disetujui / Accepted)
+// =========================================================================
+
+function renderTimelineBOMComponentInfo(project, linkedBom, isBomApproved) {
+  const container = document.getElementById('timeline-bom-component-info');
+  if (!container) return;
+
+  if (!isBomApproved || !linkedBom) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  container.style.display = 'block';
+  const components = linkedBom.components || [];
+  const totalCost = linkedBom.materialCost || components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost) || 0)), 0);
+
+  container.innerHTML = `
+    <div style="background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1px solid #a7f3d0; border-radius: 6px; padding: 6px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <i data-lucide="boxes" style="width: 16px; height: 16px; color: #059669; flex-shrink: 0;"></i>
+        <div style="font-size: 11.5px; color: #065f46; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <strong style="color: #065f46;">BOM Disetujui</strong>
+          <span class="badge badge-success" style="font-size: 9.5px; padding: 1px 6px;">${escapeHtml(linkedBom.id)}</span>
+          <span style="color: #047857;">&bull; <strong>${components.length}</strong> Material &bull; Total: <strong>${typeof formatRupiah === 'function' ? formatRupiah(totalCost) : 'Rp ' + totalCost.toLocaleString('id-ID')}</strong> &bull; Order: <span class="font-mono">${escapeHtml(linkedBom.orderId || project?.orderId || '-')}</span></span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button type="button" class="btn btn-xs btn-outline" style="border-color: #a7f3d0; color: #047857; background: #ffffff; font-size: 10.5px; padding: 2px 7px; height: 24px;" onclick="toggleTimelineBOMComponentsList()">
+          <i data-lucide="list" style="width: 12px; height: 12px;"></i> Rincian Material
+        </button>
+        <button type="button" class="btn btn-xs btn-success" style="background: #059669; border-color: #059669; font-weight: 700; font-size: 10.5px; padding: 2px 8px; height: 24px; display: inline-flex; align-items: center; gap: 3px;" onclick="openAddProjectComponentModal()">
+          <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> + Tambah
+        </button>
+      </div>
+    </div>
+    <div id="timeline-bom-components-dropdown" style="display: none; background: #ffffff; border: 1px solid #d1fae5; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05);">
+      <div style="font-size: 11.5px; font-weight: 700; color: #065f46; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+        <span>Daftar Material BOM yang Digunakan:</span>
+        <span class="font-mono text-muted" style="font-size: 10.5px;">Formula: ${escapeHtml(linkedBom.productName || project?.projectName || '')}</span>
+      </div>
+      <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+        <table class="data-table" style="font-size: 11px; margin: 0; width: 100%;">
+          <thead>
+            <tr style="background: #f8fafc;">
+              <th style="padding: 4px 6px;">No</th>
+              <th style="padding: 4px 6px;">Nama Komponen</th>
+              <th style="padding: 4px 6px; text-align: center;">Qty</th>
+              <th style="padding: 4px 6px; text-align: right;">Biaya</th>
+              <th style="padding: 4px 6px; text-align: right;">Subtotal</th>
+              <th style="padding: 4px 6px;">Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${components.map((c, i) => `
+              <tr>
+                <td style="padding: 4px 6px;">${i + 1}</td>
+                <td style="padding: 4px 6px; font-weight: 600;">${escapeHtml(c.componentName || c.itemName || 'Komponen')}</td>
+                <td style="padding: 4px 6px; text-align: center;" class="font-mono">${c.qty} ${c.unit || 'Pcs'}</td>
+                <td style="padding: 4px 6px; text-align: right;" class="font-mono">${typeof formatRupiah === 'function' ? formatRupiah(c.unitCost || 0) : c.unitCost}</td>
+                <td style="padding: 4px 6px; text-align: right; font-weight: 700;" class="font-mono">${typeof formatRupiah === 'function' ? formatRupiah((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost) || 0)) : ''}</td>
+                <td style="padding: 4px 6px; color: #64748b; font-size: 10px;">${escapeHtml(c.notes || c.prId || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  if (window.lucide) lucide.createIcons();
+}
+window.renderTimelineBOMComponentInfo = renderTimelineBOMComponentInfo;
+
+function toggleTimelineBOMComponentsList() {
+  const dropdown = document.getElementById('timeline-bom-components-dropdown');
+  if (dropdown) {
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  }
+}
+window.toggleTimelineBOMComponentsList = toggleTimelineBOMComponentsList;
+
+function openAddProjectComponentModal(targetMilestoneName = '') {
+  const activeProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  if (!activeProj) {
+    showToast('Data project tidak ditemukan', 'error');
+    return;
+  }
+
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === activeProj.id || 
+    b.orderId === (activeProj.orderId || activeProj.id) ||
+    (activeProj.bomId && b.id === activeProj.bomId) ||
+    (b.projectName && activeProj.projectName && b.projectName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim()) ||
+    (b.productName && activeProj.projectName && b.productName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim())
+  );
+
+  const isBomApproved = linkedBom && (linkedBom.status === 'Accepted' || linkedBom.status === 'Approved' || linkedBom.status === 'Disetujui');
+  if (!isBomApproved) {
+    showToast('⚠️ Fitur Tambah Komponen hanya dapat digunakan saat BOM proyek sudah disetujui (Status: Accepted)!', 'warning');
+    return;
+  }
+
+  const modal = document.getElementById('form-modal');
+  const modalBody = modal?.querySelector('.modal-body') || modal;
+  if (!modalBody) return;
+
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const milestones = activeProj.milestones || [];
+  const existingComponents = linkedBom.components || [];
+
+  modalBody.innerHTML = `
+    <div style="font-family: 'Inter', system-ui, sans-serif; max-height: 85vh; overflow-y: auto; padding-right: 4px;">
+      <!-- HEADER MODAL -->
+      <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+          <div>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+              <i data-lucide="boxes" style="color: #059669; width: 22px; height: 22px;"></i>
+              Tambah Komponen Tambahan Proyek
+            </h3>
+            <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">
+              Proyek: <strong>${escapeHtml(activeProj.projectName)}</strong> &bull; Ref Order: <span class="font-mono">${escapeHtml(activeProj.orderId || '-')}</span> &bull; BOM: <span class="font-mono font-bold text-success">${escapeHtml(linkedBom.id)} (${linkedBom.status})</span>
+            </p>
+          </div>
+          <span class="badge badge-success" style="font-size: 11px; padding: 4px 8px;">
+            <i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> BOM Telah Disetujui
+          </span>
+        </div>
+      </div>
+
+      <!-- FORMULIR INPUT KOMPONEN -->
+      <form id="form-add-project-component" onsubmit="event.preventDefault();" style="display: flex; flex-direction: column; gap: 14px;">
+        <datalist id="timeline-master-items-datalist">
+          ${masterList.map(m => `<option value="${escapeAttr(m.itemName)}">${escapeAttr(m.itemName)} (${m.specs ? escapeAttr(m.specs) + ' | ' : ''}Stok Tersedia: ${m.qty} ${m.unit} | Rp ${Number(m.unitCost || 0).toLocaleString('id-ID')})</option>`).join('')}
+        </datalist>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+            Nama Komponen / Bahan Baku <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="input-add-comp-name" class="form-control" list="timeline-master-items-datalist" placeholder="Ketik atau pilih dari Master Barang Inventory..." oninput="handleTimelineComponentInput()" required autocomplete="off" style="font-weight: 600; font-size: 13px;">
+          <div style="font-size: 11px; color: #64748b; margin-top: 3px;">
+            💡 Anda dapat memilih material yang sudah ada di Master Barang atau mengetik nama material baru.
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Spesifikasi Teknis
+            </label>
+            <input type="text" id="input-add-comp-specs" class="form-control" placeholder="Tipe, ukuran, material..." style="font-size: 12px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Satuan
+            </label>
+            <input type="text" id="input-add-comp-unit" class="form-control" value="Pcs" placeholder="Pcs, Set, Mtr..." style="font-size: 12px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Jumlah Dibutuhkan (Qty) <span class="text-danger">*</span>
+            </label>
+            <input type="number" id="input-add-comp-qty" class="form-control font-mono font-bold" min="1" step="any" value="1" oninput="handleTimelineComponentInput()" required style="font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr; gap: 12px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Estimasi Biaya Satuan (Rp)
+            </label>
+            <input type="number" id="input-add-comp-cost" class="form-control font-mono" min="0" value="0" oninput="handleTimelineComponentInput()" style="font-size: 13px;">
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+              Estimasi Subtotal Biaya
+            </label>
+            <div id="preview-add-comp-subtotal" class="form-control font-mono font-bold" style="background: #f8fafc; font-size: 14px; color: #b45309; display: flex; align-items: center;">
+              Rp 0
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+            Alokasikan ke Tahapan Milestone (Opsional)
+          </label>
+          <select id="input-add-comp-milestone" class="form-control" style="font-size: 12px;">
+            <option value="">-- Alokasi Umum Seluruh Proyek --</option>
+            ${milestones.map((m, idx) => `
+              <option value="${escapeAttr(m.title || m.name)}" ${targetMilestoneName && (m.title === targetMilestoneName || m.name === targetMilestoneName) ? 'selected' : ''}>
+                Tahap ${idx + 1}: ${escapeHtml(m.title || m.name)}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="display: block; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">
+            Keterangan Kebutuhan / Catatan Teknis
+          </label>
+          <textarea id="input-add-comp-notes" class="form-control" rows="2" placeholder="Alasan penambahan komponen, modifikasi wiring, perkuatan struktur, dll..." style="font-size: 12px;"></textarea>
+        </div>
+
+        <!-- LIVE STOCK FEEDBACK BOX -->
+        <div id="timeline-component-stock-feedback">
+          <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; color: #64748b; font-size: 12px;">
+            Ketik atau pilih nama komponen di atas untuk memeriksa ketersediaan stok di Inventory.
+          </div>
+        </div>
+
+        <!-- MODAL ACTION BUTTONS -->
+        <div id="timeline-component-modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 4px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        </div>
+      </form>
+
+      <!-- REFERENSI: KOMPONEN YANG SUDAH ADA DI BOM -->
+      <div style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 14px;">
+        <div style="font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <span>Komponen yang Sudah Terpasang pada BOM Saat Ini (${existingComponents.length} Material):</span>
+          <span class="text-muted font-xs">Total BOM HPP: <strong>${typeof formatRupiah === 'function' ? formatRupiah(linkedBom.totalEstimatedCost || linkedBom.materialCost || 0) : 'Rp 0'}</strong></span>
+        </div>
+        <div class="table-responsive" style="max-height: 160px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+          <table class="data-table" style="font-size: 11px; margin: 0; width: 100%;">
+            <thead>
+              <tr style="background: #f8fafc;">
+                <th style="padding: 5px 8px;">No</th>
+                <th style="padding: 5px 8px;">Komponen</th>
+                <th style="padding: 5px 8px; text-align: center;">Qty</th>
+                <th style="padding: 5px 8px; text-align: right;">Biaya</th>
+                <th style="padding: 5px 8px;">Ref / Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${existingComponents.map((c, i) => `
+                <tr>
+                  <td style="padding: 5px 8px;">${i + 1}</td>
+                  <td style="padding: 5px 8px; font-weight: 600;">${escapeHtml(c.componentName || c.itemName || '-')}</td>
+                  <td style="padding: 5px 8px; text-align: center;" class="font-mono">${c.qty} ${c.unit || 'Pcs'}</td>
+                  <td style="padding: 5px 8px; text-align: right;" class="font-mono">${typeof formatRupiah === 'function' ? formatRupiah(c.unitCost || 0) : c.unitCost}</td>
+                  <td style="padding: 5px 8px; color: #64748b;">${escapeHtml(c.notes || c.prId || '-')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('form-modal');
+  if (window.lucide) lucide.createIcons();
+}
+window.openAddProjectComponentModal = openAddProjectComponentModal;
+
+function handleTimelineComponentInput() {
+  const nameInput = document.getElementById('input-add-comp-name');
+  const qtyInput = document.getElementById('input-add-comp-qty');
+  const costInput = document.getElementById('input-add-comp-cost');
+  const unitInput = document.getElementById('input-add-comp-unit');
+  const specsInput = document.getElementById('input-add-comp-specs');
+  const feedback = document.getElementById('timeline-component-stock-feedback');
+  const previewSubtotal = document.getElementById('preview-add-comp-subtotal');
+  const actionContainer = document.getElementById('timeline-component-modal-actions');
+
+  if (!nameInput || !feedback) return;
+
+  const rawName = nameInput.value?.trim() || '';
+  const nameLower = rawName.toLowerCase();
+  const qty = Math.max(1, parseFloat(qtyInput?.value) || 1);
+
+  // Ambil data master items
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const matched = masterList.find(m => m.itemName.toLowerCase().trim() === nameLower);
+
+  // Auto-fill unit & cost if matched
+  if (matched) {
+    if (unitInput && !unitInput.dataset.manualEdited) unitInput.value = matched.unit || 'Pcs';
+    if (costInput && (!costInput.value || costInput.value === '0')) costInput.value = matched.unitCost || 0;
+    if (specsInput && !specsInput.value && matched.specs) specsInput.value = matched.specs;
+  }
+
+  const unitCost = parseFloat(costInput?.value) || (matched?.unitCost || 0);
+  const subtotal = qty * unitCost;
+  if (previewSubtotal) {
+    previewSubtotal.textContent = typeof formatRupiah === 'function' ? formatRupiah(subtotal) : `Rp ${subtotal.toLocaleString('id-ID')}`;
+  }
+
+  if (!rawName) {
+    feedback.innerHTML = `
+      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; color: #64748b; font-size: 12px;">
+        Ketik atau pilih nama komponen di atas untuk memeriksa ketersediaan stok di Inventory.
+      </div>
+    `;
+    if (actionContainer) actionContainer.innerHTML = `<button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>`;
+    return;
+  }
+
+  const availableStock = matched ? (parseFloat(matched.qty) || 0) : 0;
+  const unit = (unitInput?.value || matched?.unit || 'Pcs').trim();
+
+  if (matched && availableStock >= qty) {
+    // KONDISI 1: ADA DI INVENTORY DAN STOK CUKUP -> BISA LANGSUNG DIGUNAKAN & POTONG STOK
+    feedback.innerHTML = `
+      <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <span style="font-size: 13px; font-weight: 700; color: #15803d; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i> Stok Tersedia di Inventory: <strong>${availableStock} ${unit}</strong>
+          </span>
+          <span class="badge badge-success" style="font-size: 10.5px;">✓ Siap Digunakan Langsung</span>
+        </div>
+        <div style="font-size: 11.5px; color: #166534; margin-top: 5px;">
+          Komponen <strong>${escapeHtml(matched.itemName)}</strong> tersedia di Master Barang. Klik tombol hijau di bawah untuk <strong>langsung mengalokasikan ${qty} ${unit} ke BOM proyek</strong> dan stok inventory otomatis terpotong.
+        </div>
+      </div>
+    `;
+    if (actionContainer) {
+      actionContainer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        <button type="button" class="btn btn-success" style="background: #059669; border-color: #059669; padding: 9px 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="executeAddDirectComponentToBOM()">
+          <i data-lucide="check-circle"></i> Gunakan Langsung & Potong Stok (${qty} ${unit})
+        </button>
+      `;
+    }
+  } else {
+    // KONDISI 2: TIDAK ADA DI INVENTORY ATAU STOK TIDAK CUKUP -> PENGAJUAN KEMBALI PURCHASING
+    const statusText = matched ? `Stok Kurang (Tersedia: ${availableStock} ${unit}, Dibutuhkan: ${qty} ${unit})` : 'Belum Ada di Inventory (Stok: 0)';
+    feedback.innerHTML = `
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+          <span style="font-size: 13px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 6px;">
+            <i data-lucide="alert-triangle" style="width: 16px; height: 16px;"></i> ${statusText}
+          </span>
+          <span class="badge badge-amber" style="font-size: 10.5px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;">Pengajuan Purchasing Diperlukan</span>
+        </div>
+        <div style="font-size: 11.5px; color: #92400e; margin-top: 5px;">
+          Stok barang tidak mencukupi di inventory untuk kebutuhan proyek ini. Klik tombol di bawah untuk <strong>otomatis mengajukan Request Pengadaan (Purchasing) kembali</strong> ke bagian Purchasing.
+        </div>
+      </div>
+    `;
+    if (actionContainer) {
+      actionContainer.innerHTML = `
+        <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
+        <button type="button" class="btn btn-primary" style="background: #d97706; border-color: #d97706; padding: 9px 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="executeSubmitPurchasingForComponent()">
+          <i data-lucide="shopping-cart"></i> Ajukan Pengadaan Purchasing (${qty} ${unit})
+        </button>
+      `;
+    }
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+window.handleTimelineComponentInput = handleTimelineComponentInput;
+
+async function executeAddDirectComponentToBOM() {
+  const activeProj = currentActiveProjectData;
+  if (!activeProj) {
+    showToast('Data project aktif tidak ditemukan', 'error');
+    return;
+  }
+
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === activeProj.id || 
+    b.orderId === (activeProj.orderId || activeProj.id) ||
+    (activeProj.bomId && b.id === activeProj.bomId) ||
+    (b.projectName && activeProj.projectName && b.projectName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim()) ||
+    (b.productName && activeProj.projectName && b.productName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim())
+  );
+
+  if (!linkedBom) {
+    showToast('Master BOM terkait proyek ini tidak ditemukan', 'error');
+    return;
+  }
+
+  const nameInput = document.getElementById('input-add-comp-name');
+  const qtyInput = document.getElementById('input-add-comp-qty');
+  const costInput = document.getElementById('input-add-comp-cost');
+  const unitInput = document.getElementById('input-add-comp-unit');
+  const specsInput = document.getElementById('input-add-comp-specs');
+  const msInput = document.getElementById('input-add-comp-milestone');
+  const notesInput = document.getElementById('input-add-comp-notes');
+
+  const itemName = (nameInput?.value || '').trim();
+  const qty = parseFloat(qtyInput?.value) || 0;
+  const unit = (unitInput?.value || 'Pcs').trim();
+  const unitCost = parseFloat(costInput?.value) || 0;
+  const specs = (specsInput?.value || '').trim();
+  const milestoneName = msInput?.value || '';
+  const notes = (notesInput?.value || '').trim();
+
+  if (!itemName) {
+    showToast('Harap masukkan nama komponen', 'warning');
+    return;
+  }
+  if (qty <= 0) {
+    showToast('Jumlah (Qty) komponen harus lebih dari 0', 'warning');
+    return;
+  }
+
+  // Cek ketersediaan di Master Barang
+  const masterList = typeof getMasterItemsList === 'function' ? getMasterItemsList() : [];
+  const mItem = masterList.find(m => m.itemName.toLowerCase().trim() === itemName.toLowerCase().trim());
+  const availableStock = mItem ? (parseFloat(mItem.qty) || 0) : 0;
+
+  if (!mItem || availableStock < qty) {
+    showToast(`⚠️ Stok di inventory tidak mencukupi (${availableStock} ${unit}). Silakan gunakan tombol Ajukan Pengadaan Purchasing!`, 'warning');
+    return;
+  }
+
+  // Tambahkan komponen ke dalam BOM
+  if (!Array.isArray(linkedBom.components)) linkedBom.components = [];
+
+  const existingIdx = linkedBom.components.findIndex(c => 
+    (c.componentName || c.itemName || '').toLowerCase().trim() === itemName.toLowerCase().trim()
+  );
+
+  if (existingIdx !== -1) {
+    linkedBom.components[existingIdx].qty = (parseFloat(linkedBom.components[existingIdx].qty) || 0) + qty;
+    if (unitCost > 0) linkedBom.components[existingIdx].unitCost = unitCost;
+    if (specs) linkedBom.components[existingIdx].specs = specs;
+    if (notes) linkedBom.components[existingIdx].notes = (linkedBom.components[existingIdx].notes ? `${linkedBom.components[existingIdx].notes}; ` : '') + notes;
+  } else {
+    linkedBom.components.push({
+      componentName: itemName,
+      specs: specs || (mItem?.specs || ''),
+      qty: qty,
+      unit: unit || (mItem?.unit || 'Pcs'),
+      unitCost: unitCost || (mItem?.unitCost || 0),
+      prId: mItem?.sourcePrId || '',
+      notes: notes || (milestoneName ? `Tambahan milestone: ${milestoneName}` : 'Tambahan dari Kalender Milestone')
+    });
+  }
+
+  // Hitung ulang HPP BOM
+  linkedBom.materialCost = linkedBom.components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost) || 0)), 0);
+  linkedBom.totalEstimatedCost = linkedBom.materialCost + (parseFloat(linkedBom.laborCost) || 0) + (parseFloat(linkedBom.overheadCost) || 0);
+  linkedBom.updatedAt = new Date().toISOString();
+
+  try {
+    // 1. Simpan update BOM ke backend
+    const res = await fetch(`/api/bom/${linkedBom.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(linkedBom)
+    });
+    if (!res.ok) throw new Error('Gagal memperbarui data BOM di server');
+
+    // 2. Potong stok inventory (purchasing / master items)
+    if (typeof deductBOMComponentsStock === 'function') {
+      await deductBOMComponentsStock([{ componentName: itemName, qty: qty, prId: mItem?.sourcePrId }]);
+    }
+
+    // 3. Catat di milestone jika dipilih
+    if (milestoneName && Array.isArray(activeProj.milestones)) {
+      const ms = activeProj.milestones.find(m => m.name === milestoneName || m.title === milestoneName);
+      if (ms) {
+        if (!Array.isArray(ms.additionalComponents)) ms.additionalComponents = [];
+        ms.additionalComponents.push({
+          componentName: itemName,
+          qty: qty,
+          unit: unit,
+          unitCost: unitCost,
+          subtotal: qty * unitCost,
+          notes: notes,
+          addedAt: new Date().toISOString()
+        });
+        await fetch(`/api/projects/${activeProj.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(activeProj)
+        }).catch(e => console.warn(e));
+      }
+    }
+
+    // 4. Update data finansial proyek di tabel project_finances Supabase
+    const finRecord = (state.project_finances || []).find(f => f.projectId === activeProj.id || f.orderId === activeProj.orderId);
+    if (finRecord) {
+      finRecord.materialCost = linkedBom.materialCost;
+      finRecord.modalTotal = linkedBom.materialCost + (parseFloat(finRecord.laborCost) || 0) + (parseFloat(finRecord.overheadCost) || 0);
+      finRecord.grossProfit = (parseFloat(finRecord.sellingPrice) || 0) - finRecord.modalTotal;
+      finRecord.netProfit = finRecord.grossProfit - (parseFloat(finRecord.claimedWarranty) || 0);
+      finRecord.profitMargin = finRecord.sellingPrice > 0 ? Number(((finRecord.netProfit / finRecord.sellingPrice) * 100).toFixed(2)) : 0;
+      finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
+      finRecord.updatedAt = new Date().toISOString();
+
+      await fetch(`/api/project_finances/${finRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finRecord)
+      }).catch(e => console.warn(e));
+    }
+
+    // 5. Muat ulang resource terkait
+    if (typeof fetchResource === 'function') {
+      await Promise.allSettled([
+        fetchResource('bom'),
+        fetchResource('master_items'),
+        fetchResource('purchasing'),
+        fetchResource('project_finances')
+      ]);
+    }
+
+    closeModal('form-modal');
+    showToast(`✅ Komponen "${itemName}" (${qty} ${unit}) berhasil ditambahkan ke BOM dan stok inventory telah terpotong!`, 'success');
+
+    // Re-render UI Kalender & Milestone
+    renderTimelineBOMComponentInfo(activeProj, linkedBom, true);
+    renderMilestoneCalendarBlocks(activeProj);
+  } catch (err) {
+    console.error('Error adding component to BOM:', err);
+    showToast('Gagal menambahkan komponen: ' + err.message, 'error');
+  }
+}
+window.executeAddDirectComponentToBOM = executeAddDirectComponentToBOM;
+
+async function executeSubmitPurchasingForComponent() {
+  const activeProj = currentActiveProjectData;
+  if (!activeProj) {
+    showToast('Data project aktif tidak ditemukan', 'error');
+    return;
+  }
+
+  const linkedBom = (state.bom || []).find(b => 
+    b.projectId === activeProj.id || 
+    b.orderId === (activeProj.orderId || activeProj.id) ||
+    (activeProj.bomId && b.id === activeProj.bomId) ||
+    (b.projectName && activeProj.projectName && b.projectName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim()) ||
+    (b.productName && activeProj.projectName && b.productName.toLowerCase().trim() === activeProj.projectName.toLowerCase().trim())
+  );
+
+  const nameInput = document.getElementById('input-add-comp-name');
+  const qtyInput = document.getElementById('input-add-comp-qty');
+  const costInput = document.getElementById('input-add-comp-cost');
+  const unitInput = document.getElementById('input-add-comp-unit');
+  const specsInput = document.getElementById('input-add-comp-specs');
+  const msInput = document.getElementById('input-add-comp-milestone');
+  const notesInput = document.getElementById('input-add-comp-notes');
+
+  const itemName = (nameInput?.value || '').trim();
+  const qty = parseFloat(qtyInput?.value) || 0;
+  const unit = (unitInput?.value || 'Pcs').trim();
+  const unitCost = parseFloat(costInput?.value) || 0;
+  const specs = (specsInput?.value || '').trim();
+  const milestoneName = msInput?.value || '';
+  const notes = (notesInput?.value || '').trim();
+
+  if (!itemName) {
+    showToast('Harap masukkan nama komponen', 'warning');
+    return;
+  }
+  if (qty <= 0) {
+    showToast('Jumlah (Qty) komponen harus lebih dari 0', 'warning');
+    return;
+  }
+
+  const authUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const newPrId = `PR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(100 + Math.random() * 900)}`;
+
+  const newPR = {
+    id: newPrId,
+    orderId: activeProj.orderId || activeProj.id || '',
+    projectId: activeProj.id || '',
+    projectName: activeProj.projectName || '',
+    bomId: linkedBom?.id || '',
+    requestor: authUser?.name || activeProj.projectLead || 'Lead Project',
+    department: authUser?.department || 'Engineering & Produksi',
+    requestDate: new Date().toISOString().split('T')[0],
+    requiredDate: activeProj.dueDate || '',
+    urgency: 'High',
+    status: 'Pending',
+    purpose: `Pengadaan Tambahan Komponen Project: ${activeProj.projectName} (Ref: ${activeProj.orderId || activeProj.id})`,
+    notes: notes ? `${notes} [Untuk Milestone: ${milestoneName || 'Umum'}]` : `Kebutuhan komponen tambahan untuk Milestone: ${milestoneName || 'Umum'}`,
+    items: [
+      {
+        itemName: itemName,
+        specs: specs || '',
+        qty: qty,
+        unit: unit || 'Pcs',
+        estimatedPrice: unitCost || 0,
+        actualPrice: unitCost || 0,
+        total: qty * (unitCost || 0),
+        itemStatus: 'Belum Dipesan'
+      }
+    ],
+    totalEstimated: qty * (unitCost || 0),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch('/api/purchasing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPR)
+    });
+    if (!res.ok) throw new Error('Gagal mengirim pengajuan purchasing ke server');
+    const saved = await res.json();
+    state.purchasing = state.purchasing || [];
+    state.purchasing.unshift(saved || newPR);
+
+    closeModal('form-modal');
+    showToast(`📋 Pengajuan Purchasing #${newPrId} berhasil dibuat untuk ${itemName} (${qty} ${unit})! Menunggu proses pembelian & stok masuk.`, 'success');
+    if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  } catch (err) {
+    console.error('Error submitting purchasing:', err);
+    showToast('Gagal mengajukan purchasing: ' + err.message, 'error');
+  }
+}
+window.executeSubmitPurchasingForComponent = executeSubmitPurchasingForComponent;

@@ -1206,66 +1206,11 @@ async function submitProjectReport(event, projectId) {
       }
     }
 
-    // 3. JIKA ADA SISA MATERIAL, KEMBALIKAN KE DATABASE MASTER BARANG (PURCHASING)
+    // 3. JIKA ADA SISA MATERIAL, KEMBALIKAN KE DATABASE MASTER BARANG (RESTOCK INVENTORY)
     if (itemsToReturn.length > 0) {
-      // Cari PR yang telah disetujui atau buat dokumen penambahan stok restock pengembalian sisa project
-      const prList = state.purchasing || [];
-      const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
-
-      for (const retItem of itemsToReturn) {
-        let updatedExisting = false;
-
-        // Coba cari kecocokan item di approved PR yang ada
-        for (const pr of approvedPRs) {
-          const matchingItem = (pr.items || []).find(it => it.itemName?.toLowerCase() === retItem.itemName.toLowerCase());
-          if (matchingItem) {
-            matchingItem.qty = (parseFloat(matchingItem.qty) || 0) + retItem.remainingQty;
-            matchingItem.total = matchingItem.qty * (parseFloat(matchingItem.estimatedPrice || matchingItem.unitPrice || retItem.unitCost) || 0);
-            pr.totalEstimated = pr.items.reduce((s, it) => s + (parseFloat(it.total) || 0), 0);
-            pr.notes = `${pr.notes ? pr.notes + ' | ' : ''}Restock +${retItem.remainingQty} ${retItem.unit} dari sisa Project #${p.id}`;
-            
-            await fetch(`/api/purchasing/${pr.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(pr)
-            }).catch(e => console.error('Error updating PR stock:', e));
-
-            updatedExisting = true;
-            break;
-          }
-        }
-
-        // Jika barang belum ada di PR yang terdaftar, buat dokumen stok pengembalian material project baru
-        if (!updatedExisting) {
-          const returnPRDoc = {
-            id: `PR-RET-${p.orderId || p.id}-${Date.now().toString().slice(-4)}-${Math.floor(10 + Math.random() * 90)}`,
-            orderId: p.orderId || p.id,
-            department: 'Gudang & Material Project',
-            requestor: reporterName,
-            requestDate: reportDate,
-            status: 'Disetujui',
-            notes: `Pengembalian sisa material pelaksanaan project ${p.projectName} (#${p.id}). ${retItem.notes || ''}`,
-            items: [{
-              itemName: retItem.itemName,
-              specs: `Sisa Material Project #${p.id}`,
-              qty: retItem.remainingQty,
-              unit: retItem.unit,
-              estimatedPrice: retItem.unitCost || 0,
-              unitPrice: retItem.unitCost || 0,
-              purchasePrice: retItem.unitCost || 0,
-              actualPrice: retItem.unitCost || 0,
-              itemStatus: 'Sesuai',
-              total: retItem.remainingQty * (retItem.unitCost || 0)
-            }],
-            totalEstimated: retItem.remainingQty * (retItem.unitCost || 0)
-          };
-
-          await fetch('/api/purchasing', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(returnPRDoc)
-          }).catch(e => console.error('Error creating return PR doc:', e));
-        }
+      // Sinkronisasi otomatis ke Database Master Barang
+      if (typeof directSyncPurchasingTablesToSupabase === 'function') {
+        directSyncPurchasingTablesToSupabase().catch(e => console.warn('Sync master items on report return notice:', e));
       }
     }
 
@@ -1285,6 +1230,7 @@ async function submitProjectReport(event, projectId) {
       fetchResource('project_reports'),
       fetchResource('projects'),
       fetchResource('purchasing'),
+      fetchResource('master_items'),
       fetchResource('partnerships')
     ]);
 

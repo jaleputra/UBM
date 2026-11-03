@@ -56,6 +56,7 @@
     <!-- ACTION & FILTER BAR -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <input type="text" id="filter-finance-search" class="form-control-sm" placeholder="🔍 Cari nama project, pelanggan, ID..." oninput="filterFinanceTable()" style="height: 36px; min-width: 250px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 6px; padding: 0 12px; font-size: 13px;">
         <select id="filter-finance-profit-status" class="form-control-sm" onchange="filterFinanceTable()" style="height: 36px;">
           <option value="ALL">Semua Tingkat Profit & Pembayaran</option>
           <option value="PAID">💵 Lunas (Invoice Paid)</option>

@@ -630,6 +630,59 @@ module.exports = function(broadcastReload) {
       }
       await saveAuthoritativeList('purchasing_process', newProcessList);
 
+      // Hitung alokasi pemakaian pada BOM dan pengembalian sisa material dari Laporan Pelaksanaan Project
+      const bomList = await fetchAuthoritativeList('bom');
+      const activeBoms = Array.isArray(bomList) 
+        ? bomList.filter(b => b && b.status !== 'Rejected' && b.status !== 'Ditolak') 
+        : [];
+
+      const reportsList = await fetchAuthoritativeList('project_reports');
+      const allReports = Array.isArray(reportsList) ? [...reportsList] : [];
+      const projectsList = await fetchAuthoritativeList('projects');
+      if (Array.isArray(projectsList)) {
+        projectsList.forEach(p => {
+          if (p && p.actualUsageReport && !allReports.some(r => r.id === p.actualUsageReport.id)) {
+            allReports.push(p.actualUsageReport);
+          }
+        });
+      }
+
+      for (const mItem of masterMap.values()) {
+        const itemLower = (mItem.itemName || '').toLowerCase().trim();
+        mItem.inboundQty = mItem.qty; // Total masuk dari pengadaan PR
+
+        // Hitung total terpakai di BOM
+        let usedInBom = 0;
+        activeBoms.forEach(b => {
+          (b.components || []).forEach(c => {
+            const cName = (c.componentName || '').toLowerCase().trim();
+            if (cName === itemLower) {
+              usedInBom += Number(c.qty || 0);
+            }
+          });
+        });
+        mItem.usedInBom = usedInBom;
+
+        // Hitung total dikembalikan dari laporan pelaksanaan project
+        let returnedQty = 0;
+        allReports.forEach(r => {
+          (r.items || []).forEach(it => {
+            const rName = (it.itemName || '').toLowerCase().trim();
+            if (rName === itemLower) {
+              const rem = Number(it.remainingQty ?? it.returnedQty ?? 0);
+              if (rem > 0) returnedQty += rem;
+            }
+          });
+        });
+        mItem.returnedQty = returnedQty;
+
+        // Stok Tersedia di Inventory Master Barang:
+        // Masuk Pengadaan - Digunakan di BOM + Dikembalikan dari Laporan Project
+        mItem.qty = Math.max(0, mItem.inboundQty - mItem.usedInBom + mItem.returnedQty);
+        mItem.totalCost = mItem.qty * mItem.unitCost;
+        mItem.status = mItem.qty > 0 ? 'Sesuai & Tersedia' : (mItem.usedInBom > 0 ? 'Terpakai di BOM (0)' : 'Habis (0)');
+      }
+
       // Upsert semua master_items dan hapus yang sudah tidak ada
       const newMasterList = Array.from(masterMap.values());
       const validMasterIds = new Set(newMasterList.map(m => m.id));
@@ -1475,6 +1528,118 @@ end run
     }
   });
 
+  async function autoSyncProjectFinances(prjList, ordList, bomList, quoList, invList) {
+    const list = [];
+    const seenProjectIds = new Set();
+    const seenOrderIds = new Set();
+
+    (prjList || []).forEach(p => {
+      if (!p) return;
+      const pid = String(p.id || '').trim();
+      const oid = String(p.orderId || '').trim();
+      list.push(p);
+      if (pid) seenProjectIds.add(pid);
+      if (oid) seenOrderIds.add(oid);
+    });
+
+    (ordList || []).forEach(o => {
+      if (!o || !o.id) return;
+      const oid = String(o.id).trim();
+      const pid = oid.startsWith('ORD-') ? oid.replace('ORD-', 'PRJ-') : `PRJ-${oid}`;
+      const already = seenOrderIds.has(oid) || seenProjectIds.has(pid) ||
+        list.some(p => p.orderId === oid || p.id === pid || (p.projectName && o.projectName && p.projectName.toLowerCase().trim() === o.projectName.toLowerCase().trim()));
+      if (!already) {
+        list.push({
+          id: pid,
+          orderId: o.id,
+          projectName: o.projectName || o.customerName || 'Project Penjualan',
+          customerName: o.customerName || '-',
+          projectLead: o.pic || o.projectLead || 'Tim Engineering',
+          status: o.status === 'Accepted' ? 'In Production' : (o.status || 'Planning'),
+          totalBudget: o.grandTotal || o.subtotal || 0,
+          createdAt: o.createdAt || new Date().toISOString()
+        });
+        seenProjectIds.add(pid);
+        seenOrderIds.add(oid);
+      }
+    });
+
+    const finRecords = [];
+    for (const p of list) {
+      const order = (ordList || []).find(o => o.id === p.orderId || o.id === p.id || (o.projectName && p.projectName && o.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim()));
+      const quotation = (quoList || []).find(q => q.id === order?.quotationId || (q.projectName && p.projectName && q.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim()));
+      const linkedBom = (bomList || []).find(b => b.projectId === p.id || b.orderId === (p.orderId || p.id) || (b.projectName && p.projectName && b.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim()));
+
+      const contractPrice = Number(order?.grandTotal || quotation?.grandTotal || p.totalBudget || 0);
+      let materialCost = 0;
+      if (p.modalCost && typeof p.modalCost === 'object' && p.modalCost.isManualCustom) {
+        materialCost = Number(p.modalCost.material || 0);
+      } else if (linkedBom && Array.isArray(linkedBom.components) && linkedBom.components.length > 0) {
+        materialCost = linkedBom.components.reduce((sum, c) => sum + ((Number(c.qty) || 0) * (Number(c.unitCost || c.actualPrice || c.purchasePrice || 0))), 0);
+      } else if (linkedBom) {
+        materialCost = Number(linkedBom.materialCost || linkedBom.totalEstimatedCost || 0);
+      } else if (p.modalCost && typeof p.modalCost === 'object') {
+        materialCost = Number(p.modalCost.material || 0);
+      }
+
+      const laborCost = Number(linkedBom?.laborCost || (p.modalCost && typeof p.modalCost === 'object' ? p.modalCost.labor : 0) || 0);
+      const overheadCost = Number(linkedBom?.overheadCost || (p.modalCost && typeof p.modalCost === 'object' ? p.modalCost.overhead : 0) || 0);
+      const modalTotal = materialCost + laborCost + overheadCost;
+
+      const isNoWarranty = quotation?.warrantyMonths === 0 || quotation?.warrantyFee === 0 || order?.warrantyFee === 0 ||
+        (typeof quotation?.warranty === 'string' && (quotation.warranty.toLowerCase().includes('tidak ada') || quotation.warranty === '0')) ||
+        (typeof order?.warranty === 'string' && (order.warranty.toLowerCase().includes('tidak ada') || order.warranty === '0'));
+
+      const allocatedWarranty = isNoWarranty ? 0 : Number(quotation?.warrantyFee || Math.round(contractPrice * 0.05));
+      const claimedWarranty = 0;
+      const netProfit = contractPrice - modalTotal - claimedWarranty;
+      const profitMargin = contractPrice > 0 ? Number(((netProfit / contractPrice) * 100).toFixed(2)) : 0;
+      const profitLevel = profitMargin >= 30 ? 'HIGH' : (profitMargin >= 10 ? 'GOOD' : (profitMargin >= 0 ? 'LOW' : 'LOSS'));
+
+      const finId = p.id ? `FIN-${p.id.replace('PRJ-', '')}` : `FIN-${Date.now()}`;
+      const finItem = {
+        id: finId,
+        projectId: p.id,
+        orderId: p.orderId || order?.id || '',
+        quotationId: quotation?.id || '',
+        invoiceId: order?.id ? `INV-${order.id.replace('ORD-', '')}` : '',
+        projectName: p.projectName || order?.projectName || 'Project UBM',
+        customerName: p.customerName || order?.customerName || '-',
+        projectLead: p.projectLead || 'Tim Engineering',
+        status: p.status || 'Planning',
+        contractSellingPrice: contractPrice,
+        sellingPrice: contractPrice,
+        materialCost,
+        laborCost,
+        overheadCost,
+        modalTotal,
+        allocatedWarranty,
+        claimedWarranty,
+        remainingWarranty: Math.max(0, allocatedWarranty - claimedWarranty),
+        grossProfit: contractPrice - modalTotal,
+        netProfit,
+        profitMargin,
+        profitLevel,
+        invoiceStatus: 'Unpaid',
+        invoiceGrandTotal: contractPrice,
+        totalPaidAmount: 0,
+        balanceDue: contractPrice,
+        isCustomCost: Boolean(p.modalCost?.isManualCustom),
+        notes: isNoWarranty ? 'Tanpa Garansi (0 Bulan).' : 'Alokasi Garansi 5%',
+        createdAt: p.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      finRecords.push(finItem);
+    }
+
+    if (finRecords.length > 0) {
+      await saveAuthoritativeList('project_finances', finRecords);
+      for (const rec of finRecords) {
+        await upsertNativeSupabaseRow('project_finances', rec);
+      }
+    }
+  }
+
   // ---------------- GENERIC CRUD HELPER FUNCTION WITH AUTHORITATIVE SUPABASE SYNC ----------------
   function registerCrudRoutes(resourceName, idPrefix) {
     // GET ALL
@@ -1486,6 +1651,17 @@ end run
           const hasApprovedPR = prList.some(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
           if (hasApprovedPR) {
             await syncPurchasingProcessAndMasterItems(prList);
+            items = await fetchAuthoritativeList(resourceName);
+          }
+        }
+        if (resourceName === 'project_finances' && items.length === 0) {
+          const prjList = await fetchAuthoritativeList('projects');
+          const ordList = await fetchAuthoritativeList('orders');
+          if (prjList.length > 0 || ordList.length > 0) {
+            const bomList = await fetchAuthoritativeList('bom');
+            const quoList = await fetchAuthoritativeList('quotations');
+            const invList = await fetchAuthoritativeList('invoices');
+            await autoSyncProjectFinances(prjList, ordList, bomList, quoList, invList);
             items = await fetchAuthoritativeList(resourceName);
           }
         }
@@ -1563,6 +1739,11 @@ end run
           await syncOrderRelationsOnSave(newItem);
         } else if (resourceName === 'bom') {
           await syncBomRelationsOnSave(newItem);
+          await syncPurchasingProcessAndMasterItems();
+        } else if (resourceName === 'project_reports') {
+          await syncPurchasingProcessAndMasterItems();
+        } else if (resourceName === 'projects') {
+          if (newItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
         } else if (resourceName === 'delivery') {
           await syncDeliveryRelationsOnSave(newItem);
         } else if (resourceName === 'purchasing') {
@@ -1662,6 +1843,11 @@ end run
           await syncOrderRelationsOnSave(updatedItem);
         } else if (resourceName === 'bom') {
           await syncBomRelationsOnSave(updatedItem);
+          await syncPurchasingProcessAndMasterItems();
+        } else if (resourceName === 'project_reports') {
+          await syncPurchasingProcessAndMasterItems();
+        } else if (resourceName === 'projects') {
+          if (updatedItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
         } else if (resourceName === 'delivery') {
           await syncDeliveryRelationsOnSave(updatedItem);
         } else if (resourceName === 'purchasing') {
@@ -1691,8 +1877,8 @@ end run
 
         if (resourceName === 'orders') {
           await syncOrderRelationsOnDelete(req.params.id, deletedItem);
-        } else if (resourceName === 'purchasing') {
-          await syncPurchasingProcessAndMasterItems(filtered);
+        } else if (resourceName === 'purchasing' || resourceName === 'bom' || resourceName === 'project_reports') {
+          await syncPurchasingProcessAndMasterItems();
         }
 
         broadcastReload({ type: 'reload', resource: resourceName });
@@ -1723,6 +1909,7 @@ end run
   registerCrudRoutes('activity_logs', 'LOG');
   registerCrudRoutes('partnerships', 'KSM');
   registerCrudRoutes('service_expenses', 'EXP-JSA');
+  registerCrudRoutes('project_finances', 'FIN');
 
   // ---------------- DEDICATED DIRECT SUPABASE USERS & ROLES MANAGEMENT ----------------
   async function fetchSupabaseUsers() {
