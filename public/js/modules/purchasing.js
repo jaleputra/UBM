@@ -178,6 +178,91 @@ function renderPurchasingTable() {
   if (window.lucide) lucide.createIcons();
 }
 
+// Helper sinkronisasi langsung ke tabel native Supabase untuk Purchasing (Tab 1, Tab 2, Tab 3)
+async function directSyncPurchasingTablesToSupabase(prRecord) {
+  if (typeof directSupabaseUpsertNativeRow !== 'function') return;
+  try {
+    if (prRecord && prRecord.id) {
+      await directSupabaseUpsertNativeRow('purchasing', prRecord);
+    }
+
+    const prList = state.purchasing || [];
+    const approvedPRs = prList.filter(p => p.status === 'Disetujui' || p.status === 'Stock' || p.status === 'Approved');
+    const masterMap = new Map();
+
+    for (const pr of approvedPRs) {
+      const items = Array.isArray(pr.items) ? pr.items : [];
+      for (let idx = 0; idx < items.length; idx++) {
+        const it = items[idx];
+        const procId = `PRC-${pr.id}-${idx}`;
+        const qty = parseFloat(it.qty) || 1;
+        const estimatedPrice = parseFloat(it.estimatedPrice ?? it.unitPrice ?? 0) || 0;
+        const purchasePrice = parseFloat(it.purchasePrice !== undefined ? it.purchasePrice : (it.actualPrice !== undefined ? it.actualPrice : estimatedPrice)) || 0;
+        const totalCost = parseFloat(it.total) || (qty * purchasePrice);
+        const itemStatus = it.itemStatus || 'Belum Dipesan';
+
+        const procRow = {
+          id: procId,
+          prId: pr.id,
+          itemIndex: idx,
+          requestor: pr.requestor || 'Tim Produksi',
+          department: pr.department || 'Umum',
+          requestDate: pr.requestDate || new Date().toISOString().split('T')[0],
+          itemName: (it.itemName || '').trim(),
+          specs: (it.specs || '').trim(),
+          qty,
+          unit: it.unit || 'Pcs',
+          estimatedPrice,
+          purchasePrice,
+          totalCost,
+          orderDate: it.orderDate || null,
+          orderLink: it.orderLink || '',
+          arrivalDate: it.arrivalDate || it.receivedDate || null,
+          recipientName: it.recipientName || it.recipient || it.receivedBy || '',
+          itemPhoto: it.itemPhoto || it.photo || '',
+          itemStatus,
+          notes: it.notes || '',
+          updatedAt: new Date().toISOString()
+        };
+        await directSupabaseUpsertNativeRow('purchasing_process', procRow);
+
+        if (itemStatus === 'Sesuai' && procRow.itemName) {
+          const key = `${procRow.itemName.toLowerCase()}:::${procRow.specs.toLowerCase()}`;
+          const safeSlug = procRow.itemName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) || 'ITEM';
+          const masterId = `MST-${safeSlug}-${idx}`;
+          if (!masterMap.has(key)) {
+            masterMap.set(key, {
+              id: masterId,
+              itemKey: key,
+              itemName: procRow.itemName,
+              specs: procRow.specs,
+              unit: procRow.unit,
+              qty: procRow.qty,
+              unitCost: procRow.purchasePrice,
+              totalCost: procRow.qty * procRow.purchasePrice,
+              departments: pr.department ? [pr.department] : [],
+              sources: [{ prId: pr.id, itemIndex: idx, qty: procRow.qty, unitCost: procRow.purchasePrice }],
+              status: procRow.qty > 0 ? 'Sesuai & Tersedia' : 'Habis (0)',
+              updatedAt: new Date().toISOString()
+            });
+          } else {
+            const ex = masterMap.get(key);
+            ex.qty += procRow.qty;
+            if (procRow.purchasePrice > 0) ex.unitCost = procRow.purchasePrice;
+            ex.totalCost = ex.qty * ex.unitCost;
+          }
+        }
+      }
+    }
+
+    for (const mItem of masterMap.values()) {
+      await directSupabaseUpsertNativeRow('master_items', mItem);
+    }
+  } catch (err) {
+    console.warn('[Purchasing Direct Supabase Sync] Notice:', err.message);
+  }
+}
+
 // Function update status PR langsung dari tabel (Pengajuan <-> Disetujui <-> Ditolak)
 async function updatePurchasingStatusDirect(prId, newStatus) {
   if (typeof hasRolePermission === 'function' && !hasRolePermission('canApprovePurchasing')) {
@@ -211,8 +296,14 @@ async function updatePurchasingStatusDirect(prId, newStatus) {
     });
 
     if (res.ok) {
+      await directSyncPurchasingTablesToSupabase(pr);
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
       if (newStatus === 'Disetujui' || newStatus === 'Stock' || newStatus === 'Approved') {
-        showToast(`✅ PR ${prId} DISETUJUI & TERKUNCI! Dokumen tidak dapat diedit lagi, barang masuk ke tab "Proses Pembelian Barang".`, 'success');
+        showToast(`✅ PR ${prId} DISETUJUI & TERKUNCI! Dokumen tidak dapat diedit lagi, barang masuk ke tabel "Proses Pembelian Barang" di Supabase.`, 'success');
       } else if (newStatus === 'Ditolak') {
         showToast(`🔴 Request Pengadaan ${prId} DITOLAK.`, 'info');
       } else {
@@ -760,15 +851,57 @@ async function saveProcessPurchasingItem(e) {
     items: pr.items
   };
 
-  // Asynchronous network update to server and Supabase
+  // Asynchronous network update to server and Supabase (purchasing, purchasing_process, and master_items)
   try {
-    const res = await fetch(`/api/purchasing/${prId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const procId = `PRC-${prId}-${itemIndex}`;
+    const procPayload = {
+      id: procId,
+      prId,
+      itemIndex,
+      requestor: pr.requestor || 'Tim Produksi',
+      department: pr.department || 'Umum',
+      requestDate: pr.requestDate || new Date().toISOString().split('T')[0],
+      itemName: updatedItemData.itemName,
+      specs: updatedItemData.specs || '',
+      qty: updatedItemData.qty,
+      unit: updatedItemData.unit || 'Pcs',
+      estimatedPrice: updatedItemData.estimatedPrice || 0,
+      purchasePrice: updatedItemData.purchasePrice || 0,
+      totalCost: updatedItemData.total || 0,
+      orderDate: updatedItemData.orderDate || null,
+      orderLink: updatedItemData.orderLink || '',
+      arrivalDate: updatedItemData.arrivalDate || null,
+      recipientName: updatedItemData.recipientName || '',
+      itemPhoto: updatedItemData.itemPhoto || '',
+      itemStatus: updatedItemData.itemStatus || 'Belum Dipesan',
+      notes: updatedItemData.notes || ''
+    };
 
-    if (!res.ok) {
+    const [res] = await Promise.all([
+      fetch(`/api/purchasing/${prId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+      fetch(`/api/purchasing_process/${encodeURIComponent(procId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(procPayload)
+      }).catch(() => null)
+    ]);
+
+    if (res.ok) {
+      await directSyncPurchasingTablesToSupabase(pr);
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
+      renderPurchasingTable();
+      renderPurchasingProcessTable();
+      renderPurchasingItemsTable();
+      updateSidebarBadges();
+    } else {
       // Revert if failed
       pr.items[itemIndex] = oldItemData;
       renderPurchasingTable();
@@ -855,13 +988,31 @@ async function updateProcessItemStatusDirect(prId, itemIndex, newStatus) {
   };
 
   try {
-    const res = await fetch(`/api/purchasing/${prId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const procId = `PRC-${prId}-${itemIndex}`;
+    const [res] = await Promise.all([
+      fetch(`/api/purchasing/${prId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+      fetch(`/api/purchasing_process/${encodeURIComponent(procId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: procId, prId, itemIndex, itemStatus: newStatus })
+      }).catch(() => null)
+    ]);
 
-    if (!res.ok) {
+    if (res.ok) {
+      await directSyncPurchasingTablesToSupabase(pr);
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
+      renderPurchasingProcessTable();
+      renderPurchasingItemsTable();
+      updateSidebarBadges();
+    } else {
       targetItem.itemStatus = oldStatus;
       showToast('Gagal mengubah status barang di database', 'error');
       renderPurchasingProcessTable();
@@ -1231,16 +1382,28 @@ async function saveEditedPurchasingItem(e) {
   };
 
   try {
-    const res = await fetch(`/api/purchasing/${prId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const procId = `PRC-${prId}-${itemIndex}`;
+    const [res] = await Promise.all([
+      fetch(`/api/purchasing/${prId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+      fetch(`/api/purchasing_process/${encodeURIComponent(procId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: procId, prId, itemIndex, itemName, specs, qty, unit, estimatedPrice, purchasePrice: estimatedPrice, totalCost: total })
+      }).catch(() => null)
+    ]);
 
     if (res.ok) {
       closeModal('modal-edit-purchasing-item');
       showToast(`Data barang "${itemName}" pada ${prId} berhasil diperbarui!`, 'success');
-      await fetchResource('purchasing');
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
       renderPurchasingTable();
       renderPurchasingProcessTable();
       renderPurchasingItemsTable();
@@ -1285,15 +1448,25 @@ async function deletePurchasingItem(prId, itemIndex) {
   };
 
   try {
-    const res = await fetch(`/api/purchasing/${prId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const procId = `PRC-${prId}-${itemIndex}`;
+    const [res] = await Promise.all([
+      fetch(`/api/purchasing/${prId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+      fetch(`/api/purchasing_process/${encodeURIComponent(procId)}`, {
+        method: 'DELETE'
+      }).catch(() => null)
+    ]);
 
     if (res.ok) {
       showToast(`Barang "${itemName}" berhasil dihapus dari ${prId}!`, 'success');
-      await fetchResource('purchasing');
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
       renderPurchasingTable();
       renderPurchasingProcessTable();
       renderPurchasingItemsTable();
@@ -1824,9 +1997,17 @@ async function submitPurchasing(e, editId = '') {
     }
 
     if (res.ok) {
+      const savedPR = await res.json().catch(() => null);
+      if (savedPR && savedPR.id) {
+        await directSyncPurchasingTablesToSupabase(savedPR);
+      }
       closeModal('form-modal');
-      showToast(`Request Pengadaan berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'}! Dokumen masuk ke Daftar Dokumen PR.`, 'success');
-      await fetchResource('purchasing');
+      showToast(`Request Pengadaan berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'} & tersimpan di Supabase!`, 'success');
+      await Promise.allSettled([
+        fetchResource('purchasing'),
+        fetchResource('purchasing_process'),
+        fetchResource('master_items')
+      ]);
       switchPurchasingTab('docs');
       renderPurchasingTable();
       renderPurchasingProcessTable();

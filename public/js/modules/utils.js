@@ -212,6 +212,34 @@ const UBM_SUPABASE_KEY = 'sb_publishable_i-LZ_maZ8S0VaRM8lEWtXg_Mc0L5bIL';
 async function directSupabaseSyncUsers(usersList) {
   if (!Array.isArray(usersList) || usersList.length === 0) return false;
   try {
+    // 1. Upsert ke tabel native public.users di Supabase (jika tabel sudah dibuat)
+    try {
+      const nativeRows = usersList.map(u => ({
+        id: u.id,
+        name: u.name || 'Pengguna UBM',
+        email: (u.email || '').trim().toLowerCase(),
+        password: u.password || '',
+        role: u.role || 'Member',
+        role_id: u.roleId || u.role_id || 'ROLE-MEMBER',
+        department: u.department || 'Operations & Management',
+        status: u.status || 'Aktif',
+        avatar: u.avatar || 'US',
+        permissions: u.permissions || {},
+        updated_at: new Date().toISOString()
+      }));
+      await fetch(`${UBM_SUPABASE_URL}/rest/v1/users?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          'apikey': UBM_SUPABASE_KEY,
+          'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(nativeRows)
+      });
+    } catch (nativeErr) {}
+
+    // 2. Simpan juga ke Cloud Store backup
     const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery`, {
       method: 'POST',
       headers: {
@@ -240,6 +268,37 @@ async function directSupabaseSyncUsers(usersList) {
 
 async function directSupabaseFetchUsers() {
   try {
+    // 1. Cek tabel native public.users terlebih dahulu
+    const nativeRes = await fetch(`${UBM_SUPABASE_URL}/rest/v1/users?select=*&order=created_at.desc`, {
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache, no-store'
+      }
+    });
+    if (nativeRes.ok) {
+      const nativeData = await nativeRes.json();
+      if (Array.isArray(nativeData) && nativeData.length > 0) {
+        const mapped = nativeData.map(r => ({
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          password: r.password,
+          role: r.role,
+          roleId: r.role_id,
+          department: r.department,
+          status: r.status,
+          avatar: r.avatar,
+          permissions: r.permissions,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at
+        }));
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(mapped)); } catch (e) {}
+        return mapped;
+      }
+    }
+
+    // 2. Fallback Cloud Store
     const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.__SYS_SYNC_users__&select=items`, {
       headers: {
         'apikey': UBM_SUPABASE_KEY,
@@ -307,19 +366,16 @@ async function directSupabaseFetchPartnerships() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items)) {
-        try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data[0].items)); } catch (e) {}
-        return data[0].items;
+      if (Array.isArray(data)) {
+        const items = (data[0] && Array.isArray(data[0].items)) ? data[0].items : [];
+        try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(items)); } catch (e) {}
+        return items;
       }
     }
   } catch (err) {
     console.warn('⚠️ [Direct Supabase Fetch Partnerships] Notice:', err.message);
   }
-  try {
-    const cached = localStorage.getItem('ubm_cached_partnerships');
-    if (cached) return JSON.parse(cached);
-  } catch (e) {}
-  return null;
+  return [];
 }
 
 window.directSupabaseSyncPartnerships = directSupabaseSyncPartnerships;
@@ -365,27 +421,129 @@ async function directSupabaseFetchServiceExpenses() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data[0] && Array.isArray(data[0].items)) {
-        try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data[0].items)); } catch (e) {}
-        return data[0].items;
+      if (Array.isArray(data)) {
+        const items = (data[0] && Array.isArray(data[0].items)) ? data[0].items : [];
+        try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(items)); } catch (e) {}
+        return items;
       }
     }
   } catch (err) {
     console.warn('⚠️ [Direct Supabase Fetch Service Expenses] Notice:', err.message);
   }
-  try {
-    const cached = localStorage.getItem('ubm_cached_service_expenses');
-    if (cached) return JSON.parse(cached);
-  } catch (e) {}
-  return null;
+  return [];
 }
 
 window.directSupabaseSyncServiceExpenses = directSupabaseSyncServiceExpenses;
 window.directSupabaseFetchServiceExpenses = directSupabaseFetchServiceExpenses;
 
-// Universal direct Supabase Cloud Store helper for any resource
+function toSnakeCaseKey(str) {
+  return String(str).replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+function toCamelCaseKey(str) {
+  return String(str).replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
+}
+
+function convertObjToSnake(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === '_syncedNative') continue;
+    const sk = toSnakeCaseKey(k);
+    if (sk.endsWith('_date') && (!v || v === '-')) {
+      out[sk] = null;
+    } else {
+      out[sk] = v;
+    }
+  }
+  return out;
+}
+
+function convertObjToCamel(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[toCamelCaseKey(k)] = v;
+  }
+  return out;
+}
+
+async function directSupabaseUpsertNativeRow(resource, item) {
+  if (!resource || !item || !item.id) return false;
+  try {
+    let payload = convertObjToSnake(item);
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/${resource}`, {
+        method: 'POST',
+        headers: {
+          'apikey': UBM_SUPABASE_KEY,
+          'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=representation'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return true;
+      const errBody = await res.json().catch(() => ({}));
+      const msg = errBody.message || '';
+      if (errBody.code === 'PGRST204' || msg.includes('column') || msg.includes('schema')) {
+        const missingCol = (
+          msg.match(/'([^']+)' column/) ||
+          msg.match(/column "([^"]+)"/) ||
+          msg.match(/column '([^']+)'/)
+        )?.[1];
+        if (missingCol && Object.prototype.hasOwnProperty.call(payload, missingCol)) {
+          delete payload[missingCol];
+          continue;
+        }
+      }
+      break;
+    }
+  } catch (err) {
+    console.warn(`⚠️ [Direct Native Upsert] ${resource}:`, err.message);
+  }
+  return false;
+}
+
+async function directSupabaseDeleteNativeRow(resource, id) {
+  if (!resource || !id) return false;
+  try {
+    const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/${resource}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': UBM_SUPABASE_KEY,
+        'Authorization': `Bearer ${UBM_SUPABASE_KEY}`
+      }
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`⚠️ [Direct Native Delete] ${resource}:`, err.message);
+    return false;
+  }
+}
+
+// Universal direct Supabase helper for any resource (Native Table + Cloud Store)
 async function directSupabaseFetchResource(resource) {
   try {
+    if (resource && resource !== 'settings') {
+      const nativeUrl = resource === 'delivery'
+        ? `${UBM_SUPABASE_URL}/rest/v1/delivery?id=not.like.__SYS_SYNC_*&select=*&order=created_at.desc`
+        : `${UBM_SUPABASE_URL}/rest/v1/${resource}?select=*&order=created_at.desc`;
+      const nativeRes = await fetch(nativeUrl, {
+        headers: {
+          'apikey': UBM_SUPABASE_KEY,
+          'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+          'Cache-Control': 'no-cache, no-store'
+        }
+      });
+      if (nativeRes.ok) {
+        const nativeRows = await nativeRes.json();
+        if (Array.isArray(nativeRows)) {
+          return nativeRows.map(r => convertObjToCamel(r));
+        }
+      }
+    }
+
     const syncKey = `__SYS_SYNC_${resource}__`;
     const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
       headers: {
@@ -396,8 +554,11 @@ async function directSupabaseFetchResource(resource) {
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data[0] && data[0].items !== undefined) {
-        return data[0].items;
+      if (Array.isArray(data)) {
+        if (data[0] && data[0].items !== undefined) {
+          return data[0].items;
+        }
+        return resource === 'settings' ? null : [];
       }
     }
   } catch (err) {
@@ -434,41 +595,93 @@ async function directSupabaseSyncResource(resource, items) {
   }
 }
 
+window.directSupabaseUpsertNativeRow = directSupabaseUpsertNativeRow;
+window.directSupabaseDeleteNativeRow = directSupabaseDeleteNativeRow;
 window.directSupabaseFetchResource = directSupabaseFetchResource;
 window.directSupabaseSyncResource = directSupabaseSyncResource;
 
 // ==================== SERVICE (JASA) DETECTION HELPERS ====================
 function isServiceOrder(order) {
   if (!order) return false;
-  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
-  if (order.quotationId && window.state && state.quotations) {
-    const quo = (state.quotations || []).find(q => q.id === order.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+
+  // 1. Cek relasi Quotation terlebih dahulu (Sumber Kebenaran Utama Tipe Penawaran)
+  const quoId = order.quotationId || (order.notes && (order.notes.match(/QUO-[\w-]+/i) || [])[0]);
+  if (quoId && window.state && Array.isArray(state.quotations)) {
+    const quo = state.quotations.find(q => q.id === quoId);
+    if (quo && quo.quotationType) {
+      return String(quo.quotationType).toLowerCase() === 'jasa';
+    }
   }
-  if (order.notes && (
-    order.notes.toLowerCase().includes('[tipe: jasa]') ||
-    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    order.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (order.id && window.state && Array.isArray(state.quotations)) {
+    const linkedQuo = state.quotations.find(q => q.orderId === order.id);
+    if (linkedQuo && linkedQuo.quotationType) {
+      return String(linkedQuo.quotationType).toLowerCase() === 'jasa';
+    }
+  }
+
+  // 2. Cek properti eksplisit pada order (quotationType / orderType)
+  if (order.quotationType) {
+    return String(order.quotationType).toLowerCase() === 'jasa';
+  }
+  if (order.orderType) {
+    return String(order.orderType).toLowerCase() === 'jasa';
+  }
+
+  // 3. Fallback pada catatan konversi eksplisit (hindari salah deteksi kata 'jasa' dari sub-rincian instalasi produk)
+  if (order.notes) {
+    const notesLower = order.notes.toLowerCase();
+    if (notesLower.includes('surat penawaran harga (produk)') || notesLower.includes('[tipe: produk]')) {
+      return false;
+    }
+    if (notesLower.includes('surat penawaran harga (jasa)') || notesLower.includes('[tipe: jasa]') || notesLower.includes('tipe penawaran: jasa')) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 function isProjectService(p) {
   if (!p) return false;
-  if (p.isService === true || p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
-  if (p.orderId && window.state && state.orders) {
-    const order = (state.orders || []).find(o => o.id === p.orderId);
-    if (order && isServiceOrder(order)) return true;
+
+  // 1. Jika terhubung ke Order Penjualan, ikuti tipe Order/Quotation secara ketat
+  if (p.orderId && window.state && Array.isArray(state.orders)) {
+    const order = state.orders.find(o => o.id === p.orderId);
+    if (order) {
+      return isServiceOrder(order);
+    }
   }
-  if (p.quotationId && window.state && state.quotations) {
-    const quo = (state.quotations || []).find(q => q.id === p.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+
+  // 2. Jika terhubung ke Quotation langsung, ikuti tipe Quotation
+  if (p.quotationId && window.state && Array.isArray(state.quotations)) {
+    const quo = state.quotations.find(q => q.id === p.quotationId);
+    if (quo && quo.quotationType) {
+      return String(quo.quotationType).toLowerCase() === 'jasa';
+    }
   }
-  if (p.notes && (
-    p.notes.toLowerCase().includes('[tipe: jasa]') ||
-    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    p.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+
+  // 3. Cek properti eksplisit pada project
+  if (p.quotationType) {
+    return String(p.quotationType).toLowerCase() === 'jasa';
+  }
+  if (p.projectType) {
+    return String(p.projectType).toLowerCase() === 'jasa';
+  }
+  if (typeof p.isService === 'boolean') {
+    return p.isService;
+  }
+
+  // 4. Fallback catatan eksplisit
+  if (p.notes) {
+    const notesLower = p.notes.toLowerCase();
+    if (notesLower.includes('surat penawaran harga (produk)') || notesLower.includes('[tipe: produk]')) {
+      return false;
+    }
+    if (notesLower.includes('surat penawaran harga (jasa)') || notesLower.includes('[tipe: jasa]') || notesLower.includes('tipe penawaran: jasa')) {
+      return true;
+    }
+  }
+
   return false;
 }
 

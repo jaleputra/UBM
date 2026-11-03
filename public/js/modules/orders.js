@@ -3,18 +3,29 @@
 // =========================================================
 
 // Helper: Memeriksa apakah order bertipe Jasa / Layanan (Non-BOM)
+// Hanya true jika Quotation asal atau Order eksplisit bertipe 'jasa'
 function isServiceOrder(order) {
   if (!order) return false;
-  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
-  if (order.quotationId) {
-    const quo = (state.quotations || []).find(q => q.id === order.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+  const quoId = order.quotationId || (order.notes && (order.notes.match(/QUO-[\w-]+/i) || [])[0]);
+  if (quoId && window.state && Array.isArray(state.quotations)) {
+    const quo = state.quotations.find(q => q.id === quoId);
+    if (quo && quo.quotationType) {
+      return String(quo.quotationType).toLowerCase() === 'jasa';
+    }
   }
-  if (order.notes && (
-    order.notes.toLowerCase().includes('[tipe: jasa]') ||
-    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    order.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (order.id && window.state && Array.isArray(state.quotations)) {
+    const linkedQuo = state.quotations.find(q => q.orderId === order.id);
+    if (linkedQuo && linkedQuo.quotationType) {
+      return String(linkedQuo.quotationType).toLowerCase() === 'jasa';
+    }
+  }
+  if (order.quotationType) return String(order.quotationType).toLowerCase() === 'jasa';
+  if (order.orderType) return String(order.orderType).toLowerCase() === 'jasa';
+  if (order.notes) {
+    const notesLower = order.notes.toLowerCase();
+    if (notesLower.includes('surat penawaran harga (produk)') || notesLower.includes('[tipe: produk]')) return false;
+    if (notesLower.includes('surat penawaran harga (jasa)') || notesLower.includes('[tipe: jasa]') || notesLower.includes('tipe penawaran: jasa')) return true;
+  }
   return false;
 }
 
@@ -172,17 +183,19 @@ function renderOrdersTable() {
           `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
     }
 
-    // Tombol 4: Hapus Order
-    const btnDelete = isPOAndAccepted ?
-      `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>` :
-      `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan untuk menghapus Order" onclick="event.stopPropagation(); promptPOAndAcceptedRequired('${order.id}')"><i data-lucide="trash-2"></i></button>`;
+    // Tombol 4: Edit Order
+    const btnEdit = `<button class="btn-icon" title="Edit Order Penjualan" onclick="event.stopPropagation(); editOrder('${order.id}')"><i data-lucide="edit-2"></i></button>`;
 
-    // Action Buttons: Penugasan -> BOM -> Project Management -> Hapus
+    // Tombol 5: Hapus Order
+    const btnDelete = `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>`;
+
+    // Action Buttons: Penugasan -> BOM -> Project Management -> Edit -> Hapus
     const actionsHtml = `
       <div class="table-actions" onclick="event.stopPropagation()">
         ${btnPenugasan}
         ${btnBOM}
         ${btnProject}
+        ${btnEdit}
         ${btnDelete}
       </div>
     `;
@@ -945,7 +958,12 @@ async function saveDirectUploadedPO(orderId) {
 
       // Ambil data terbaru dari server dan pertahankan metadata poDocument
       const savedOrder = await res.json().catch(() => ({}));
-      await fetchResource('orders');
+      await Promise.allSettled([
+        fetchResource('orders'),
+        fetchResource('quotations'),
+        fetchResource('invoices'),
+        fetchResource('projects')
+      ]);
       const target = (state.orders || []).find(o => o.id === orderId);
       if (target) {
         if (!target.poDocument) target.poDocument = order.poDocument;
@@ -1195,17 +1213,18 @@ async function submitOrder(e, editId = '') {
   });
 
   const totals = calculateOrderTotals();
-  const poFileUrl = formData.get('poFileUrl') || '';
-  const poFileName = formData.get('poFileName') || '';
+  const existingOrder = editId ? (state.orders || []).find(o => o.id === editId) : null;
+  const poFileUrl = formData.get('poFileUrl') || existingOrder?.poFileUrl || existingOrder?.poDocument?.url || '';
+  const poFileName = formData.get('poFileName') || existingOrder?.poFileName || existingOrder?.poDocument?.name || '';
 
   const poDocument = (poFileUrl || poFileName) ? {
     name: poFileName || 'PO-Pelanggan.pdf',
     url: poFileUrl,
-    uploadedAt: new Date().toISOString()
-  } : null;
+    uploadedAt: existingOrder?.poDocument?.uploadedAt || new Date().toISOString()
+  } : (existingOrder?.poDocument || null);
 
   const payload = {
-    quotationId: quotationId,
+    quotationId: quotationId || existingOrder?.quotationId || '',
     orderType: orderType,
     quotationType: orderType,
     customerName: formData.get('customerName'),
@@ -1214,7 +1233,7 @@ async function submitOrder(e, editId = '') {
     customerAddress: formData.get('customerAddress'),
     orderDate: formData.get('orderDate'),
     dueDate: formData.get('dueDate'),
-    status: !editId ? 'Pengajuan' : (formData.get('status') || 'Pengajuan'),
+    status: !editId ? 'Pengajuan' : (formData.get('status') || existingOrder?.status || 'Pengajuan'),
     notes: formData.get('notes'),
     poDocument: poDocument,
     poFileUrl: poFileUrl,
@@ -1260,43 +1279,21 @@ async function submitOrder(e, editId = '') {
     if (res.ok) {
       closeModal('form-modal');
 
-      await fetchResource('orders');
+      await Promise.allSettled([
+        fetchResource('orders'),
+        fetchResource('quotations'),
+        fetchResource('invoices'),
+        fetchResource('projects')
+      ]);
       if (typeof renderOrdersTable === 'function') {
         renderOrdersTable();
       }
-
-      // Sinkronisasi status Quotation terkait sesuai status Order
-      const linkedQuoId = quotationId || (payload.notes && (payload.notes.match(/QUO-[\w-]+/i) || [])[0]);
-      if (linkedQuoId) {
-        try {
-          let targetQuo = (state.quotations || []).find(q => q.id === linkedQuoId);
-          if (!targetQuo) {
-            const getQuo = await fetch(`/api/quotations/${linkedQuoId}`);
-            if (getQuo.ok) targetQuo = await getQuo.json();
-          }
-          if (targetQuo) {
-            const expectedQuoStatus = payload.status === 'Accepted' ? 'Accepted' : 'Pengajuan';
-            if (targetQuo.status !== expectedQuoStatus) {
-              const updateQuoRes = await fetch(`/api/quotations/${linkedQuoId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...targetQuo, status: expectedQuoStatus })
-              });
-              if (updateQuoRes.ok) {
-                targetQuo.status = expectedQuoStatus;
-                await fetchResource('quotations');
-                if (typeof renderQuotationsTable === 'function') {
-                  renderQuotationsTable();
-                }
-              }
-            }
-          }
-        } catch (quoErr) {
-          console.error('Error syncing quotation status:', quoErr);
-        }
+      if (typeof renderQuotationsTable === 'function' && state.currentView === 'quotations') {
+        renderQuotationsTable();
       }
+      updateSidebarBadges();
 
-      showToast(editId ? 'Order penjualan berhasil diperbarui!' : 'Order penjualan baru berhasil disimpan!', 'success');
+      showToast(editId ? 'Order penjualan berhasil diperbarui di Supabase!' : 'Order penjualan baru berhasil disimpan ke Supabase!', 'success');
     } else {
       const errData = await res.json().catch(() => ({}));
       showToast(errData.error || errData.message || 'Gagal menyimpan order', 'error');
@@ -1319,29 +1316,37 @@ function viewOrderDetail(orderId) {
   const bom = acceptedBOM || pengajuanBOM || rejectedBOM || null;
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const startDate = project?.startDate || order.orderDate || '-';
-  const dueDate = project?.dueDate || order.dueDate || '-';
+  const milestones = project?.milestones || [];
+  const hasTimeline = Array.isArray(milestones) && milestones.length > 0;
+  const startDate = hasTimeline ? (project?.startDate || order.orderDate || '-') : '-';
+  const dueDate = hasTimeline ? (project?.dueDate || order.dueDate || '-') : '-';
 
   // Calculate Progress & Health
-  let progress = project?.progressPercent;
-  if (progress === undefined || progress === null) {
-    progress = order.status === 'Delivered' ? 100 :
-      order.status === 'In Production' ? 50 : 25;
+  let progress = 0;
+  if (hasTimeline) {
+    if (typeof project?.progressPercent === 'number' && project.progressPercent > 0) {
+      progress = project.progressPercent;
+    } else {
+      const completedMs = milestones.filter(m => m.status === 'Completed').length;
+      const inProgressMs = milestones.filter(m => m.status === 'In Progress').length;
+      progress = Math.min(100, Math.round(((completedMs + (inProgressMs * 0.5)) / milestones.length) * 100));
+    }
   }
 
-  const isCompleted = progress >= 100 || project?.status === 'Completed' || order.status === 'Delivered';
+  const isCompleted = hasTimeline && (progress >= 100 || project?.status === 'Completed' || order.status === 'Delivered');
   const isOnHold = project?.status === 'On Hold' || (project?.notes && project.notes.toLowerCase().includes('kendala'));
-  const isOverdue = dueDate !== '-' && dueDate < todayStr && !isCompleted;
+  const isOverdue = hasTimeline && dueDate !== '-' && dueDate < todayStr && !isCompleted;
 
-  const healthBadge = isCompleted ? 'badge-success' :
-    isOnHold ? 'badge-amber' :
-      isOverdue ? 'badge-danger' : 'badge-purple';
+  const healthBadge = !hasTimeline ? 'badge-secondary' :
+    isCompleted ? 'badge-success' :
+      isOnHold ? 'badge-amber' :
+        isOverdue ? 'badge-danger' : 'badge-purple';
 
-  const healthText = isCompleted ? 'Completed (Selesai)' :
-    isOnHold ? 'Ada Kendala / Hold' :
-      isOverdue ? 'Overdue (Lewat Deadline)' : 'On Track (In Progress)';
+  const healthText = !hasTimeline ? 'Belum Input Timeline' :
+    isCompleted ? 'Completed (Selesai)' :
+      isOnHold ? 'Ada Kendala / Hold' :
+        isOverdue ? 'Overdue (Lewat Deadline)' : 'On Track (In Progress)';
 
-  const milestones = project?.milestones || [];
   const team = project?.team || [];
 
   const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
@@ -1449,6 +1454,9 @@ function viewOrderDetail(orderId) {
           <div class="text-muted font-sm">Engineering, Manufacturing, & Automation Solutions</div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); editOrder('${order.id}')">
+            <i data-lucide="edit-2"></i> Edit Order
+          </button>
           ${penugasanBtnModal}
           ${bomBtnModal}
           ${timelineBtnModal}
@@ -1495,8 +1503,8 @@ function viewOrderDetail(orderId) {
           </div>
           <div>
             <span class="text-muted font-bold">Timeline Pengerjaan:</span>
-            <div class="font-bold text-main">${startDate} &rarr; ${dueDate}</div>
-            <div class="text-muted font-sm">${isCompleted ? '<span class="text-success">Selesai 100%</span>' : isOverdue ? '<span class="text-danger font-bold">Overdue / Terlambat</span>' : '<span class="text-primary">Dalam Pengerjaan</span>'}</div>
+            <div class="font-bold text-main">${hasTimeline ? `${startDate} &rarr; ${dueDate}` : '<span class="text-muted">Belum diinput di Project Management</span>'}</div>
+            <div class="text-muted font-sm">${!hasTimeline ? '<span class="text-muted">Silakan klik tombol Timeline & Milestone</span>' : isCompleted ? '<span class="text-success">Selesai 100%</span>' : isOverdue ? '<span class="text-danger font-bold">Overdue / Terlambat</span>' : '<span class="text-primary">Dalam Pengerjaan</span>'}</div>
           </div>
           <div>
             <span class="text-muted font-bold">${isService ? 'Tipe Pengerjaan:' : 'Formula BOM Terkait:'}</span>

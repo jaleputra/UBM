@@ -2484,20 +2484,24 @@ async function saveAdjustProjectModalCost(event, projectId) {
   };
 
   try {
-    const updated = await api.put(`/api/projects/${p.id}`, p);
-    // Perbarui state lokal jika perlu
+    const res = await fetch(`/api/projects/${p.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p)
+    });
+    if (!res.ok) throw new Error('Gagal menyimpan HPP ke server');
+    const updated = await res.json();
     const idx = (state.projects || []).findIndex(item => item.id === p.id);
     if (idx !== -1) {
       state.projects[idx] = updated || p;
     }
     closeModal('form-modal');
-    showToast('Harga Modal (HPP) proyek berhasil disimpan & diperbarui!', 'success');
+    showToast('Harga Modal (HPP) proyek berhasil disimpan ke Supabase!', 'success');
     renderServiceFinanceTable();
   } catch (err) {
     console.error('Error saving project modal cost:', err);
-    // Fallback simpan di state
     closeModal('form-modal');
-    showToast('Harga Modal diperbarui pada state lokal', 'info');
+    showToast('Gagal menyimpan Harga Modal ke database: ' + err.message, 'error');
     renderServiceFinanceTable();
   }
 }

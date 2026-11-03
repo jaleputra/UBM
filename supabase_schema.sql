@@ -1,18 +1,23 @@
 -- =========================================================
 -- UBM (Universal Business Management) ERP - Supabase SQL Schema
 -- Compatibility: Supabase / PostgreSQL 14+
--- Modules: Quotations, Orders, Purchase Orders (PO), Invoices, Purchasing (PR), BOM, Delivery
+-- Relational Modules: Quotations, Orders, Projects, BOM, Purchasing (PR),
+-- PO, Delivery, Invoices, BAST, Project Reports, Maintenance,
+-- Service Tickets, Warranty Claims, Partnerships, Service Expenses,
+-- Activity Logs, Users, Settings
 -- =========================================================
 
--- Enable UUID extension if needed
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ---------------------------------------------------------
--- 0. TABLE: quotations (Surat Penawaran Harga)
+-- 1. TABLE: quotations (Surat Penawaran Harga)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.quotations (
     id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    quotation_type VARCHAR(50) DEFAULT 'produk',
     customer_name VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255),
     customer_phone VARCHAR(100),
     customer_email VARCHAR(255),
     customer_address TEXT,
@@ -24,32 +29,49 @@ CREATE TABLE IF NOT EXISTS public.quotations (
     lead_time VARCHAR(150),
     payment_terms VARCHAR(255),
     items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    additional_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+    rab_items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    total_modal NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    estimated_profit NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    main_items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    services_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    warranty_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
     subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
     discount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
     tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    pdf_url TEXT,
+    pdf_filename TEXT,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_quotations_status ON public.quotations(status);
-CREATE INDEX IF NOT EXISTS idx_quotations_date ON public.quotations(quotation_date);
-
 -- ---------------------------------------------------------
--- 1. TABLE: orders (Sales Orders)
+-- 2. TABLE: orders (Sales Orders / Pesanan Penjualan)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.orders (
     id VARCHAR(50) PRIMARY KEY,
+    quotation_id VARCHAR(50),
+    order_type VARCHAR(50) DEFAULT 'produk',
+    quotation_type VARCHAR(50) DEFAULT 'produk',
     customer_name VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255),
     customer_phone VARCHAR(100),
     customer_address TEXT,
     order_date DATE NOT NULL DEFAULT CURRENT_DATE,
     due_date DATE,
-    status VARCHAR(50) NOT NULL DEFAULT 'Confirmed',
+    status VARCHAR(50) NOT NULL DEFAULT 'Pengajuan',
     items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    additional_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+    main_items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    services_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    warranty_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
     subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    discount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
     tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
@@ -61,86 +83,60 @@ CREATE TABLE IF NOT EXISTS public.orders (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Migration helpers if table already exists:
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS quotation_id VARCHAR(50);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(50) DEFAULT 'produk';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS quotation_type VARCHAR(50) DEFAULT 'produk';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS additional_services JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS main_items_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS services_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS items_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS warranty_fee NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS discount NUMERIC(15, 2) DEFAULT 0;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_document JSONB;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_file_url TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_file_name TEXT;
 
 -- ---------------------------------------------------------
--- 2. TABLE: po (Purchase Orders to Vendors)
+-- 3. TABLE: projects (Project Management & Timeline)
 -- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.po (
-    id VARCHAR(50) PRIMARY KEY,
-    vendor_name VARCHAR(255) NOT NULL,
-    vendor_contact VARCHAR(255),
-    vendor_email VARCHAR(255),
-    po_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    expected_date DATE,
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending Approval',
-    payment_terms VARCHAR(100) DEFAULT 'NET 30',
-    items JSONB NOT NULL DEFAULT '[]'::jsonb,
-    subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
-    tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 3. TABLE: invoices (Customer Billing & Invoices)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.invoices (
+CREATE TABLE IF NOT EXISTS public.projects (
     id VARCHAR(50) PRIMARY KEY,
     order_id VARCHAR(50),
-    customer_name VARCHAR(255) NOT NULL,
-    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    due_date DATE NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'Unpaid',
-    payment_method VARCHAR(100) DEFAULT 'Bank Transfer',
-    items JSONB NOT NULL DEFAULT '[]'::jsonb,
-    subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
-    tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    paid_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    balance_due NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    quotation_id VARCHAR(50),
+    bom_id VARCHAR(50),
+    project_name VARCHAR(255) NOT NULL,
+    customer_name VARCHAR(255),
+    project_lead VARCHAR(255),
+    department VARCHAR(255),
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    end_date DATE,
+    due_date DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Planning',
+    progress_percent NUMERIC(5, 2) NOT NULL DEFAULT 0,
+    is_service BOOLEAN DEFAULT FALSE,
+    service_expense_approved BOOLEAN DEFAULT FALSE,
+    milestones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    team JSONB NOT NULL DEFAULT '[]'::jsonb,
+    modal_cost JSONB,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- ---------------------------------------------------------
--- 4. TABLE: purchasing (Purchase Requisitions / PR)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.purchasing (
-    id VARCHAR(50) PRIMARY KEY,
-    requestor VARCHAR(255) NOT NULL,
-    department VARCHAR(255) NOT NULL,
-    request_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    urgency VARCHAR(50) NOT NULL DEFAULT 'Medium',
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending',
-    purpose TEXT,
-    items JSONB NOT NULL DEFAULT '[]'::jsonb,
-    total_estimated NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    approved_by VARCHAR(255) DEFAULT '-',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 5. TABLE: bom (Bill of Materials & Product Formulas)
+-- 4. TABLE: bom (Bill of Materials & Product Formulas)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.bom (
     id VARCHAR(50) PRIMARY KEY,
     order_id VARCHAR(50),
+    project_id VARCHAR(50),
     product_name VARCHAR(255) NOT NULL,
     product_code VARCHAR(100) NOT NULL,
     revision VARCHAR(50) DEFAULT 'v1.0',
     category VARCHAR(100) DEFAULT 'General Assembly',
     created_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    status VARCHAR(50) NOT NULL DEFAULT 'Active',
+    status VARCHAR(50) NOT NULL DEFAULT 'Pengajuan',
     labor_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
     overhead_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
     components JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -151,15 +147,125 @@ CREATE TABLE IF NOT EXISTS public.bom (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Ensure column exists if table was already created
 ALTER TABLE public.bom ADD COLUMN IF NOT EXISTS order_id VARCHAR(50);
+ALTER TABLE public.bom ADD COLUMN IF NOT EXISTS project_id VARCHAR(50);
 
 -- ---------------------------------------------------------
--- 6. TABLE: delivery (Delivery Orders / Surat Jalan)
+-- 5. TABLE: purchasing (Purchase Requisitions / PR - Tab 1)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.purchasing (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    bom_id VARCHAR(50),
+    requestor VARCHAR(255) NOT NULL,
+    pic_name VARCHAR(255),
+    department VARCHAR(255) NOT NULL,
+    request_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    required_date DATE,
+    urgency VARCHAR(50) NOT NULL DEFAULT 'Medium',
+    status VARCHAR(50) NOT NULL DEFAULT 'Pengajuan',
+    purpose TEXT,
+    notes TEXT,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    total_estimated NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    approved_by VARCHAR(255) DEFAULT '-',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS order_id VARCHAR(50);
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS bom_id VARCHAR(50);
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS pic_name VARCHAR(255);
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS required_date DATE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- ---------------------------------------------------------
+-- 5B. TABLE: purchasing_process (Tab 2: Proses Pembelian Barang)
+-- Berelasi ke public.purchasing(id) ON DELETE CASCADE
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.purchasing_process (
+    id VARCHAR(100) PRIMARY KEY,
+    pr_id VARCHAR(50) NOT NULL REFERENCES public.purchasing(id) ON DELETE CASCADE,
+    item_index INTEGER NOT NULL DEFAULT 0,
+    requestor VARCHAR(255),
+    department VARCHAR(255),
+    request_date DATE DEFAULT CURRENT_DATE,
+    item_name VARCHAR(255) NOT NULL,
+    specs TEXT,
+    qty NUMERIC(15, 2) NOT NULL DEFAULT 1,
+    unit VARCHAR(50) DEFAULT 'Pcs',
+    estimated_price NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    purchase_price NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    total_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    order_date DATE,
+    order_link TEXT,
+    arrival_date DATE,
+    recipient_name VARCHAR(255),
+    item_photo TEXT,
+    item_status VARCHAR(50) NOT NULL DEFAULT 'Proses Pembelian',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 5C. TABLE: master_items (Tab 3: Database Master Barang / Inventaris)
+-- Menyimpan stok & harga barang yang telah diverifikasi 'Sesuai'
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.master_items (
+    id VARCHAR(100) PRIMARY KEY,
+    item_key VARCHAR(255) UNIQUE NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
+    specs TEXT,
+    unit VARCHAR(50) DEFAULT 'Pcs',
+    qty NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    unit_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    total_cost NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    departments JSONB NOT NULL DEFAULT '[]'::jsonb,
+    sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status VARCHAR(50) NOT NULL DEFAULT 'Sesuai',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 6. TABLE: po (Purchase Orders to Vendors)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.po (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    purchasing_id VARCHAR(50),
+    vendor_name VARCHAR(255) NOT NULL,
+    vendor_contact VARCHAR(255),
+    vendor_email VARCHAR(255),
+    po_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    expected_date DATE,
+    expected_delivery DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Pending Approval',
+    payment_terms VARCHAR(100) DEFAULT 'NET 30',
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
+    tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    total_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.po ADD COLUMN IF NOT EXISTS order_id VARCHAR(50);
+ALTER TABLE public.po ADD COLUMN IF NOT EXISTS purchasing_id VARCHAR(50);
+ALTER TABLE public.po ADD COLUMN IF NOT EXISTS expected_delivery DATE;
+ALTER TABLE public.po ADD COLUMN IF NOT EXISTS total_amount NUMERIC(15, 2) DEFAULT 0;
+
+-- ---------------------------------------------------------
+-- 7. TABLE: delivery (Delivery Orders / Surat Jalan & Cloud Sync Store)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.delivery (
     id VARCHAR(50) PRIMARY KEY,
     order_id VARCHAR(50),
+    project_id VARCHAR(50),
     customer_name VARCHAR(255) NOT NULL,
     delivery_date DATE NOT NULL DEFAULT CURRENT_DATE,
     delivery_address TEXT,
@@ -175,8 +281,196 @@ CREATE TABLE IF NOT EXISTS public.delivery (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.delivery ADD COLUMN IF NOT EXISTS project_id VARCHAR(50);
+
 -- ---------------------------------------------------------
--- 7. TABLE: activity_logs (Log Kegiatan & Agenda Kalender UBM)
+-- 8. TABLE: invoices (Customer Billing & Invoices)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.invoices (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    quotation_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    customer_phone VARCHAR(100),
+    customer_address TEXT,
+    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Unpaid',
+    payment_method VARCHAR(100) DEFAULT 'Bank Transfer',
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    additional_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+    main_items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    services_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    items_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    warranty_fee NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    discount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
+    tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    paid_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    balance_due NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS quotation_id VARCHAR(50);
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(100);
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS customer_address TEXT;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS additional_services JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS main_items_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS services_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS items_total NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS warranty_fee NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS discount NUMERIC(15, 2) DEFAULT 0;
+
+-- ---------------------------------------------------------
+-- 9. TABLE: bast (Berita Acara Serah Terima)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.bast (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255),
+    bast_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    work_summary TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'Draft',
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pdf_url TEXT,
+    pdf_filename TEXT,
+    uploaded_document JSONB,
+    documentation_photos JSONB NOT NULL DEFAULT '[]'::jsonb,
+    proof_notes TEXT,
+    handed_over_date DATE,
+    receiver_name VARCHAR(255),
+    has_proof BOOLEAN DEFAULT FALSE,
+    proof_updated_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 10. TABLE: project_reports (Laporan Pelaksanaan Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.project_reports (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    project_name VARCHAR(255),
+    customer_name VARCHAR(255),
+    report_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    reporter_name VARCHAR(255),
+    author VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'Completed',
+    is_service_report BOOLEAN DEFAULT FALSE,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    actual_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+    returned_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+    evidence_docs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    overall_description TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 11. TABLE: maintenance (Pemeliharaan Berkala Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.maintenance (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255),
+    schedule_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status VARCHAR(50) DEFAULT 'Scheduled',
+    inspection_checklist JSONB NOT NULL DEFAULT '[]'::jsonb,
+    technician_name VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 12. TABLE: service_tickets (Tiket Perbaikan & Servis Non-Garansi)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.service_tickets (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    ticket_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    issue_description TEXT NOT NULL,
+    priority VARCHAR(50) DEFAULT 'Medium',
+    status VARCHAR(50) DEFAULT 'Open',
+    repair_cost NUMERIC(15, 2) DEFAULT 0,
+    technician_name VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 13. TABLE: warranty_claims (Klaim Garansi Resmi)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.warranty_claims (
+    id VARCHAR(50) PRIMARY KEY,
+    project_id VARCHAR(50),
+    order_id VARCHAR(50),
+    customer_name VARCHAR(255) NOT NULL,
+    claim_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    claim_reason TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'Under Review',
+    approved_by VARCHAR(255),
+    resolution_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 14. TABLE: partnerships (Bagi Hasil Kerjasama Takumi & Ayumi)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.partnerships (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    project_id VARCHAR(50),
+    invoice_ref VARCHAR(50),
+    client_name VARCHAR(255),
+    service_name VARCHAR(255),
+    date DATE DEFAULT CURRENT_DATE,
+    billed_amount NUMERIC(15, 2) DEFAULT 0,
+    payment_status VARCHAR(50) DEFAULT 'Belum Lunas',
+    percentages JSONB DEFAULT '{}'::jsonb,
+    contributions JSONB DEFAULT '{}'::jsonb,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 15. TABLE: service_expenses (Pengajuan Biaya Transport & Uang Makan Jasa)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.service_expenses (
+    id VARCHAR(50) PRIMARY KEY,
+    order_id VARCHAR(50),
+    project_id VARCHAR(50),
+    customer_name VARCHAR(255),
+    service_name VARCHAR(255),
+    pic_name VARCHAR(255),
+    date DATE DEFAULT CURRENT_DATE,
+    status VARCHAR(50) DEFAULT 'Pengajuan',
+    meal_fee NUMERIC(15, 2) DEFAULT 0,
+    transport_fee NUMERIC(15, 2) DEFAULT 0,
+    total_expense NUMERIC(15, 2) DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ---------------------------------------------------------
+-- 16. TABLE: activity_logs (Log Kegiatan & Agenda Kalender UBM)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.activity_logs (
     id VARCHAR(50) PRIMARY KEY,
@@ -186,34 +480,141 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
     category VARCHAR(100) DEFAULT 'Produksi',
     start_date DATE NOT NULL DEFAULT CURRENT_DATE,
     end_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    start_time VARCHAR(50),
+    end_time VARCHAR(50),
     status VARCHAR(50) NOT NULL DEFAULT 'Sedang Berjalan',
+    report JSONB DEFAULT '{}'::jsonb,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Produksi';
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS start_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS end_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS start_time VARCHAR(50);
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS end_time VARCHAR(50);
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Sedang Berjalan';
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS report JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS notes TEXT;
+
 -- ---------------------------------------------------------
--- 8. TABLE: users (Manajemen Akun Pengguna & Hak Akses Role)
+-- 17. TABLE: roles (Master Role & Matriks Hak Akses Pengguna)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.roles (
+    id VARCHAR(50) PRIMARY KEY,
+    role_name VARCHAR(100) UNIQUE NOT NULL,
+    label VARCHAR(150) NOT NULL,
+    badge_color VARCHAR(50) DEFAULT '#475569',
+    description TEXT,
+    allowed_views JSONB NOT NULL DEFAULT '[]'::jsonb,
+    can_approve_order BOOLEAN NOT NULL DEFAULT FALSE,
+    can_assign_lead BOOLEAN NOT NULL DEFAULT FALSE,
+    can_register_members BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_timeline BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_bom BOOLEAN NOT NULL DEFAULT FALSE,
+    can_submit_pr BOOLEAN NOT NULL DEFAULT FALSE,
+    can_approve_purchasing BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_invoices BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_finance BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_bast BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_after_sales BOOLEAN NOT NULL DEFAULT FALSE,
+    can_manage_settings BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+INSERT INTO public.roles (
+    id, role_name, label, badge_color, description, allowed_views,
+    can_approve_order, can_assign_lead, can_register_members, can_manage_timeline,
+    can_manage_bom, can_submit_pr, can_approve_purchasing, can_manage_invoices,
+    can_manage_finance, can_manage_bast, can_manage_after_sales, can_manage_settings
+) VALUES
+(
+    'ROLE-ADMIN', 'Administrator', 'Administrator', '#9d174d',
+    'Akses penuh seluruh modul sistem, persetujuan, dan manajemen akun pengguna',
+    '["dashboard","logs","quotations","orders","projects","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE
+),
+(
+    'ROLE-KETUA', 'Ketua UBM', 'Ketua UBM', '#1e40af',
+    'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, dan monitoring seluruh operasional',
+    '["dashboard","logs","quotations","orders","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+),
+(
+    'ROLE-KEUANGAN', 'Keuangan', 'Keuangan', '#166534',
+    'Persetujuan pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales',
+    '["dashboard","purchasing","invoices","bast","finance","service","maintenance","logs"]'::jsonb,
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+),
+(
+    'ROLE-MEMBER', 'Member', 'Member', '#475569',
+    'Anggota Tim / Pelaksana Project: Akses timeline, progres task, dan apabila ditunjuk sebagai Lead Project berwenang menyusun BOM, mengajukan PR, serta mengisi laporan & anggota tim',
+    '["dashboard","orders","bom","bom-form","purchasing","project-reports","timeline","service","maintenance","logs"]'::jsonb,
+    FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+)
+ON CONFLICT (id) DO UPDATE SET
+    role_name = EXCLUDED.role_name,
+    label = EXCLUDED.label,
+    badge_color = EXCLUDED.badge_color,
+    description = EXCLUDED.description,
+    allowed_views = EXCLUDED.allowed_views,
+    can_approve_order = EXCLUDED.can_approve_order,
+    can_assign_lead = EXCLUDED.can_assign_lead,
+    can_register_members = EXCLUDED.can_register_members,
+    can_manage_timeline = EXCLUDED.can_manage_timeline,
+    can_manage_bom = EXCLUDED.can_manage_bom,
+    can_submit_pr = EXCLUDED.can_submit_pr,
+    can_approve_purchasing = EXCLUDED.can_approve_purchasing,
+    can_manage_invoices = EXCLUDED.can_manage_invoices,
+    can_manage_finance = EXCLUDED.can_manage_finance,
+    can_manage_bast = EXCLUDED.can_manage_bast,
+    can_manage_after_sales = EXCLUDED.can_manage_after_sales,
+    can_manage_settings = EXCLUDED.can_manage_settings,
+    updated_at = timezone('utc'::text, now());
+
+-- ---------------------------------------------------------
+-- 18. TABLE: users (Manajemen Akun Pengguna & Hak Akses Role)
+-- Berelasi ke public.roles(role_name)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.users (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(100) NOT NULL DEFAULT 'Member',
+    role VARCHAR(100) NOT NULL DEFAULT 'Member' REFERENCES public.roles(role_name) ON UPDATE CASCADE,
+    role_id VARCHAR(50) DEFAULT 'ROLE-MEMBER',
     department VARCHAR(255) DEFAULT 'Operations & Management',
     status VARCHAR(50) NOT NULL DEFAULT 'Aktif',
     avatar VARCHAR(10),
+    permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
-CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
-CREATE INDEX IF NOT EXISTS idx_users_status ON public.users(status);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role_id VARCHAR(50) DEFAULT 'ROLE-MEMBER';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+INSERT INTO public.users (
+    id, name, email, password, role, role_id, department, status, avatar, permissions
+) VALUES (
+    'USR-001',
+    'Super Administrator',
+    'admin@ubm.co.id',
+    'admin123',
+    'Administrator',
+    'ROLE-ADMIN',
+    'IT & Management',
+    'Aktif',
+    'A',
+    '{"allowedViews":["dashboard","quotations","orders","projects","bom","purchasing","delivery","invoices","bast","project_reports","after_sales","activity_log","settings"],"canApproveOrders":true,"canApprovePurchasing":true,"canApproveBom":true,"canApproveServiceExpenses":true,"canManagePurchasingProcess":true,"canManageInvoices":true,"canManagePartnerships":true,"canManageUsers":true,"canEditCompanySettings":true,"canDeleteRecords":true,"canCreateEditOperational":true,"canPrintDocuments":true}'::jsonb
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- ---------------------------------------------------------
--- 9. TABLE: settings (Pengaturan Profil Perusahaan & Sistem)
+-- 19. TABLE: settings (Pengaturan Profil Perusahaan & Sistem)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.settings (
     id VARCHAR(50) PRIMARY KEY DEFAULT 'current',
@@ -242,142 +643,72 @@ CREATE TABLE IF NOT EXISTS public.settings (
     bank_account_name VARCHAR(255),
     payment_instructions TEXT,
     copyright_text VARCHAR(255),
+    partnership_percentages JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- ---------------------------------------------------------
--- 10. TABLE: projects (Project Management & Timeline)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.projects (
-    id VARCHAR(50) PRIMARY KEY,
-    order_id VARCHAR(50),
-    project_name VARCHAR(255) NOT NULL,
-    customer_name VARCHAR(255),
-    project_lead VARCHAR(255),
-    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    end_date DATE,
-    status VARCHAR(50) NOT NULL DEFAULT 'Planning',
-    progress_percent NUMERIC(5, 2) NOT NULL DEFAULT 0,
-    milestones JSONB NOT NULL DEFAULT '[]'::jsonb,
-    team JSONB NOT NULL DEFAULT '[]'::jsonb,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_projects_status ON public.projects(status);
-CREATE INDEX IF NOT EXISTS idx_projects_lead ON public.projects(project_lead);
-
--- ---------------------------------------------------------
--- 11. TABLE: bast (Berita Acara Serah Terima)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.bast (
-    id VARCHAR(50) PRIMARY KEY,
-    order_id VARCHAR(50),
-    project_id VARCHAR(50),
-    customer_name VARCHAR(255) NOT NULL,
-    bast_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    work_summary TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Draft',
-    items JSONB NOT NULL DEFAULT '[]'::jsonb,
-    pdf_url TEXT,
-    pdf_filename TEXT,
-    uploaded_document JSONB,
-    documentation_photos JSONB NOT NULL DEFAULT '[]'::jsonb,
-    proof_notes TEXT,
-    handed_over_date DATE,
-    receiver_name VARCHAR(255),
-    has_proof BOOLEAN DEFAULT FALSE,
-    proof_updated_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 12. TABLE: project_reports (Laporan Pelaksanaan Project)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.project_reports (
-    id VARCHAR(50) PRIMARY KEY,
-    project_id VARCHAR(50),
-    order_id VARCHAR(50),
-    report_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    author VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'Submitted',
-    actual_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
-    returned_materials JSONB NOT NULL DEFAULT '[]'::jsonb,
-    labor_hours NUMERIC(10, 2) DEFAULT 0,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 13. TABLE: maintenance (Pemeliharaan Berkala Project)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.maintenance (
-    id VARCHAR(50) PRIMARY KEY,
-    project_id VARCHAR(50),
-    customer_name VARCHAR(255) NOT NULL,
-    schedule_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    status VARCHAR(50) DEFAULT 'Scheduled',
-    inspection_checklist JSONB NOT NULL DEFAULT '[]'::jsonb,
-    technician_name VARCHAR(255),
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 14. TABLE: service_tickets (Tiket Perbaikan & Servis Non-Garansi)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.service_tickets (
-    id VARCHAR(50) PRIMARY KEY,
-    project_id VARCHAR(50),
-    customer_name VARCHAR(255) NOT NULL,
-    ticket_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    issue_description TEXT NOT NULL,
-    priority VARCHAR(50) DEFAULT 'Medium',
-    status VARCHAR(50) DEFAULT 'Open',
-    repair_cost NUMERIC(15, 2) DEFAULT 0,
-    technician_name VARCHAR(255),
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- ---------------------------------------------------------
--- 15. TABLE: warranty_claims (Klaim Garansi Resmi)
--- ---------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.warranty_claims (
-    id VARCHAR(50) PRIMARY KEY,
-    project_id VARCHAR(50),
-    customer_name VARCHAR(255) NOT NULL,
-    claim_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    claim_reason TEXT NOT NULL,
-    status VARCHAR(50) DEFAULT 'Under Review',
-    approved_by VARCHAR(255),
-    resolution_notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+INSERT INTO public.settings (
+    id, company_name, company_short_name, institution_name, parent_institution, tagline,
+    phone, whatsapp, email, website, address, city,
+    leader_name, leader_nip, leader_role, wadir1_name, wadir1_nip, wadir1_role,
+    head_after_sales, head_finance, bank_name, bank_branch, bank_account, bank_account_name,
+    payment_instructions, copyright_text, partnership_percentages
+) VALUES (
+    'current',
+    'Unit Bisnis & Manufaktur (UBM) Politeknik Takumi',
+    'UBM Politeknik Takumi',
+    'Politeknik Takumi',
+    'Yayasan Pendidikan Takumi',
+    'Precision Manufacturing, Automation & Engineering Solutions',
+    '(021) 8990-1234',
+    '0812-3456-7890',
+    'ubm@takumi.ac.id',
+    'www.takumi.ac.id',
+    'Jl. Kampus Hijau No. 1, Kawasan Industri Jababeka, Cikarang, Bekasi, Jawa Barat 17530',
+    'Cikarang',
+    'Ir. Hendra Wijaya, M.T.',
+    '19820415 201012 1 002',
+    'Ketua Unit Bisnis & Manufaktur (UBM)',
+    'Dr. Eng. Budi Santoso, S.T., M.Eng.',
+    '19790821 200801 1 001',
+    'Wakil Direktur I Bidang Akademik & Kemahasiswaan',
+    'Rizky Pratama, S.T.',
+    'Siti Nurhaliza, S.E., M.Ak.',
+    'Bank Mandiri',
+    'KCP Cikarang Jababeka',
+    '156-00-9876543-2',
+    'Yayasan Pendidikan Takumi - UBM',
+    'Harap mencantumkan Nomor Invoice pada berita transfer dan mengirimkan bukti transfer ke bagian Keuangan UBM.',
+    '© 2025 UBM Politeknik Takumi. All rights reserved.',
+    '{"takumi":10,"yayasan":15,"ubm":20,"pelaksana":55}'::jsonb
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- =========================================================
--- INDEXES FOR MAXIMUM QUERY PERFORMANCE
+-- RELATIONAL INDEXES
 -- =========================================================
-CREATE INDEX IF NOT EXISTS idx_activity_logs_status ON public.activity_logs(status);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_project_name ON public.activity_logs(project_name);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_start_date ON public.activity_logs(start_date);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_end_date ON public.activity_logs(end_date);
+CREATE INDEX IF NOT EXISTS idx_quotations_status ON public.quotations(status);
+CREATE INDEX IF NOT EXISTS idx_quotations_order_id ON public.quotations(order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_quotation_id ON public.orders(quotation_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
-CREATE INDEX IF NOT EXISTS idx_orders_date ON public.orders(order_date);
-CREATE INDEX IF NOT EXISTS idx_po_status ON public.po(status);
-CREATE INDEX IF NOT EXISTS idx_invoices_status ON public.invoices(status);
-CREATE INDEX IF NOT EXISTS idx_invoices_order ON public.invoices(order_id);
-CREATE INDEX IF NOT EXISTS idx_purchasing_status ON public.purchasing(status);
-CREATE INDEX IF NOT EXISTS idx_bom_code ON public.bom(product_code);
-CREATE INDEX IF NOT EXISTS idx_delivery_status ON public.delivery(status);
-CREATE INDEX IF NOT EXISTS idx_delivery_order ON public.delivery(order_id);
+CREATE INDEX IF NOT EXISTS idx_projects_order_id ON public.projects(order_id);
+CREATE INDEX IF NOT EXISTS idx_bom_order_id ON public.bom(order_id);
+CREATE INDEX IF NOT EXISTS idx_purchasing_order_id ON public.purchasing(order_id);
+CREATE INDEX IF NOT EXISTS idx_purchasing_process_pr_id ON public.purchasing_process(pr_id);
+CREATE INDEX IF NOT EXISTS idx_purchasing_process_status ON public.purchasing_process(item_status);
+CREATE INDEX IF NOT EXISTS idx_master_items_item_key ON public.master_items(item_key);
+CREATE INDEX IF NOT EXISTS idx_po_order_id ON public.po(order_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_order_id ON public.delivery(order_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_order_id ON public.invoices(order_id);
+CREATE INDEX IF NOT EXISTS idx_bast_order_id ON public.bast(order_id);
+CREATE INDEX IF NOT EXISTS idx_bast_project_id ON public.bast(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_reports_order_id ON public.project_reports(order_id);
+CREATE INDEX IF NOT EXISTS idx_project_reports_project_id ON public.project_reports(project_id);
+CREATE INDEX IF NOT EXISTS idx_partnerships_order_id ON public.partnerships(order_id);
+CREATE INDEX IF NOT EXISTS idx_service_expenses_order_id ON public.service_expenses(order_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 
 -- =========================================================
 -- AUTO-UPDATE 'updated_at' TRIGGER FUNCTION
@@ -390,146 +721,90 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Apply Triggers
-DROP TRIGGER IF EXISTS trigger_quotations_updated_at ON public.quotations;
-CREATE TRIGGER trigger_quotations_updated_at BEFORE UPDATE ON public.quotations FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_orders_updated_at ON public.orders;
-CREATE TRIGGER trigger_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_po_updated_at ON public.po;
-CREATE TRIGGER trigger_po_updated_at BEFORE UPDATE ON public.po FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_invoices_updated_at ON public.invoices;
-CREATE TRIGGER trigger_invoices_updated_at BEFORE UPDATE ON public.invoices FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_purchasing_updated_at ON public.purchasing;
-CREATE TRIGGER trigger_purchasing_updated_at BEFORE UPDATE ON public.purchasing FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_bom_updated_at ON public.bom;
-CREATE TRIGGER trigger_bom_updated_at BEFORE UPDATE ON public.bom FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_delivery_updated_at ON public.delivery;
-CREATE TRIGGER trigger_delivery_updated_at BEFORE UPDATE ON public.delivery FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_activity_logs_updated_at ON public.activity_logs;
-CREATE TRIGGER trigger_activity_logs_updated_at BEFORE UPDATE ON public.activity_logs FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_users_updated_at ON public.users;
-CREATE TRIGGER trigger_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_settings_updated_at ON public.settings;
-CREATE TRIGGER trigger_settings_updated_at BEFORE UPDATE ON public.settings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_projects_updated_at ON public.projects;
-CREATE TRIGGER trigger_projects_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_bast_updated_at ON public.bast;
-CREATE TRIGGER trigger_bast_updated_at BEFORE UPDATE ON public.bast FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_project_reports_updated_at ON public.project_reports;
-CREATE TRIGGER trigger_project_reports_updated_at BEFORE UPDATE ON public.project_reports FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_maintenance_updated_at ON public.maintenance;
-CREATE TRIGGER trigger_maintenance_updated_at BEFORE UPDATE ON public.maintenance FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_service_tickets_updated_at ON public.service_tickets;
-CREATE TRIGGER trigger_service_tickets_updated_at BEFORE UPDATE ON public.service_tickets FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS trigger_warranty_claims_updated_at ON public.warranty_claims;
-CREATE TRIGGER trigger_warranty_claims_updated_at BEFORE UPDATE ON public.warranty_claims FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
 -- =========================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================
 ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.po ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.purchasing ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bom ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.delivery ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bom ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchasing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchasing_process ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.master_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.po ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.delivery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bast ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.warranty_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partnerships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.service_expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- Allow Public / Authenticated Access for Enterprise App Operations
+DROP POLICY IF EXISTS "Allow all access to quotations" ON public.quotations;
 CREATE POLICY "Allow all access to quotations" ON public.quotations FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to orders" ON public.orders;
 CREATE POLICY "Allow all access to orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to po" ON public.po FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to invoices" ON public.invoices FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to purchasing" ON public.purchasing FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to bom" ON public.bom FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to delivery" ON public.delivery FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to users" ON public.users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to settings" ON public.settings FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to projects" ON public.projects;
 CREATE POLICY "Allow all access to projects" ON public.projects FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to bom" ON public.bom;
+CREATE POLICY "Allow all access to bom" ON public.bom FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to purchasing" ON public.purchasing;
+CREATE POLICY "Allow all access to purchasing" ON public.purchasing FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to purchasing_process" ON public.purchasing_process;
+CREATE POLICY "Allow all access to purchasing_process" ON public.purchasing_process FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to master_items" ON public.master_items;
+CREATE POLICY "Allow all access to master_items" ON public.master_items FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to po" ON public.po;
+CREATE POLICY "Allow all access to po" ON public.po FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to delivery" ON public.delivery;
+CREATE POLICY "Allow all access to delivery" ON public.delivery FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to invoices" ON public.invoices;
+CREATE POLICY "Allow all access to invoices" ON public.invoices FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to bast" ON public.bast;
 CREATE POLICY "Allow all access to bast" ON public.bast FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to project_reports" ON public.project_reports;
 CREATE POLICY "Allow all access to project_reports" ON public.project_reports FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to maintenance" ON public.maintenance;
 CREATE POLICY "Allow all access to maintenance" ON public.maintenance FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to service_tickets" ON public.service_tickets;
 CREATE POLICY "Allow all access to service_tickets" ON public.service_tickets FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to warranty_claims" ON public.warranty_claims;
 CREATE POLICY "Allow all access to warranty_claims" ON public.warranty_claims FOR ALL USING (true) WITH CHECK (true);
 
--- =========================================================
--- INITIAL SAMPLE DATA SEEDING (UBM ERP Records)
--- =========================================================
+DROP POLICY IF EXISTS "Allow all access to partnerships" ON public.partnerships;
+CREATE POLICY "Allow all access to partnerships" ON public.partnerships FOR ALL USING (true) WITH CHECK (true);
 
--- 0. Seed Quotations
-INSERT INTO public.quotations (id, customer_name, customer_phone, customer_email, customer_address, pic_name, quotation_date, valid_until, status, warranty, lead_time, payment_terms, items, subtotal, discount, tax_rate, tax_amount, grand_total, notes)
-VALUES
-('QUO-2026-001', 'PT Astra Otoparts Tbk', '081388997766', 'procurement@component.astra.co.id', 'Kawasan Industri KIIC Lot C-4, Karawang Barat, Jawa Barat', 'Bpk. Hendra Gunawan', '2026-09-01', '2026-09-25', 'Sent', 'Garansi servis & sparepart 12 bulan (1 tahun) sejak serah terima', '14 hari kerja setelah PO resmi diterbitkan', 'DP 40%, Pelunasan 60% setelah pengujian fungsi (FAT) & BAST', '[{"sku": "MCV-HS-01", "qty": 2, "unit": "Unit", "total": 70000000, "itemName": "Modul Conveyor Otomatis High Speed (Sensor Infrared)", "warranty": "12 Bulan", "unitPrice": 35000000}, {"sku": "PLC-S7-HMI", "qty": 1, "unit": "Set", "total": 28500000, "itemName": "Control Box PLC Siemens S7-1200 + HMI Touchscreen 7 Inch", "warranty": "12 Bulan", "unitPrice": 28500000}]'::jsonb, 98500000, 0, 11, 10835000, 109335000, 'Harga sudah termasuk biaya pengiriman area Jabodetabek & instalasi onsite.')
-ON CONFLICT (id) DO NOTHING;
+DROP POLICY IF EXISTS "Allow all access to service_expenses" ON public.service_expenses;
+CREATE POLICY "Allow all access to service_expenses" ON public.service_expenses FOR ALL USING (true) WITH CHECK (true);
 
--- 1. Seed Orders
-INSERT INTO public.orders (id, customer_name, customer_phone, customer_address, order_date, due_date, status, items, subtotal, tax_rate, tax_amount, grand_total, notes)
-VALUES 
-('ORD-2026-001', 'PT Surya Mandiri Teknik', '+62 812-3456-7890', 'Jl. Industri Raya No. 45, Cikarang, Bekasi', '2026-08-25', '2026-09-10', 'In Production', '[{"sku": "PL-3P-01", "qty": 2, "unit": "Unit", "total": 25000000, "itemName": "Panel Listrik Distribusi 3 Phase", "unitPrice": 12500000}, {"sku": "KBL-NYY-16", "qty": 4, "unit": "Roll", "total": 7200000, "itemName": "Kabel NYY 4x16mm (50m)", "unitPrice": 1800000}]'::jsonb, 32200000, 11, 3542000, 35742000, 'Pengiriman tahap 1 dijadwalkan awal September'),
-('ORD-2026-002', 'CV Karya Abadi Sejahtera', '+62 821-9876-5432', 'Kawasan Industri MM2100 Blok C2, Cibitung', '2026-08-28', '2026-09-05', 'Confirmed', '[{"sku": "MOT-75KW", "qty": 3, "unit": "Unit", "total": 18600000, "itemName": "Motor Induksi 7.5 kW", "unitPrice": 6200000}, {"sku": "INV-10HP", "qty": 3, "unit": "Unit", "total": 13500000, "itemName": "Inverter VFD 10HP", "unitPrice": 4500000}]'::jsonb, 32100000, 11, 3531000, 35631000, 'Mohon sertakan test report sertifikasi pabrik'),
-('ORD-2026-003', 'PT Mitra Bangun Nusantara', '+62 857-1122-3344', 'Jl. Gatot Subroto Kav. 18, Jakarta Selatan', '2026-09-01', '2026-09-15', 'Completed', '[{"sku": "RAK-42U", "qty": 5, "unit": "Unit", "total": 21000000, "itemName": "Rak Server 42U Heavy Duty", "unitPrice": 4200000}]'::jsonb, 21000000, 11, 2310000, 23310000, 'Pesanan selesai dan telah diterima gudang pusat')
-ON CONFLICT (id) DO NOTHING;
+DROP POLICY IF EXISTS "Allow all access to activity_logs" ON public.activity_logs;
+CREATE POLICY "Allow all access to activity_logs" ON public.activity_logs FOR ALL USING (true) WITH CHECK (true);
 
--- 2. Seed PO
-INSERT INTO public.po (id, vendor_name, vendor_contact, vendor_email, po_date, expected_date, status, payment_terms, items, subtotal, tax_rate, tax_amount, grand_total, notes)
-VALUES 
-('PO-2026-001', 'PT Schneider Electric Supply', 'Budi Santoso (0813-8899-7766)', 'sales@schneider-partner.id', '2026-08-20', '2026-08-30', 'Received', 'NET 30', '[{"sku": "MCCB-250A", "qty": 10, "unit": "Pcs", "total": 14500000, "itemName": "MCCB 3P 250A 36kA", "unitPrice": 1450000}, {"sku": "CT-40A", "qty": 25, "unit": "Pcs", "total": 8000000, "itemName": "Contactor 3P 40A 220V", "unitPrice": 320000}]'::jsonb, 22500000, 11, 2475000, 24975000, 'Barang telah diterima di Gudang Utama UBM'),
-('PO-2026-002', 'CV Metal Presisi Perkasa', 'Hendro Wicaksono (0818-4455-6677)', 'hendro@metalpresisi.com', '2026-08-29', '2026-09-08', 'Approved', 'NET 14', '[{"sku": "PLT-SPCC-2", "qty": 50, "unit": "Lembar", "total": 14000000, "itemName": "Plat Besi Enclosure SPCC 2.0mm", "unitPrice": 280000}, {"sku": "PCO-7035", "qty": 100, "unit": "Kg", "total": 6500000, "itemName": "Powder Coating Grey RAL 7035", "unitPrice": 65000}]'::jsonb, 20500000, 11, 2255000, 22755000, 'Material utama untuk pembuatan Box Panel batch Q3'),
-('PO-2026-003', 'PT Tembaga Nusantara Jaya', 'Dewi Sartika (0812-7788-9900)', 'order@tembaganusantara.co.id', '2026-09-01', '2026-09-12', 'Pending Approval', 'Cash on Delivery', '[{"sku": "BSB-CU-305", "qty": 20, "unit": "Batang", "total": 9600000, "itemName": "Busbar Tembaga Cu 30x5mm (4m)", "unitPrice": 480000}]'::jsonb, 9600000, 11, 1056000, 10656000, 'Menunggu persetujuan Finance Manager')
-ON CONFLICT (id) DO NOTHING;
+DROP POLICY IF EXISTS "Allow all access to roles" ON public.roles;
+CREATE POLICY "Allow all access to roles" ON public.roles FOR ALL USING (true) WITH CHECK (true);
 
--- 3. Seed Invoices
-INSERT INTO public.invoices (id, order_id, customer_name, invoice_date, due_date, status, payment_method, items, subtotal, tax_rate, tax_amount, grand_total, paid_amount, balance_due, notes)
-VALUES 
-('INV-2026-001', 'ORD-2026-003', 'PT Mitra Bangun Nusantara', '2026-09-01', '2026-09-30', 'Paid', 'Bank Transfer BCA', '[{"qty": 5, "unit": "Unit", "total": 21000000, "itemName": "Rak Server 42U Heavy Duty", "unitPrice": 4200000}]'::jsonb, 21000000, 11, 2310000, 23310000, 23310000, 0, 'Lunas ditransfer ke rekening BCA PT UBM Mandiri'),
-('INV-2026-002', 'ORD-2026-001', 'PT Surya Mandiri Teknik', '2026-08-27', '2026-09-26', 'Partial', 'Bank Transfer Mandiri', '[{"qty": 1, "unit": "Lot", "total": 17871000, "itemName": "Panel Listrik Distribusi 3 Phase (DP 50%)", "unitPrice": 17871000}]'::jsonb, 16100000, 11, 1771000, 17871000, 10000000, 7871000, 'Termin 1 (DP) telah diterima, pelunasan saat BAST'),
-('INV-2026-003', 'ORD-2026-002', 'CV Karya Abadi Sejahtera', '2026-08-29', '2026-09-12', 'Unpaid', 'Bank Transfer BCA', '[{"qty": 3, "unit": "Unit", "total": 18600000, "itemName": "Motor Induksi 7.5 kW", "unitPrice": 6200000}, {"qty": 3, "unit": "Unit", "total": 13500000, "itemName": "Inverter VFD 10HP", "unitPrice": 4500000}]'::jsonb, 32100000, 11, 3531000, 35631000, 0, 35631000, 'Faktur telah dikirim via email Finance')
-ON CONFLICT (id) DO NOTHING;
+DROP POLICY IF EXISTS "Allow all access to users" ON public.users;
+CREATE POLICY "Allow all access to users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
--- 4. Seed Purchasing (PR)
-INSERT INTO public.purchasing (id, requestor, department, request_date, urgency, status, purpose, items, total_estimated, approved_by)
-VALUES 
-('PR-2026-001', 'Agus Setiawan (Divisi Fabrikasi)', 'Produksi & Workshop', '2026-08-28', 'High', 'Approved', 'Pengadaan mata gerinda potong dan kawat las CO2', '[{"qty": 10, "unit": "Roll", "total": 3800000, "itemName": "Kawat Las MIG/MAG Solid Wire ER70S-6 (15kg)", "estimatedPrice": 380000}, {"qty": 200, "unit": "Pcs", "total": 1700000, "itemName": "Batu Gerinda Potong 4 inch WD", "estimatedPrice": 8500}]'::jsonb, 5500000, 'Ir. Bambang Hidayat (Factory Mgr)'),
-('PR-2026-002', 'Rina Marlina (Divisi QA/QC)', 'Quality Assurance', '2026-08-31', 'Medium', 'Pending', 'Kalibrasi alat ukur Digital Vernier Caliper & Insulation Tester', '[{"qty": 4, "unit": "Alat", "total": 3000000, "itemName": "Jasa Kalibrasi ISO 17025 Caliper & Multimeter", "estimatedPrice": 750000}]'::jsonb, 3000000, '-'),
-('PR-2026-003', 'Dedi Prasetyo (Maintenance)', 'Facility & Maintenance', '2026-09-02', 'Low', 'In Review', 'Oli hidrolik mesin bending plat CNC', '[{"qty": 1, "unit": "Drum", "total": 6800000, "itemName": "Hydraulic Oil Tellus S2 M 46 (209L)", "estimatedPrice": 6800000}]'::jsonb, 6800000, '-')
-ON CONFLICT (id) DO NOTHING;
-
--- 5. Seed BOM
-INSERT INTO public.bom (id, product_name, product_code, revision, category, created_date, status, labor_cost, overhead_cost, components, material_cost, total_estimated_cost, notes)
-VALUES 
-('BOM-2026-001', 'Panel Distribusi Listrik 3 Phase 100kVA', 'PNL-DIST-100K', 'v2.1', 'Electrical Assembly', '2026-08-15', 'Active', 1500000, 500000, '[{"qty": 1, "sku": "ENC-1886", "unit": "Unit", "unitCost": 3200000, "totalCost": 3200000, "componentName": "Box Enclosure Free Standing 1800x800x600"}, {"qty": 1, "sku": "MCCB-250A", "unit": "Pcs", "unitCost": 1450000, "totalCost": 1450000, "componentName": "Main MCCB 3P 250A"}, {"qty": 6, "sku": "MCB-3P-32", "unit": "Pcs", "unitCost": 180000, "totalCost": 1080000, "componentName": "Branch MCB 3P 32A"}, {"qty": 3, "sku": "BSB-CU-305", "unit": "Batang", "unitCost": 480000, "totalCost": 1440000, "componentName": "Busbar Tembaga Cu 30x5mm"}, {"qty": 1, "sku": "MTR-PM5350", "unit": "Unit", "unitCost": 2200000, "totalCost": 2200000, "componentName": "Digital Power Meter Schneider PM5350"}, {"qty": 1, "sku": "ACC-PLCT", "unit": "Set", "unitCost": 450000, "totalCost": 450000, "componentName": "Pilot Lamp & CT 250/5A Set"}]'::jsonb, 9820000, 11820000, 'Standar IEC 61439-1 / IP54 untuk outdoor protection'),
-('BOM-2026-002', 'Star Delta Motor Starter 30kW', 'STR-DEL-30K', 'v1.0', 'Control System', '2026-08-22', 'Active', 600000, 200000, '[{"qty": 1, "sku": "ENC-6040", "unit": "Unit", "unitCost": 750000, "totalCost": 750000, "componentName": "Box Wall Mount 600x400x200"}, {"qty": 3, "sku": "CT-65A", "unit": "Pcs", "unitCost": 420000, "totalCost": 1260000, "componentName": "Magnetic Contactor 3P 65A"}, {"qty": 1, "sku": "TOR-65A", "unit": "Pcs", "unitCost": 380000, "totalCost": 380000, "componentName": "Thermal Overload Relay 48-65A"}, {"qty": 1, "sku": "TMR-SD22", "unit": "Pcs", "unitCost": 190000, "totalCost": 190000, "componentName": "Star Delta Electronic Timer 220V"}]'::jsonb, 2580000, 3380000, 'Digunakan untuk starting motor pompa cooling tower')
-ON CONFLICT (id) DO NOTHING;
-
--- 6. Seed Delivery
-INSERT INTO public.delivery (id, order_id, customer_name, delivery_date, delivery_address, courier_name, driver_name, tracking_number, status, items, received_by, received_at, notes)
-VALUES 
-('DO-2026-001', 'ORD-2026-003', 'PT Mitra Bangun Nusantara', '2026-09-01', 'Gedung Cyber 2 Lantai 12, Jl. HR Rasuna Said Blok X-5, Jakarta', 'Armada UBM Box (B 9128 UBM)', 'Sutrisno (+62 878-5544-3322)', 'UBM-EXP-082601', 'Delivered', '[{"qty": 5, "unit": "Unit", "itemName": "Rak Server 42U Heavy Duty", "serialNumbers": "RS42U-001 s/d RS42U-005"}]'::jsonb, 'Farhan (Security Cyber 2)', '2026-09-01 14:30 WIB', 'Telah ditandatangani BAST fisik'),
-('DO-2026-002', 'ORD-2026-001', 'PT Surya Mandiri Teknik', '2026-09-03', 'Jl. Industri Raya No. 45, Kawasan Industri Jababeka 1, Cikarang', 'Ekspedisi Wahana Logistik', 'Kurniawan (0856-1122-8877)', 'UBM-WHN-260903', 'In Transit', '[{"qty": 4, "unit": "Roll", "itemName": "Kabel NYY 4x16mm (50m)", "serialNumbers": "NYY-16-BATCH-44"}]'::jsonb, '-', '-', 'Pengiriman tahap 1 kabel power'),
-('DO-2026-003', 'ORD-2026-002', 'CV Karya Abadi Sejahtera', '2026-09-04', 'Kawasan Industri MM2100 Blok C2, Cibitung, Bekasi', 'Armada UBM Pick-up (B 9482 BCD)', 'Ahmad Dani (0819-2233-4455)', 'UBM-PKP-090401', 'Packing / Ready', '[{"qty": 3, "unit": "Unit", "itemName": "Motor Induksi 7.5 kW", "serialNumbers": "MI-75-01, MI-75-02, MI-75-03"}, {"qty": 3, "unit": "Unit", "itemName": "Inverter VFD 10HP", "serialNumbers": "VFD10-101, VFD10-102, VFD10-103"}]'::jsonb, '-', '-', 'Barang sudah siap di staging area packing')
-ON CONFLICT (id) DO NOTHING;
+DROP POLICY IF EXISTS "Allow all access to settings" ON public.settings;
+CREATE POLICY "Allow all access to settings" ON public.settings FOR ALL USING (true) WITH CHECK (true);

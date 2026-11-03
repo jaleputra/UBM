@@ -852,18 +852,24 @@ async function saveAdjustProjectModalCost(event, projectId) {
   };
 
   try {
-    const updated = await api.put(`/api/projects/${p.id}`, p);
+    const res = await fetch(`/api/projects/${p.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p)
+    });
+    if (!res.ok) throw new Error('Gagal menyimpan HPP ke server');
+    const updated = await res.json();
     const idx = (state.projects || []).findIndex(item => item.id === p.id);
     if (idx !== -1) {
       state.projects[idx] = updated || p;
     }
     closeModal('form-modal');
-    showToast('Harga Modal (HPP) proyek berhasil disimpan & diperbarui!', 'success');
+    showToast('Harga Modal (HPP) proyek berhasil disimpan ke Supabase!', 'success');
     renderFinanceTable();
   } catch (err) {
     console.error('Error saving project modal cost:', err);
     closeModal('form-modal');
-    showToast('Harga Modal diperbarui pada state lokal', 'info');
+    showToast('Gagal menyimpan Harga Modal ke database: ' + err.message, 'error');
     renderFinanceTable();
   }
 }
@@ -2516,6 +2522,17 @@ function filterServiceExpensesTable() {
  * @param {string|null} expenseId - ID Pengeluaran Jasa (jika mode edit)
  */
 function openServiceExpenseModal(orderId = null, expenseId = null) {
+  if (orderId && !expenseId) {
+    const targetOrd = (state.orders || []).find(o => o.id === orderId);
+    if (targetOrd && typeof isServiceOrder === 'function' && !isServiceOrder(targetOrd)) {
+      showToast('ℹ️ Order ini adalah Produk Manufaktur (BOM). Membuka halaman Timeline & Task Project...', 'info');
+      if (typeof openProjectTimelinePage === 'function') {
+        openProjectTimelinePage(orderId);
+      }
+      return;
+    }
+  }
+
   const modal = document.getElementById('modal-service-expense-form');
   if (!modal) return;
 

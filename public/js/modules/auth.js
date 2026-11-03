@@ -4,7 +4,7 @@
 // =========================================================
 
 const AUTH_STORAGE_KEY = 'ubm_auth_user';
-const ALLOWED_EMAIL = 'admin@ubm.co.id';
+const ALLOWED_EMAIL = 'unitbisnis@takumi.ac.id';
 const ALLOWED_PASSWORD = 'bisnisdigital365';
 
 /**

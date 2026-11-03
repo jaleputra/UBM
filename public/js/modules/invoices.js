@@ -1,121 +1,12 @@
 // =========================================================
 // UBM - Invoices Module (Faktur Tagihan & Pembayaran)
+// Hanya menampilkan data yang tersimpan secara otoritatif di Supabase
 // =========================================================
 
-// Sinkronisasi otomatis: Order yang berstatus Accepted otomatis masuk ke Faktur Tagihan / Invoices
 async function syncAcceptedOrdersToInvoices() {
-  const orders = state.orders || [];
-  const acceptedOrders = orders.filter(o => 
-    o.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(o.status)
-  );
-
-  let newlyCreated = false;
-
-  for (const order of acceptedOrders) {
-    const existing = (state.invoices || []).find(inv => 
-      inv.orderId === order.id || 
-      inv.id === `INV-${order.id.replace('ORD-', '')}` ||
-      (inv.notes && inv.notes.includes(order.id))
-    );
-
-    if (!existing) {
-      const invId = `INV-${order.id.replace('ORD-', '')}`;
-      const subtotal = order.subtotal || order.grandTotal || 0;
-      const taxRate = order.taxRate !== undefined ? Number(order.taxRate) : 11;
-      const taxAmount = order.taxAmount !== undefined ? Number(order.taxAmount) : Math.round(subtotal * (taxRate / 100));
-      const grandTotal = order.grandTotal || (subtotal + taxAmount);
-
-      const newInvoice = {
-        id: invId,
-        orderId: order.id,
-        customerName: order.customerName || 'Customer',
-        customerPhone: order.customerPhone || '',
-        customerAddress: order.customerAddress || '-',
-        invoiceDate: order.orderDate || new Date().toISOString().split('T')[0],
-        dueDate: order.dueDate || '',
-        status: 'Unpaid',
-        paymentMethod: 'Bank Transfer (Mandiri)',
-        items: (order.items && order.items.length > 0) ? order.items : [{
-          itemName: order.projectName || 'Pesanan Produk',
-          qty: 1,
-          unit: 'Lot',
-          unitPrice: grandTotal,
-          total: grandTotal
-        }],
-        additionalServices: order.additionalServices || [],
-        mainItemsTotal: order.mainItemsTotal || 0,
-        servicesTotal: order.servicesTotal || 0,
-        itemsTotal: order.itemsTotal || subtotal,
-        warrantyFee: order.warrantyFee || 0,
-        discount: order.discount || 0,
-        subtotal: subtotal,
-        taxRate: taxRate,
-        taxAmount: taxAmount,
-        grandTotal: grandTotal,
-        paidAmount: 0,
-        balanceDue: grandTotal,
-        notes: `Faktur Tagihan Resmi untuk Sales Order / Project ${order.id}`
-      };
-
-      // Tambahkan ke in-memory state agar langsung terlihat di UI
-      if (!state.invoices) state.invoices = [];
-      state.invoices.push(newInvoice);
-      newlyCreated = true;
-
-      // Simpan ke database server
-      try {
-        fetch('/api/invoices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newInvoice)
-        }).catch(e => console.warn('Auto invoice save error:', e));
-      } catch (err) {
-        console.warn('Auto sync invoice error:', err);
-      }
-    } else {
-      // Jika invoice sudah ada, sinkronkan additionalServices dan kalkulasi finansial dari order jika belum tersinkronisasi
-      let needsUpdate = false;
-      if ((!existing.additionalServices || existing.additionalServices.length === 0) && order.additionalServices && order.additionalServices.length > 0) {
-        existing.additionalServices = order.additionalServices;
-        needsUpdate = true;
-      }
-      if (order.servicesTotal !== undefined && existing.servicesTotal !== order.servicesTotal) {
-        existing.servicesTotal = order.servicesTotal;
-        needsUpdate = true;
-      }
-      if (order.mainItemsTotal !== undefined && existing.mainItemsTotal !== order.mainItemsTotal) {
-        existing.mainItemsTotal = order.mainItemsTotal;
-        needsUpdate = true;
-      }
-      if (order.itemsTotal !== undefined && existing.itemsTotal !== order.itemsTotal) {
-        existing.itemsTotal = order.itemsTotal;
-        needsUpdate = true;
-      }
-      if (order.warrantyFee !== undefined && existing.warrantyFee !== order.warrantyFee) {
-        existing.warrantyFee = order.warrantyFee;
-        needsUpdate = true;
-      }
-      if (order.discount !== undefined && existing.discount !== order.discount) {
-        existing.discount = order.discount;
-        needsUpdate = true;
-      }
-      if (needsUpdate) {
-        try {
-          fetch(`/api/invoices/${existing.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(existing)
-          }).catch(e => console.warn('Auto invoice update error:', e));
-        } catch (err) {
-          console.warn('Auto sync invoice error:', err);
-        }
-      }
-    }
-  }
-
-  if (newlyCreated) {
-    updateSidebarBadges();
-  }
+  // Sinkronisasi relasi Order -> Invoice kini ditangani secara otoritatif di server/Supabase (src/routes/api.js).
+  // Frontend TIDAK lagi membuat atau memanipulasi data invoice di memori lokal agar hanya data di Supabase yang ditampilkan.
+  return;
 }
 
 function filterInvoices() {
@@ -126,17 +17,14 @@ function renderInvoicesTable() {
   const tbody = document.getElementById('table-invoices-body');
   if (!tbody) return;
 
-  // Pastikan badge sub-tab selalu terupdate
+  // Pastikan badge sub-tab selalu terupdate sesuai data Supabase
   const badgeCustomer = document.getElementById('badge-tab-invoice-customer-count');
   if (badgeCustomer) badgeCustomer.textContent = (state.invoices || []).length;
   const badgePartnership = document.getElementById('badge-tab-invoice-partnership-count');
   if (badgePartnership) badgePartnership.textContent = (state.partnerships || []).length;
 
-  // Pastikan order accepted tersinkronisasi
-  syncAcceptedOrdersToInvoices();
-
   const statusFilter = document.getElementById('filter-invoice-status')?.value || document.getElementById('invoice-status-filter')?.value || 'ALL';
-  let list = state.invoices || [];
+  let list = Array.isArray(state.invoices) ? [...state.invoices] : [];
 
   if (statusFilter !== 'ALL') {
     list = list.filter(inv => inv.status === statusFilter);
@@ -220,8 +108,7 @@ function printInvoice(invId) {
 
 // Function Selector Cetak Invoice dari Header Action Bar
 function openPrintInvoiceSelector() {
-  syncAcceptedOrdersToInvoices();
-  const list = state.invoices || [];
+  const list = Array.isArray(state.invoices) ? state.invoices : [];
 
   if (list.length === 0) {
     showToast('Belum ada faktur tagihan / invoice yang tersedia untuk dicetak.', 'warning');

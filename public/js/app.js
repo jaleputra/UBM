@@ -13,6 +13,8 @@ Object.assign(state, {
   po: state.po || [],
   invoices: state.invoices || [],
   purchasing: state.purchasing || [],
+  purchasing_process: state.purchasing_process || [],
+  master_items: state.master_items || [],
   bom: state.bom || [],
   delivery: state.delivery || [],
   projects: state.projects || [],
@@ -22,20 +24,9 @@ Object.assign(state, {
   warranty_claims: state.warranty_claims || [],
   maintenance: state.maintenance || [],
   activity_logs: state.activity_logs || [],
-  partnerships: (function() {
-    try {
-      const c = localStorage.getItem('ubm_cached_partnerships');
-      if (c) return JSON.parse(c);
-    } catch (e) {}
-    return window.state?.partnerships || [];
-  })(),
-  service_expenses: (function() {
-    try {
-      const c = localStorage.getItem('ubm_cached_service_expenses');
-      if (c) return JSON.parse(c);
-    } catch (e) {}
-    return window.state?.service_expenses || [];
-  })(),
+  partnerships: state.partnerships || [],
+  service_expenses: state.service_expenses || [],
+  roles: state.roles || [],
   users: (function() {
     try {
       const c = localStorage.getItem('ubm_cached_users');
@@ -285,6 +276,8 @@ async function loadAllData() {
       fetchResource('po'),
       fetchResource('invoices'),
       fetchResource('purchasing'),
+      fetchResource('purchasing_process'),
+      fetchResource('master_items'),
       fetchResource('bom'),
       fetchResource('delivery'),
       fetchResource('projects'),
@@ -296,6 +289,7 @@ async function loadAllData() {
       fetchResource('activity_logs'),
       fetchResource('partnerships'),
       fetchResource('service_expenses'),
+      fetchResource('roles'),
       fetchResource('users'),
       fetchResource('settings')
     ]);
@@ -303,13 +297,18 @@ async function loadAllData() {
     if (typeof getAuthUser === 'function') {
       const authUser = getAuthUser();
       if (authUser && Array.isArray(state.users)) {
+        const authRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(authUser) : (authUser.role || '');
         const liveUser = state.users.find(u =>
           (u.email || '').trim().toLowerCase() === (authUser.email || '').trim().toLowerCase() ||
           u.id === authUser.id
-        );
+        ) || (authRole === 'Administrator'
+          ? state.users.find(u => (typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : (u.role || '')) === 'Administrator' && u.status !== 'Non-Aktif')
+          : null);
         if (liveUser) {
           const updatedAuth = {
             ...authUser,
+            id: liveUser.id || authUser.id,
+            email: liveUser.email || authUser.email,
             name: liveUser.name,
             role: liveUser.role,
             department: liveUser.department,
@@ -346,38 +345,7 @@ async function loadAllData() {
 }
 
 async function fetchResource(resource) {
-  // 1. Prioritaskan fetch khusus jika ada helper dedicated
-  if (resource === 'users' && typeof directSupabaseFetchUsers === 'function') {
-    try {
-      const directUsers = await directSupabaseFetchUsers();
-      if (Array.isArray(directUsers) && directUsers.length > 0) {
-        state.users = directUsers;
-        return directUsers;
-      }
-    } catch (e) {}
-  }
-
-  if (resource === 'partnerships' && typeof directSupabaseFetchPartnerships === 'function') {
-    try {
-      const directPartnerships = await directSupabaseFetchPartnerships();
-      if (Array.isArray(directPartnerships)) {
-        state.partnerships = directPartnerships;
-        return directPartnerships;
-      }
-    } catch (e) {}
-  }
-
-  if (resource === 'service_expenses' && typeof directSupabaseFetchServiceExpenses === 'function') {
-    try {
-      const directExpenses = await directSupabaseFetchServiceExpenses();
-      if (Array.isArray(directExpenses)) {
-        state.service_expenses = directExpenses;
-        return directExpenses;
-      }
-    } catch (e) {}
-  }
-
-  // 2. Fetch via Express / Netlify Serverless API endpoint
+  // 1. Fetch via Express / Netlify Serverless API endpoint (Authoritative Supabase Single Source of Truth)
   try {
     const cacheBuster = `_t=${Date.now()}`;
     const url = `/api/${resource}?${cacheBuster}`;
@@ -398,13 +366,13 @@ async function fetchResource(resource) {
           try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
         }
         if (resource === 'partnerships' && Array.isArray(data)) {
-          try { localStorage.setItem('ubm_cached_partnerships', JSON.stringify(data)); } catch (e) {}
+          try { localStorage.removeItem('ubm_cached_partnerships'); } catch (e) {}
         }
         if (resource === 'service_expenses' && Array.isArray(data)) {
-          try { localStorage.setItem('ubm_cached_service_expenses', JSON.stringify(data)); } catch (e) {}
+          try { localStorage.removeItem('ubm_cached_service_expenses'); } catch (e) {}
         }
         if (resource === 'activity_logs' && Array.isArray(data)) {
-          try { localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(data)); } catch (e) {}
+          try { localStorage.removeItem('ubm_activity_logs_backup'); } catch (e) {}
           if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
             renderLogsView();
           }
@@ -416,7 +384,7 @@ async function fetchResource(resource) {
     console.warn(`[Data Fetch /api/${resource}] Server notice, mencoba direct Supabase:`, err.message);
   }
 
-  // 3. Fallback Universal: Fetch langsung ke Supabase Cloud Store (untuk sinkronisasi instan live & multi-device)
+  // 2. Fallback Universal: Fetch langsung ke Supabase Cloud Store jika endpoint API sedang offline
   if (typeof directSupabaseFetchResource === 'function') {
     try {
       const directData = await directSupabaseFetchResource(resource);
@@ -644,7 +612,29 @@ async function deleteResource(resource, id) {
       showToast(`Data ${resource.toUpperCase()} ${id} berhasil dihapus`, 'success');
       await fetchResource(resource);
       if (resource === 'bom') {
-        await fetchResource('purchasing');
+        await Promise.allSettled([
+          fetchResource('purchasing'),
+          fetchResource('purchasing_process'),
+          fetchResource('master_items'),
+          fetchResource('projects')
+        ]);
+      } else if (resource === 'purchasing') {
+        await Promise.allSettled([
+          fetchResource('purchasing_process'),
+          fetchResource('master_items')
+        ]);
+      } else if (resource === 'orders') {
+        await Promise.allSettled([
+          fetchResource('quotations'),
+          fetchResource('projects'),
+          fetchResource('bom'),
+          fetchResource('invoices'),
+          fetchResource('delivery'),
+          fetchResource('bast'),
+          fetchResource('project_reports'),
+          fetchResource('service_expenses'),
+          fetchResource('partnerships')
+        ]);
       }
       renderCurrentView();
       updateSidebarBadges();

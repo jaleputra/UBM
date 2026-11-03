@@ -5,36 +5,52 @@
 // Helper: Memeriksa apakah order bertipe Jasa / Layanan (Non-BOM)
 function isServiceOrder(order) {
   if (!order) return false;
-  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
   if (order.quotationId) {
     const quo = (state.quotations || []).find(q => q.id === order.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+    if (quo) {
+      if (quo.quotationType === 'produk') return false;
+      if (quo.quotationType === 'jasa') return true;
+    }
   }
-  if (order.notes && (
-    order.notes.toLowerCase().includes('[tipe: jasa]') ||
-    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    order.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (order.quotationType === 'produk' || order.orderType === 'produk') return false;
+  if (order.quotationType === 'jasa' || order.orderType === 'jasa') return true;
+  if (order.notes) {
+    const lower = order.notes.toLowerCase();
+    if (lower.includes('surat penawaran harga (produk)') || lower.includes('[tipe: produk]')) return false;
+    if (
+      lower.includes('surat penawaran harga (jasa)') ||
+      lower.includes('[tipe: jasa]') ||
+      lower.includes('tipe penawaran: jasa')
+    ) return true;
+  }
   return false;
 }
 
 // Helper: Memeriksa apakah project berasal dari Quotation / Order bertipe Jasa
 function isProjectService(p) {
   if (!p) return false;
-  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
   if (p.orderId) {
     const order = (state.orders || []).find(o => o.id === p.orderId);
-    if (order && isServiceOrder(order)) return true;
+    if (order) return isServiceOrder(order);
   }
   if (p.quotationId) {
     const quo = (state.quotations || []).find(q => q.id === p.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+    if (quo) {
+      if (quo.quotationType === 'produk') return false;
+      if (quo.quotationType === 'jasa') return true;
+    }
   }
-  if (p.notes && (
-    p.notes.toLowerCase().includes('[tipe: jasa]') ||
-    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    p.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (p.projectType === 'produk' || p.quotationType === 'produk') return false;
+  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.notes) {
+    const lower = p.notes.toLowerCase();
+    if (lower.includes('surat penawaran harga (produk)') || lower.includes('[tipe: produk]')) return false;
+    if (
+      lower.includes('surat penawaran harga (jasa)') ||
+      lower.includes('[tipe: jasa]') ||
+      lower.includes('tipe penawaran: jasa')
+    ) return true;
+  }
   return false;
 }
 
@@ -109,7 +125,10 @@ function renderProjectsTableView() {
 
     const moreTeam = teamCount > 2 ? `<span class="badge badge-secondary" style="font-size: 9.5px;">+${teamCount - 2}</span>` : '';
 
-    const dateRange = p.startDate && p.dueDate ? `${p.startDate} s/d ${p.dueDate}` : (p.dueDate ? `Deadline: ${p.dueDate}` : '-');
+    const hasTimeline = Array.isArray(p.milestones) && p.milestones.length > 0;
+    const dateRange = hasTimeline
+      ? (p.startDate && p.dueDate ? `${p.startDate} s/d ${p.dueDate}` : (p.dueDate ? `Deadline: ${p.dueDate}` : '-'))
+      : '<span class="badge badge-secondary" style="font-size: 10px; font-weight: 600;">Belum Input Timeline</span>';
 
     return `
       <tr style="cursor: pointer; transition: background-color 0.15s ease;" class="project-row" onclick="openProjectTimelinePage('${p.id || p.orderId}')" title="Klik untuk membuka Detail Timeline & Milestone">
@@ -283,12 +302,17 @@ function viewProjectDetail(projectId) {
     </div>
 
     <!-- ACTION FOOTER -->
-    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color);">
-      <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe;" onclick="closeModal('project-detail-modal'); openTeamAssignmentPage('${p.orderId || ''}')">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 8px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe;" onclick="closeModal('project-detail-modal'); openTeamAssignmentPage('${p.orderId || p.id || ''}')">
           <i data-lucide="edit-3"></i> Edit Penugasan Tim
         </button>
-        <button type="button" class="btn btn-sm btn-outline" style="color: #0284c7; border-color: #bae6fd;" onclick="closeModal('project-detail-modal'); openProjectTimelinePage('${p.orderId || ''}')">
+        ${(typeof getNormalizedRole === 'function' && getNormalizedRole(typeof getAuthUser === 'function' ? getAuthUser() : null) === 'Administrator') ? `
+        <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff;" onclick="closeModal('project-detail-modal'); sendTeamAssignmentEmail('${p.orderId || p.id || ''}')">
+          <i data-lucide="mail"></i> Kirim Surat Tugas via Email
+        </button>
+        ` : ''}
+        <button type="button" class="btn btn-sm btn-outline" style="color: #0284c7; border-color: #bae6fd;" onclick="closeModal('project-detail-modal'); openProjectTimelinePage('${p.orderId || p.id || ''}')">
           <i data-lucide="folder-kanban"></i> Buka Timeline Gantt Penuh
         </button>
       </div>
@@ -720,6 +744,8 @@ function renderTeamAssignmentWorkspace(orderId) {
 
   // Wewenang: Hanya Lead Project atau Administrator yang dapat mendaftarkan/mengubah anggota tim
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
+  const isAdmin = roleName === 'Administrator';
   const isLead = (typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true) || canAssignLead || !activeProj.projectLead || activeProj.projectLead === 'Belum diassign';
   if (deptInput) deptInput.disabled = !isLead;
 
@@ -727,6 +753,17 @@ function renderTeamAssignmentWorkspace(orderId) {
   const saveTeamBtn = document.querySelector('#team-assignment-modal button[onclick*="saveTeamAssignmentData"]');
   if (addMemberBtn) addMemberBtn.style.display = isLead ? 'inline-flex' : 'none';
   if (saveTeamBtn) saveTeamBtn.style.display = isLead ? 'inline-flex' : 'none';
+
+  // Tombol Kirim via Email KHUSUS Role Administrator
+  const emailBtnHeader = document.getElementById('btn-send-assignment-email-header');
+  const emailBtnFooter = document.getElementById('btn-send-assignment-email-footer');
+  const emailInfoBox = document.getElementById('pm-admin-email-info-box');
+  if (emailBtnHeader) emailBtnHeader.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (emailBtnFooter) emailBtnFooter.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (emailInfoBox) emailInfoBox.style.display = isAdmin ? 'block' : 'none';
+  if (isAdmin && typeof updateTeamAssignmentEmailPreview === 'function') {
+    updateTeamAssignmentEmailPreview();
+  }
 
   // Render Dynamic Next-Step Quick Action Button
   const quickContainer = document.getElementById('pm-quick-action-container');
@@ -778,8 +815,13 @@ function autoFillTeamMemberFromAccount(selectEl) {
     const phoneInp = row.querySelector('.pm-member-phone');
     const autoRole = opt?.getAttribute('data-role') || user?.role || (val ? 'Member' : '');
     const autoPhone = opt?.getAttribute('data-phone') || user?.phone || '';
+    const autoEmail = opt?.getAttribute('data-email') || user?.email || '';
+    row.setAttribute('data-member-email', autoEmail);
     if (roleInp && autoRole) roleInp.value = autoRole;
     if (phoneInp && autoPhone && !phoneInp.value) phoneInp.value = autoPhone;
+  }
+  if (typeof updateTeamAssignmentEmailPreview === 'function') {
+    updateTeamAssignmentEmailPreview();
   }
 }
 window.autoFillTeamMemberFromAccount = autoFillTeamMemberFromAccount;
@@ -789,8 +831,10 @@ function addProjectTeamMemberRow(member = null) {
   if (!container) return;
 
   const currentMemberName = typeof member === 'string' ? member : (member?.name || '');
+  const currentMemberEmail = (typeof member === 'object' && member?.email) ? member.email : '';
   const row = document.createElement('div');
   row.className = 'pm-team-row';
+  if (currentMemberEmail) row.setAttribute('data-member-email', currentMemberEmail);
   row.style.cssText = 'display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px;';
   
   const selectHtml = (typeof getUserDropdownOptions === 'function')
@@ -813,12 +857,15 @@ function addProjectTeamMemberRow(member = null) {
       <input type="text" class="form-control form-control-sm pm-member-phone" placeholder="No. HP / Kontak" value="${escapeAttr(member?.phone || '')}" ${isLead ? '' : 'disabled style="background: #f1f5f9; cursor: not-allowed;"'}>
     </div>
     <div>
-      ${isLead ? `<button type="button" class="btn-icon btn-danger-ghost" title="Hapus Anggota" onclick="this.closest('.pm-team-row').remove();"><i data-lucide="trash-2"></i></button>` : ''}
+      ${isLead ? `<button type="button" class="btn-icon btn-danger-ghost" title="Hapus Anggota" onclick="this.closest('.pm-team-row').remove(); if(typeof updateTeamAssignmentEmailPreview === 'function') updateTeamAssignmentEmailPreview();"><i data-lucide="trash-2"></i></button>` : ''}
     </div>
   `;
 
   container.appendChild(row);
   if (window.lucide) lucide.createIcons();
+  if (typeof updateTeamAssignmentEmailPreview === 'function') {
+    updateTeamAssignmentEmailPreview();
+  }
 }
 window.addProjectTeamMemberRow = addProjectTeamMemberRow;
 
@@ -840,28 +887,37 @@ async function saveTeamAssignmentData() {
     return;
   }
 
-  // Extract Team Members
+  // Extract Team Members (beserta email dari akun pengguna)
   const team = [];
   document.querySelectorAll('#pm-team-list .pm-team-row').forEach(r => {
-    const name = r.querySelector('.pm-member-name')?.value?.trim();
+    const sel = r.querySelector('.pm-member-name');
+    const name = sel?.value?.trim();
     const role = r.querySelector('.pm-member-role')?.value?.trim() || 'Team Member';
     const phone = r.querySelector('.pm-member-phone')?.value?.trim() || '';
+    const optEmail = sel?.options?.[sel.selectedIndex]?.getAttribute('data-email') || r.getAttribute('data-member-email') || '';
+    const email = resolveAccountEmailByName(name, optEmail);
     if (name) {
-      team.push({ name, role, phone });
+      team.push({ name, role, phone, email });
     }
   });
 
+  const leadSelectEl = document.getElementById('pm-lead-name');
   const leadName = canAssignLead
-    ? (document.getElementById('pm-lead-name')?.value?.trim() || existingProject?.projectLead || 'Belum diassign')
+    ? (leadSelectEl?.value?.trim() || existingProject?.projectLead || 'Belum diassign')
     : (existingProject?.projectLead || 'Belum diassign');
+  const leadOptEmail = leadSelectEl?.options?.[leadSelectEl.selectedIndex]?.getAttribute('data-email') || existingProject?.leadEmail || '';
+  const leadEmail = resolveAccountEmailByName(leadName, leadOptEmail);
   const department = document.getElementById('pm-department')?.value?.trim() || 'Engineering';
 
   const payload = {
     ...(existingProject || {}),
     orderId: existingProject?.orderId || (order ? order.id : ''),
+    quotationId: existingProject?.quotationId || order?.quotationId || '',
+    quotationType: order ? (isServiceOrder(order) ? 'jasa' : 'produk') : (existingProject?.quotationType || 'produk'),
     projectName: existingProject?.projectName || order?.projectName || (order ? `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})` : 'Project Mandiri'),
     customerName: existingProject?.customerName || order?.customerName || 'Internal UBM',
     projectLead: leadName,
+    leadEmail: leadEmail,
     department: department,
     team: team,
     isLeadLocked: true
@@ -1948,7 +2004,7 @@ function addModalCommentAction() {
   renderModalComments(ms.comments);
 }
 
-function deleteCurrentMilestoneModal(msId) {
+async function deleteCurrentMilestoneModal(msId) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
   if (!isLead) {
@@ -1964,7 +2020,8 @@ function deleteCurrentMilestoneModal(msId) {
   renderTimelineMonthCalendar(currentActiveProjectData);
   syncTimelineMilestonesHiddenList(currentActiveProjectData);
   calculateTimelineProgress();
-  showToast('Tahapan milestone berhasil dihapus', 'info');
+  await saveProjectTimelineData(false);
+  showToast('Tahapan milestone berhasil dihapus & disimpan ke Supabase', 'info');
 }
 
 function saveMilestoneDetailModal(msId) {
@@ -2729,218 +2786,777 @@ async function saveProjectTimelineData(redirect = true) {
 }
 
 // -------------------------------------------------------------
-// 3. SURAT TUGAS PENUGASAN TIM & PIC (EXPORT PDF / PRINT)
+// 3. SURAT TUGAS PENUGASAN TIM & PIC (EXPORT PDF / PRINT & KIRIM VIA EMAIL OTOMATIS)
 // -------------------------------------------------------------
-function exportTeamAssignmentLetterPDF(orderId = null) {
-  // Automatically close team-assignment-modal if open
-  closeModal('team-assignment-modal');
+let activeAssignmentPdfBlob = null;
+let activeAssignmentPdfFile = null;
+let activeAssignmentPdfUrl = '';
+let activeAssignmentEmailData = null;
 
-  const targetOrderId = orderId || currentActiveProjectOrderId || (state.orders.length > 0 ? state.orders[0].id : null);
-  if (!targetOrderId) {
-    showToast('Pilih order penjualan terlebih dahulu', 'warning');
-    return;
+function resolveAccountEmailByName(nameOrEmail, fallbackEmail = '') {
+  const raw = String(nameOrEmail || '').trim();
+  if (!raw || raw === 'Belum diassign') return fallbackEmail || '';
+  if (raw.includes('@')) return raw.toLowerCase();
+
+  const norm = raw.toLowerCase();
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  const matched = users.find(u => {
+    if (!u) return false;
+    const uName = String(u.name || '').trim().toLowerCase();
+    const uEmail = String(u.email || '').trim().toLowerCase();
+    return uName === norm || uEmail === norm || (uName && (uName.includes(norm) || norm.includes(uName)));
+  });
+
+  if (matched && matched.email) {
+    return String(matched.email).trim().toLowerCase();
   }
+  return fallbackEmail ? String(fallbackEmail).trim().toLowerCase() : '';
+}
 
-  const order = state.orders.find(o => o.id === targetOrderId);
-  const project = (state.projects || []).find(p => p.orderId === targetOrderId);
+function getAdminAccountEmail() {
+  // Prioritaskan email akun Administrator yang terdaftar di Pengaturan Profil (state.users / Supabase)
+  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
+  const adminUser = users.find(u => {
+    const r = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : String(u?.role || '');
+    return r === 'Administrator' && u?.email && u.status !== 'Non-Aktif';
+  });
+  if (adminUser && adminUser.email) {
+    return String(adminUser.email).trim().toLowerCase();
+  }
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
+  if (roleName === 'Administrator' && activeUser?.email && activeUser.email.toLowerCase() !== 'admin@ubm.co.id') {
+    return String(activeUser.email).trim().toLowerCase();
+  }
+  return 'unitbisnis@takumi.ac.id';
+}
 
-  const leadName = document.getElementById('pm-lead-name')?.value?.trim() || project?.projectLead || 'Ir. Budi Santoso';
-  const department = document.getElementById('pm-department')?.value?.trim() || project?.department || 'Engineering & Assembly';
-  
+function getTeamAssignmentLetterData(orderId = null) {
+  const targetOrderId = orderId || currentActiveProjectOrderId || (state.orders.length > 0 ? state.orders[0].id : null);
+  const project = (state.projects || []).find(p => p.id === targetOrderId || p.orderId === targetOrderId);
+  const order = (state.orders || []).find(o => o.id === (project?.orderId || targetOrderId));
+
+  const isModalOpen = document.getElementById('team-assignment-modal')?.classList.contains('active') &&
+    (!orderId || orderId === currentActiveProjectOrderId);
+
+  const leadSelectEl = document.getElementById('pm-lead-name');
+  const leadName = (isModalOpen ? leadSelectEl?.value?.trim() : '') || project?.projectLead || 'Belum diassign';
+  const leadOptEmail = (isModalOpen ? leadSelectEl?.options?.[leadSelectEl.selectedIndex]?.getAttribute('data-email') : '') || project?.leadEmail || '';
+  const leadEmail = resolveAccountEmailByName(leadName, leadOptEmail);
+
+  const department = (isModalOpen ? document.getElementById('pm-department')?.value?.trim() : '') || project?.department || 'Engineering & Assembly';
+
   // Collect team members
   let team = [];
-  const domRows = document.querySelectorAll('#pm-team-list .pm-team-row');
+  const domRows = isModalOpen ? document.querySelectorAll('#pm-team-list .pm-team-row') : [];
   if (domRows.length > 0) {
     domRows.forEach(r => {
-      const name = r.querySelector('.pm-member-name')?.value?.trim();
+      const sel = r.querySelector('.pm-member-name');
+      const name = sel?.value?.trim();
       const role = r.querySelector('.pm-member-role')?.value?.trim() || 'Pelaksana Teknis';
       const phone = r.querySelector('.pm-member-phone')?.value?.trim() || '-';
-      if (name) team.push({ name, role, phone });
+      const optEmail = sel?.options?.[sel.selectedIndex]?.getAttribute('data-email') || r.getAttribute('data-member-email') || '';
+      const email = resolveAccountEmailByName(name, optEmail);
+      if (name) team.push({ name, role, phone, email });
     });
   } else if (project?.team && project.team.length > 0) {
-    team = project.team;
+    team = project.team.map(m => {
+      const mName = typeof m === 'string' ? m : (m.name || '');
+      const mEmail = resolveAccountEmailByName(mName, m.email || '');
+      return {
+        name: mName,
+        role: m.role || 'Pelaksana Teknis',
+        phone: m.phone || '-',
+        email: mEmail
+      };
+    });
   }
 
-  if (team.length === 0) {
-    team = [
-      { name: 'Ahmad Fauzi', role: 'Wiring & Enclosure Specialist', phone: '0812-3344-5566' },
-      { name: 'Deni Prasetyo', role: 'PLC & QC Engineer', phone: '0813-7788-9900' }
-    ];
-  }
+  const firstItem = order?.items?.[0]?.itemName || '';
+  const rawProjectName = order?.projectName || project?.projectName || firstItem || 'Project Engineering';
+  // Bersihkan nama project jika terdapat embel-embel "(Customer)" agar nama project tetap rapi
+  const cleanProjectName = rawProjectName;
 
-  const firstItem = order?.items?.[0]?.itemName || 'Proyek Solusi Otomasi & Fabrikasi';
-  const orderNumCode = targetOrderId.replace(/[^0-9]/g, '') || '001';
+  const refCode = order?.id || project?.orderId || project?.id || targetOrderId || 'PRJ-001';
+  const orderNumCode = refCode.replace(/[^0-9]/g, '') || '001';
   const currentYear = new Date().getFullYear();
   const letterNumber = `ST/UBM-ENG/${currentYear}/${orderNumCode}`;
   const todayFormatted = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
+  const adminEmail = getAdminAccountEmail();
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const adminName = activeUser?.name || 'Administrator UBM';
+
+  const recipientList = [];
+  if (leadEmail && leadEmail.includes('@')) {
+    recipientList.push({ name: leadName, role: 'Project Lead', email: leadEmail });
+  }
+  team.forEach(m => {
+    if (m.email && m.email.includes('@') && !recipientList.some(r => r.email === m.email)) {
+      recipientList.push({ name: m.name, role: m.role || 'Member', email: m.email });
+    }
+  });
+
+  const emailSubject = `Surat Tugas Project "${cleanProjectName}"`;
+  const emailMessage = `Surat Tugas Project "${cleanProjectName}"`;
+  const safeFileSlug = cleanProjectName.replace(/[^a-zA-Z0-9-_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Project';
+  const pdfFilename = `Surat_Tugas_Project_${safeFileSlug}.pdf`;
+
+  return {
+    targetOrderId: refCode,
+    projectId: project?.id || null,
+    orderId: order?.id || project?.orderId || null,
+    order,
+    project,
+    projectName: cleanProjectName,
+    customerName: order?.customerName || project?.customerName || 'Internal UBM',
+    dueDate: order?.dueDate || project?.dueDate || 'Sesuai Timeline Milestone',
+    leadName,
+    leadEmail,
+    department,
+    team,
+    letterNumber,
+    todayFormatted,
+    adminEmail,
+    adminName,
+    recipientList,
+    recipientEmails: recipientList.map(r => r.email),
+    emailSubject,
+    emailMessage,
+    pdfFilename
+  };
+}
+
+function updateTeamAssignmentEmailPreview() {
+  const box = document.getElementById('pm-admin-email-info-box');
+  if (!box) return;
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const isAdmin = (typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '') === 'Administrator';
+  if (!isAdmin) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+  const data = getTeamAssignmentLetterData(currentActiveProjectOrderId);
+
+  const leadBadge = data.leadName && data.leadName !== 'Belum diassign'
+    ? `<span class="badge" style="background: #ffffff; color: #065f46; border: 1px solid #6ee7b7; font-size: 10.5px; padding: 2px 7px;">👑 Lead: <strong>${escapeHtml(data.leadName)}</strong> (${escapeHtml(data.leadEmail || 'email belum terdaftar')})</span>`
+    : `<span class="badge badge-amber" style="font-size: 10px;">Lead Project belum dipilih</span>`;
+
+  const memberBadges = data.team.length > 0
+    ? data.team.map(m => `<span class="badge" style="background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; font-size: 10.5px; padding: 2px 7px;">👤 ${escapeHtml(m.name)} (${escapeHtml(m.email || 'email belum terdaftar')})</span>`).join(' ')
+    : `<span class="text-muted" style="font-size: 10.5px;">Belum ada member dipilih</span>`;
+
+  box.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 240px;">
+        <div style="font-weight: 700; font-size: 12px; color: #047857; display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+          <i data-lucide="mail-check" style="width: 15px; height: 15px;"></i> Pengiriman Otomatis Surat Tugas Project via Email (Khusus Administrator)
+        </div>
+        <div style="margin-bottom: 4px;">
+          <span style="color: #065f46; font-weight: 600;">Pengirim (Admin):</span>
+          <strong class="font-mono" style="color: #0f172a;">${escapeHtml(data.adminEmail)}</strong>
+        </div>
+        <div style="margin-bottom: 6px;">
+          <span style="color: #065f46; font-weight: 600;">Pesan & Lampiran PDF:</span>
+          <strong style="color: #0f172a;">${escapeHtml(data.emailMessage)}</strong>
+          <span class="font-mono" style="font-size: 10.5px; color: #047857;">(${escapeHtml(data.pdfFilename)})</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+          <span style="color: #065f46; font-weight: 600;">Penerima Otomatis:</span>
+          ${leadBadge}
+          ${memberBadges}
+        </div>
+      </div>
+    </div>
+  `;
+  if (window.lucide) lucide.createIcons();
+}
+window.updateTeamAssignmentEmailPreview = updateTeamAssignmentEmailPreview;
+
+function buildTeamAssignmentLetterHtml(data) {
+  const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
+    companyName: 'Unit Bisnis Mandiri (UBM) Politeknik Takumi',
+    companyShortName: 'UBM Politeknik Takumi',
+    institutionName: 'Yayasan Takumi Bina Karya',
+    parentInstitution: 'Politeknik Takumi',
+    address: 'Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Kab. Bekasi, Jawa Barat 17530',
+    website: 'takumi.ac.id',
+    email: 'ubm@takumi.ac.id',
+    phone: '(021) 8990-1234',
+    city: 'Cikarang',
+    leaderName: 'Ir. Hendra Wijaya, M.T.',
+    leaderNip: '19850412 201012 1 002',
+    leaderRole: 'Ketua Unit Bisnis Mandiri (UBM)',
+    wadir1Name: 'Dr. Eng. Tri Wahyudi, M.Eng.',
+    wadir1Nip: '19820315 200804 1 003',
+    wadir1Role: 'Wakil Direktur I Politeknik Takumi',
+    copyrightText: 'Copyright © Bisnis Digital Takumi'
+  };
+
+  const teamRowsHtml = data.team.length > 0
+    ? data.team.map((m, idx) => `
+        <tr>
+          <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${escapeHtml(m.name)}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${escapeHtml(m.role || 'Teknisi Pelaksana')}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${escapeHtml(m.email || '-')}</td>
+          <td style="border: 1px solid #000; padding: 6px; text-align: center;">${escapeHtml(m.phone || '-')}</td>
+        </tr>
+      `).join('')
+    : `
+        <tr>
+          <td colspan="5" style="border: 1px solid #000; padding: 8px; text-align: center; color: #64748b;">Belum ada anggota tim tambahan yang didaftarkan</td>
+        </tr>
+      `;
+
+  return `
+    <div class="doc-preview" style="font-family: 'Times New Roman', Times, serif; color: #000000; line-height: 1.5; padding: 10px 15px; background: #ffffff;">
+      
+      <!-- KOP SURAT RESMI POLITEKNIK TAKUMI & UBM -->
+      <div style="text-align: center; border-bottom: 3px double #000000; padding-bottom: 12px; margin-bottom: 20px;">
+        <div style="font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.institutionName)}</div>
+        <div style="font-size: 19px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.parentInstitution)}</div>
+        <div style="font-size: 15px; font-weight: bold; color: #1e3a8a; text-transform: uppercase;">${escapeHtml(compSettings.companyName)}</div>
+        <div style="font-size: 11px; margin-top: 4px;">${escapeHtml(compSettings.address)}</div>
+        <div style="font-size: 11px;">Website: ${escapeHtml(compSettings.website)} | Email: ${escapeHtml(compSettings.email)} | Telp: ${escapeHtml(compSettings.phone)}</div>
+      </div>
+
+      <!-- JUDUL SURAT TUGAS -->
+      <div style="text-align: center; margin-bottom: 22px;">
+        <div style="font-size: 16px; font-weight: bold; text-decoration: underline; text-transform: uppercase;">SURAT TUGAS PELAKSANAAN PROYEK</div>
+        <div style="font-size: 12px; margin-top: 2px;">Nomor: <strong>${escapeHtml(data.letterNumber)}</strong></div>
+      </div>
+
+      <!-- PREAMBULE -->
+      <div style="font-size: 12.5px; text-align: justify; margin-bottom: 14px;">
+        Yang bertanda tangan di bawah ini, Pimpinan <strong>${escapeHtml(compSettings.companyName)}</strong> bersama dengan <strong>${escapeHtml(compSettings.wadir1Role)}</strong>, dengan ini memberikan penugasan resmi kepada nama-nama personil berikut untuk memimpin dan melaksanakan seluruh tahapan pengerjaan proyek:
+      </div>
+
+      <!-- DETAIL REFERENSI PROYEK -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12.5px;">
+        <tr>
+          <td style="width: 220px; padding: 4px 0; font-weight: bold;">Nama Proyek / Produk</td>
+          <td style="width: 15px; padding: 4px 0;">:</td>
+          <td style="padding: 4px 0; font-weight: bold; color: #0f172a;">${escapeHtml(data.projectName)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-weight: bold;">No. Referensi Order / Project</td>
+          <td style="padding: 4px 0;">:</td>
+          <td style="padding: 4px 0;"><strong>${escapeHtml(data.targetOrderId)}</strong></td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-weight: bold;">Pelanggan / Klien</td>
+          <td style="padding: 4px 0;">:</td>
+          <td style="padding: 4px 0;">${escapeHtml(data.customerName)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-weight: bold;">Divisi / Departemen Pelaksana</td>
+          <td style="padding: 4px 0;">:</td>
+          <td style="padding: 4px 0;">${escapeHtml(data.department)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-weight: bold;">Target Waktu Penyelesaian</td>
+          <td style="padding: 4px 0;">:</td>
+          <td style="padding: 4px 0;">${escapeHtml(data.dueDate)}</td>
+        </tr>
+      </table>
+
+      <!-- SUSUNAN TIM PELAKSANA -->
+      <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
+        I. PENANGGUNG JAWAB UTAMA (PROJECT LEAD)
+      </div>
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 14px; margin-bottom: 16px; font-size: 12.5px;">
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <strong>Nama Project Lead:</strong> <span style="font-size: 13.5px; font-weight: bold; color: #1e3a8a;">${escapeHtml(data.leadName)}</span>
+            ${data.leadEmail ? `<div style="font-size: 11.5px; color: #334155;">Email: <strong>${escapeHtml(data.leadEmail)}</strong></div>` : ''}
+          </div>
+          <div>
+            <strong>Jabatan / Peran:</strong> Lead Project Engineer & Penanggung Jawab Mutu
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
+        II. DAFTAR ANGGOTA TIM PELAKSANA PROYEK
+      </div>
+      <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 12px; font-family: 'Times New Roman', Times, serif;">
+        <thead>
+          <tr style="background: #f1f5f9;">
+            <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 36px;">No.</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: left;">Nama Anggota Tim</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: left;">Peran / Tugas Khusus</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: left;">Email Terdaftar</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 120px;">Kontak / No. HP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${teamRowsHtml}
+        </tbody>
+      </table>
+
+      <!-- KETENTUAN DAN TANGGUNG JAWAB -->
+      <div style="font-size: 12px; text-align: justify; margin-bottom: 24px;">
+        <strong>Ketentuan Penugasan:</strong>
+        <ol style="margin: 4px 0 0 18px; padding: 0;">
+          <li>Melaksanakan pekerjaan proyek sesuai spesifikasi teknis, standar keselamatan kerja (K3), dan standar mutu ${escapeHtml(compSettings.parentInstitution)}.</li>
+          <li>Melakukan koordinasi aktif bersama Project Lead dan Ketua UBM terkait perkembangan milestone dan kebutuhan logistik material.</li>
+          <li>Surat Tugas ini berlaku terhitung sejak tanggal diterbitkan sampai dengan selesainya serah terima pekerjaan (Berita Acara Serah Terima) kepada pihak pelanggan.</li>
+        </ol>
+      </div>
+
+      <!-- TANDA TANGAN RESMI (KETUA UBM & WAKIL DIREKTUR I) -->
+      <div style="margin-top: 30px; page-break-inside: avoid; font-size: 12px;">
+        <div style="text-align: right; margin-bottom: 16px; font-weight: 500;">${escapeHtml(compSettings.city || 'Bekasi')}, ${escapeHtml(data.todayFormatted)}</div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center;">
+          
+          <!-- 1. KETUA UBM -->
+          <div>
+            <div style="font-weight: bold;">Yang Menugaskan,</div>
+            <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.leaderRole)}</div>
+            <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
+            <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
+              (Tanda Tangan & Cap UBM)
+            </div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.leaderName)}</div>
+            <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.leaderNip || '-')}</div>
+          </div>
+
+          <!-- 2. WAKIL DIREKTUR I -->
+          <div>
+            <div style="font-weight: bold;">Mengetahui & Mengesahkan,</div>
+            <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.wadir1Role)}</div>
+            <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
+            <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
+              (Tanda Tangan & Cap)
+            </div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.wadir1Name)}</div>
+            <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.wadir1Nip || '-')}</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- FOOTER DOKUMEN -->
+      <div style="margin-top: 30px; padding-top: 10px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;">
+        <span>${escapeHtml(compSettings.copyrightText)}</span>
+        <span>Dokumen Resmi Sistem Manajemen ${escapeHtml(compSettings.companyShortName || 'UBM')}</span>
+      </div>
+
+    </div>
+  `;
+}
+
+function exportTeamAssignmentLetterPDF(orderId = null) {
+  const data = getTeamAssignmentLetterData(orderId);
+  if (!data.targetOrderId) {
+    showToast('Pilih order penjualan atau project terlebih dahulu', 'warning');
+    return;
+  }
+
+  closeModal('team-assignment-modal');
+
   const content = document.getElementById('preview-modal-content') || document.getElementById('preview-modal-body');
   const titleEl = document.getElementById('preview-modal-title');
-  if (titleEl) titleEl.innerHTML = `<i data-lucide="file-check-2" style="color: #4f46e5;"></i> Surat Tugas Penugasan Tim Proyek - ${targetOrderId}`;
+  if (titleEl) {
+    titleEl.innerHTML = `<i data-lucide="file-check-2" style="color: #4f46e5;"></i> Surat Tugas Project "${escapeHtml(data.projectName)}"`;
+  }
 
   if (content) {
-    const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
-      companyName: 'Unit Bisnis Mandiri (UBM) Politeknik Takumi',
-      institutionName: 'Yayasan Takumi Bina Karya',
-      parentInstitution: 'Politeknik Takumi',
-      address: 'Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Kab. Bekasi, Jawa Barat 17530',
-      website: 'takumi.ac.id',
-      email: 'ubm@takumi.ac.id',
-      phone: '(021) 8990-1234',
-      city: 'Cikarang',
-      leaderName: 'Ir. Hendra Wijaya, M.T.',
-      leaderNip: '19850412 201012 1 002',
-      leaderRole: 'Ketua Unit Bisnis Mandiri (UBM)',
-      wadir1Name: 'Dr. Eng. Tri Wahyudi, M.Eng.',
-      wadir1Nip: '19820315 200804 1 003',
-      wadir1Role: 'Wakil Direktur I Politeknik Takumi',
-      copyrightText: 'Copyright © Bisnis Digital Takumi'
-    };
+    const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const isAdmin = (typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '') === 'Administrator';
 
-    content.innerHTML = `
-      <div class="doc-preview" style="font-family: 'Times New Roman', Times, serif; color: #000000; line-height: 1.5; padding: 10px 15px;">
-        
-        <!-- KOP SURAT RESMI POLITEKNIK TAKUMI & UBM -->
-        <div style="text-align: center; border-bottom: 3px double #000000; padding-bottom: 12px; margin-bottom: 20px;">
-          <div style="font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.institutionName)}</div>
-          <div style="font-size: 19px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.parentInstitution)}</div>
-          <div style="font-size: 15px; font-weight: bold; color: #1e3a8a; text-transform: uppercase;">${escapeHtml(compSettings.companyName)}</div>
-          <div style="font-size: 11px; margin-top: 4px;">${escapeHtml(compSettings.address)}</div>
-          <div style="font-size: 11px;">Website: ${escapeHtml(compSettings.website)} | Email: ${escapeHtml(compSettings.email)} | Telp: ${escapeHtml(compSettings.phone)}</div>
+    const adminActionTopBar = isAdmin ? `
+      <div class="no-print" style="margin-bottom: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 12px; color: #065f46;">
+          <strong>Pesan Email:</strong> "${escapeHtml(data.emailMessage)}" &bull; <strong>Dari:</strong> ${escapeHtml(data.adminEmail)} &rarr; <strong>Ke:</strong> ${escapeHtml(data.recipientEmails.join(', ') || 'Lead & Tim')}
         </div>
-
-        <!-- JUDUL SURAT TUGAS -->
-        <div style="text-align: center; margin-bottom: 22px;">
-          <div style="font-size: 16px; font-weight: bold; text-decoration: underline; text-transform: uppercase;">SURAT TUGAS PELAKSANAAN PROYEK</div>
-          <div style="font-size: 12px; margin-top: 2px;">Nomor: <strong>${letterNumber}</strong></div>
-        </div>
-
-        <!-- PREAMBULE -->
-        <div style="font-size: 12.5px; text-align: justify; margin-bottom: 14px;">
-          Yang bertanda tangan di bawah ini, Pimpinan <strong>${escapeHtml(compSettings.companyName)}</strong> bersama dengan <strong>${escapeHtml(compSettings.wadir1Role)}</strong>, dengan ini memberikan penugasan resmi kepada nama-nama personil berikut untuk memimpin dan melaksanakan seluruh tahapan pengerjaan proyek pesanan pelanggan:
-        </div>
-
-        <!-- DETAIL REFERENSI PROYEK -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12.5px;">
-          <tr>
-            <td style="width: 220px; padding: 4px 0; font-weight: bold;">Nama Proyek / Produk</td>
-            <td style="width: 15px; padding: 4px 0;">:</td>
-            <td style="padding: 4px 0; font-weight: bold; color: #0f172a;">${firstItem}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">No. Order Penjualan</td>
-            <td style="padding: 4px 0;">:</td>
-            <td style="padding: 4px 0;"><strong>${targetOrderId}</strong></td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">Pelanggan / Klien</td>
-            <td style="padding: 4px 0;">:</td>
-            <td style="padding: 4px 0;">${order?.customerName || '-'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">Divisi / Departemen Pelaksana</td>
-            <td style="padding: 4px 0;">:</td>
-            <td style="padding: 4px 0;">${department}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">Target Waktu Penyelesaian</td>
-            <td style="padding: 4px 0;">:</td>
-            <td style="padding: 4px 0;">${order?.dueDate || 'Sesuai Timeline Milestone'}</td>
-          </tr>
-        </table>
-
-        <!-- SUSUNAN TIM PELAKSANA -->
-        <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
-          I. PENANGGUNG JAWAB UTAMA (PROJECT LEAD)
-        </div>
-        <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 14px; margin-bottom: 16px; font-size: 12.5px;">
-          <div style="display: flex; justify-content: space-between;">
-            <div>
-              <strong>Nama Project Lead:</strong> <span style="font-size: 13.5px; font-weight: bold; color: #1e3a8a;">${leadName}</span>
-            </div>
-            <div>
-              <strong>Jabatan / Peran:</strong> Lead Project Engineer & Penanggung Jawab Mutu
-            </div>
-          </div>
-        </div>
-
-        <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
-          II. DAFTAR ANGGOTA TIM PELAKSANA PROYEK
-        </div>
-        <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 12px; font-family: 'Times New Roman', Times, serif;">
-          <thead>
-            <tr style="background: #f1f5f9;">
-              <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 40px;">No.</th>
-              <th style="border: 1px solid #000; padding: 6px; text-align: left;">Nama Anggota Tim</th>
-              <th style="border: 1px solid #000; padding: 6px; text-align: left;">Peran / Tugas Khusus</th>
-              <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 140px;">Kontak / No. HP</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${team.map((m, idx) => `
-              <tr>
-                <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
-                <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${m.name}</td>
-                <td style="border: 1px solid #000; padding: 6px;">${m.role || 'Teknisi Pelaksana'}</td>
-                <td style="border: 1px solid #000; padding: 6px; text-align: center;">${m.phone || '-'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <!-- KETENTUAN DAN TANGGUNG JAWAB -->
-        <div style="font-size: 12px; text-align: justify; margin-bottom: 24px;">
-          <strong>Ketentuan Penugasan:</strong>
-          <ol style="margin: 4px 0 0 18px; padding: 0;">
-            <li>Melaksanakan pekerjaan proyek sesuai spesifikasi teknis, standar keselamatan kerja (K3), dan standar mutu ${escapeHtml(compSettings.parentInstitution)}.</li>
-            <li>Melakukan koordinasi aktif bersama Project Lead dan Ketua UBM terkait perkembangan milestone dan kebutuhan logistik material.</li>
-            <li>Surat Tugas ini berlaku terhitung sejak tanggal diterbitkan sampai dengan selesainya serah terima pekerjaan (Berita Acara Serah Terima) kepada pihak pelanggan.</li>
-          </ol>
-        </div>
-
-        <!-- TANDA TANGAN RESMI (KETUA UBM & WAKIL DIREKTUR I) -->
-        <div style="margin-top: 30px; page-break-inside: avoid; font-size: 12px;">
-          <div style="text-align: right; margin-bottom: 16px; font-weight: 500;">${escapeHtml(compSettings.city || 'Bekasi')}, ${todayFormatted}</div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center;">
-            
-            <!-- 1. KETUA UBM -->
-            <div>
-              <div style="font-weight: bold;">Yang Menugaskan,</div>
-              <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.leaderRole)}</div>
-              <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
-              <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
-                (Tanda Tangan & Cap UBM)
-              </div>
-              <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.leaderName)}</div>
-              <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.leaderNip || '-')}</div>
-            </div>
-
-            <!-- 2. WAKIL DIREKTUR I -->
-            <div>
-              <div style="font-weight: bold;">Mengetahui & Mengesahkan,</div>
-              <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.wadir1Role)}</div>
-              <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
-              <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
-                (Tanda Tangan & Cap)
-              </div>
-              <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.wadir1Name)}</div>
-              <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.wadir1Nip || '-')}</div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- FOOTER DOKUMEN -->
-        <div style="margin-top: 30px; padding-top: 10px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;">
-          <span>${escapeHtml(compSettings.copyrightText)}</span>
-          <span>Dokumen Resmi Sistem Manajemen ${escapeHtml(compSettings.companyShortName)}</span>
-        </div>
-
+        <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700;" onclick="closeModal('preview-modal'); sendTeamAssignmentEmail('${escapeAttr(data.orderId || data.projectId || data.targetOrderId)}')">
+          <i data-lucide="send"></i> Kirim via Email ke Lead & Tim
+        </button>
       </div>
-    `;
+    ` : '';
+
+    content.innerHTML = adminActionTopBar + buildTeamAssignmentLetterHtml(data);
   }
 
   openModal('preview-modal');
   if (window.lucide) lucide.createIcons();
 }
+window.exportTeamAssignmentLetterPDF = exportTeamAssignmentLetterPDF;
+
+async function sendTeamAssignmentEmail(orderId = null) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
+  if (roleName !== 'Administrator') {
+    showToast('⚠️ Akses Ditolak: Hanya role Administrator yang dapat mengirim Surat Tugas via Email!', 'error');
+    return;
+  }
+
+  // Pastikan daftar akun pengguna (state.users) sudah dimuat agar email Lead & Member terdeteksi akurat
+  if (!state.users || state.users.length === 0) {
+    try {
+      await fetchResource('users');
+    } catch (e) {}
+  }
+
+  const data = getTeamAssignmentLetterData(orderId);
+  if (!data.leadName || data.leadName === 'Belum diassign') {
+    showToast('⚠️ Pilih Project Lead terlebih dahulu sebelum mengirim Surat Tugas via Email!', 'warning');
+    return;
+  }
+
+  if (data.recipientEmails.length === 0) {
+    showToast('⚠️ Alamat email Project Lead / Member belum ditemukan pada data Akun Pengguna!', 'warning');
+    return;
+  }
+
+  // Jika modal Penugasan Tim sedang terbuka, simpan data penugasan tim terlebih dahulu secara otomatis ke database
+  const isTeamModalOpen = document.getElementById('team-assignment-modal')?.classList.contains('active');
+  if (isTeamModalOpen) {
+    try {
+      const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+      const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
+      const payload = {
+        ...(existingProject || {}),
+        orderId: existingProject?.orderId || (order ? order.id : ''),
+        quotationId: existingProject?.quotationId || order?.quotationId || '',
+        quotationType: order ? (isServiceOrder(order) ? 'jasa' : 'produk') : (existingProject?.quotationType || 'produk'),
+        projectName: existingProject?.projectName || order?.projectName || data.projectName,
+        customerName: existingProject?.customerName || order?.customerName || data.customerName,
+        projectLead: data.leadName,
+        leadEmail: data.leadEmail,
+        department: data.department,
+        team: data.team,
+        isLeadLocked: true
+      };
+      if (existingProject && existingProject.id) {
+        await fetch(`/api/projects/${existingProject.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+      await fetchResource('projects');
+      closeModal('team-assignment-modal');
+    } catch (saveErr) {
+      console.warn('Auto-save before email failed:', saveErr);
+    }
+  }
+
+  // Buka modal proses pembuatan & pengiriman PDF via Email
+  const shareModal = document.getElementById('wa-share-modal');
+  const modalHeaderTitle = shareModal?.querySelector('.modal-header h3');
+  const modalHeader = shareModal?.querySelector('.modal-header');
+  const modalBody = document.getElementById('wa-share-modal-body');
+
+  if (modalHeader) {
+    modalHeader.style.background = '#ecfdf5';
+    modalHeader.style.borderBottom = '1px solid #a7f3d0';
+  }
+  if (modalHeaderTitle) {
+    modalHeaderTitle.style.color = '#065f46';
+    modalHeaderTitle.innerHTML = `<i data-lucide="mail" style="color: #059669;"></i> Kirim Surat Tugas Project via Email (PDF)`;
+  }
+
+  if (modalBody) {
+    modalBody.innerHTML = `
+      <div style="text-align: center; padding: 28px 16px;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; background: #d1fae5; color: #059669; margin-bottom: 12px;">
+          <i data-lucide="loader" style="width: 26px; height: 26px;"></i>
+        </div>
+        <h4 style="font-size: 15.5px; font-weight: 700; color: #0f172a; margin: 0 0 6px 0;">Menyiapkan PDF & Mengirim Email Otomatis...</h4>
+        <p style="font-size: 12.5px; color: #64748b; margin: 0;">
+          Membuat berkas <strong>${escapeHtml(data.pdfFilename)}</strong> dengan pesan:<br>
+          <strong style="color: #059669;">${escapeHtml(data.emailMessage)}</strong>
+        </p>
+      </div>
+    `;
+    openModal('wa-share-modal');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  try {
+    // 1. Render HTML Surat Tugas ke container tersembunyi untuk konversi PDF
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '790px';
+    container.style.padding = '20px 24px';
+    container.style.background = '#ffffff';
+    container.style.boxSizing = 'border-box';
+    container.innerHTML = buildTeamAssignmentLetterHtml(data);
+    document.body.appendChild(container);
+
+    let pdfBlob = null;
+    let pdfBase64 = '';
+    let pdfFileUrl = '';
+
+    if (typeof html2pdf !== 'undefined') {
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: data.pdfFilename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      const worker = html2pdf().set(opt).from(container);
+      pdfBlob = await worker.output('blob');
+      pdfBase64 = await worker.output('datauristring');
+    }
+
+    container.remove();
+
+    // 2. Susun isi pesan email resmi (Surat Tugas Project "(Nama project)")
+    const defaultPdfLink = `${window.location.origin}/uploads/projects/${data.pdfFilename}`;
+    const emailBodyText = [
+      `Surat Tugas Project "${data.projectName}"`,
+      ``,
+      `Yth. Project Lead (${data.leadName}) dan Tim Pelaksana Proyek,`,
+      ``,
+      `Berikut kami kirimkan dokumen resmi Surat Tugas Project "${data.projectName}" (${data.pdfFilename}) yang telah terlampir pada email ini.`,
+      ``,
+      `Detail Penugasan:`,
+      `- Nama Project : ${data.projectName}`,
+      `- No. Referensi : ${data.targetOrderId}`,
+      `- Project Lead : ${data.leadName} (${data.leadEmail || '-'})`,
+      `- Anggota Tim  : ${data.team.map(m => `${m.name} (${m.role || 'Member'})`).join(', ') || '-'}`,
+      ``,
+      `Hormat kami,`,
+      `${data.adminName}`,
+      `Administrator (${data.adminEmail})`
+    ].join('\n');
+
+    // 3. Kirim ke endpoint backend /api/projects/send-assignment-email
+    // Backend akan menyimpan PDF dan otomatis membuka aplikasi Mail dengan file PDF langsung ter-attach!
+    let smtpSent = false;
+    let desktopMailOpened = false;
+    try {
+      const res = await fetch('/api/projects/send-assignment-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: data.projectId,
+          orderId: data.orderId || data.targetOrderId,
+          projectName: data.projectName,
+          senderEmail: data.adminEmail,
+          senderName: data.adminName,
+          senderRole: roleName,
+          leadName: data.leadName,
+          leadEmail: data.leadEmail,
+          team: data.team,
+          recipients: data.recipientEmails,
+          subject: data.emailSubject,
+          message: data.emailMessage,
+          emailBodyText,
+          pdfBase64,
+          filename: data.pdfFilename
+        })
+      });
+      if (res.ok) {
+        const resJson = await res.json();
+        pdfFileUrl = resJson.fileUrl || '';
+        smtpSent = Boolean(resJson.smtpSent);
+        desktopMailOpened = Boolean(resJson.desktopMailOpened);
+        if (resJson.senderEmail) {
+          data.adminEmail = resJson.senderEmail;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Gagal menghubungi endpoint send-assignment-email:', apiErr);
+    }
+
+    // 4. Siapkan objek File PDF di memori & unduh salinan PDF ke perangkat Administrator
+    if (pdfBlob) {
+      activeAssignmentPdfBlob = pdfBlob;
+      activeAssignmentPdfFile = new File([pdfBlob], data.pdfFilename, { type: 'application/pdf' });
+      activeAssignmentPdfUrl = (pdfFileUrl && !pdfFileUrl.startsWith('data:'))
+        ? `${window.location.origin}${pdfFileUrl}`
+        : defaultPdfLink;
+
+      const downloadUrl = window.URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = data.pdfFilename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      }, 1200);
+    }
+
+    activeAssignmentEmailData = {
+      ...data,
+      fullPdfLink: activeAssignmentPdfUrl || defaultPdfLink,
+      smtpSent,
+      desktopMailOpened,
+      emailBodyText
+    };
+
+    // Jika aplikasi email belum terbuka dari sisi server dan belum terkirim via SMTP, jalankan fallback pembuka email
+    if (!smtpSent && !desktopMailOpened) {
+      await triggerAssignmentMailtoClient();
+    }
+
+    if (modalBody) {
+      const recipientsRowsHtml = data.recipientList.map(r => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px;">
+          <div>
+            <strong>${escapeHtml(r.name)}</strong>
+            <span class="badge ${r.role === 'Project Lead' ? 'badge-purple' : 'badge-secondary'}" style="font-size: 10px; margin-left: 6px;">${escapeHtml(r.role)}</span>
+          </div>
+          <span class="font-mono" style="color: #059669; font-weight: 600;">${escapeHtml(r.email)}</span>
+        </div>
+      `).join('');
+
+      modalBody.innerHTML = `
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="display: inline-flex; align-items: center; justify-content: center; width: 50px; height: 50px; border-radius: 50%; background: #dcfce7; color: #16a34a; margin-bottom: 8px;">
+            <i data-lucide="check-circle" style="width: 28px; height: 28px;"></i>
+          </div>
+          <h4 style="font-size: 16px; font-weight: 700; margin: 0; color: #0f172a;">
+            ${smtpSent
+              ? 'Email & PDF Surat Tugas Berhasil Dikirim Otomatis!'
+              : desktopMailOpened
+                ? 'Aplikasi Email Dibuka Otomatis dengan File PDF Terlampir!'
+                : 'PDF Surat Tugas Siap & Email Otomatis Dibuka!'}
+          </h4>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 4px 0 0 0;">
+            Pesan: <strong style="color: #059669;">${escapeHtml(data.emailMessage)}</strong>
+          </p>
+        </div>
+
+        <!-- Ringkasan Pengirim, Penerima & File PDF -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
+            <span class="text-muted font-bold">Email Pengirim (Administrator):</span>
+            <strong class="font-mono" style="color: #0f172a;">${escapeHtml(data.adminEmail)}</strong>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <div class="text-muted font-bold" style="margin-bottom: 6px;">Penerima Email (Project Lead & Member - ${data.recipientList.length} Akun):</div>
+            <div style="display: flex; flex-direction: column; gap: 5px; max-height: 130px; overflow-y: auto;">
+              ${recipientsRowsHtml}
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="background: #dcfce7; color: #15803d; font-weight: 800; border: 1px solid #86efac;">📎 PDF TERLAMPIR</span>
+              <strong style="color: #0f172a;">${escapeHtml(data.pdfFilename)}</strong>
+            </div>
+            <button type="button" class="btn btn-xs btn-outline" onclick="downloadCurrentAssignmentPdf()">
+              <i data-lucide="download"></i> Unduh PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Tombol Kirim Email -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" class="btn btn-primary" style="background: #059669; border-color: #059669; padding: 11px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="triggerAssignmentMailtoClient()">
+            <i data-lucide="paperclip"></i> Buka Aplikasi Email (Otomatis Attach File PDF)
+          </button>
+          <button type="button" class="btn btn-outline" style="padding: 10px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="triggerAssignmentGmailCompose()">
+            <i data-lucide="mail"></i> Buka Gmail Web (${escapeHtml(data.adminEmail)})
+          </button>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    showToast(`Surat Tugas Project "${data.projectName}" siap dikirim ke ${data.recipientEmails.length} email Lead & Member!`, 'success');
+    await fetchResource('projects');
+    renderProjectsTableView();
+    renderOrdersTable();
+  } catch (err) {
+    console.error('Error sending team assignment email:', err);
+    showToast('Gagal memproses pengiriman email Surat Tugas Project', 'error');
+  }
+}
+window.sendTeamAssignmentEmail = sendTeamAssignmentEmail;
+
+function downloadCurrentAssignmentPdf() {
+  if (!activeAssignmentPdfBlob || !activeAssignmentEmailData) {
+    showToast('Berkas PDF belum tersedia', 'warning');
+    return;
+  }
+  const downloadUrl = window.URL.createObjectURL(activeAssignmentPdfBlob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = activeAssignmentEmailData.pdfFilename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+  }, 1000);
+}
+window.downloadCurrentAssignmentPdf = downloadCurrentAssignmentPdf;
+
+async function triggerAssignmentMailtoClient() {
+  if (!activeAssignmentEmailData) return;
+
+  // 1. Coba buka aplikasi email desktop (Mail.app) dengan file PDF langsung ter-attach melalui backend
+  try {
+    const res = await fetch('/api/projects/open-mail-with-attachment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: activeAssignmentEmailData.pdfFilename,
+        senderEmail: activeAssignmentEmailData.adminEmail || 'unitbisnis@takumi.ac.id',
+        recipients: activeAssignmentEmailData.recipientEmails || [],
+        subject: activeAssignmentEmailData.emailSubject,
+        bodyText: activeAssignmentEmailData.emailBodyText || activeAssignmentEmailData.emailMessage
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.desktopMailOpened) {
+        showToast(`Aplikasi Email dibuka otomatis dengan lampiran ${activeAssignmentEmailData.pdfFilename}!`, 'success');
+        return;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Jika browser mendukung Web Share API dengan File PDF (misal Safari macOS / iOS)
+  if (activeAssignmentPdfFile && navigator.canShare && navigator.canShare({ files: [activeAssignmentPdfFile] })) {
+    try {
+      await navigator.share({
+        title: activeAssignmentEmailData.emailSubject,
+        text: activeAssignmentEmailData.emailBodyText || activeAssignmentEmailData.emailMessage,
+        files: [activeAssignmentPdfFile]
+      });
+      return;
+    } catch (shareErr) {}
+  }
+
+  // 3. Fallback ke mailto URI standar
+  const toList = (activeAssignmentEmailData.recipientEmails || []).join(',');
+  const subject = encodeURIComponent(activeAssignmentEmailData.emailSubject);
+  const body = encodeURIComponent(activeAssignmentEmailData.emailBodyText || activeAssignmentEmailData.emailMessage);
+  const mailtoUrl = `mailto:${toList}?subject=${subject}&body=${body}`;
+  window.location.href = mailtoUrl;
+}
+window.triggerAssignmentMailtoClient = triggerAssignmentMailtoClient;
+
+function triggerAssignmentGmailCompose() {
+  if (!activeAssignmentEmailData) return;
+  const toList = encodeURIComponent((activeAssignmentEmailData.recipientEmails || []).join(','));
+  const subject = encodeURIComponent(activeAssignmentEmailData.emailSubject);
+  const body = encodeURIComponent(activeAssignmentEmailData.emailBodyText || activeAssignmentEmailData.emailMessage);
+  const authUserEmail = encodeURIComponent(activeAssignmentEmailData.adminEmail || 'unitbisnis@takumi.ac.id');
+  const gmailUrl = `https://mail.google.com/mail/?authuser=${authUserEmail}&view=cm&fs=1&to=${toList}&su=${subject}&body=${body}`;
+  window.open(gmailUrl, '_blank');
+}
+window.triggerAssignmentGmailCompose = triggerAssignmentGmailCompose;

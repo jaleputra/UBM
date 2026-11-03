@@ -5,16 +5,24 @@
 // Helper: Memeriksa apakah order bertipe Jasa / Layanan (Non-BOM)
 function isServiceOrder(order) {
   if (!order) return false;
-  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
   if (order.quotationId) {
     const quo = (state.quotations || []).find(q => q.id === order.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+    if (quo) {
+      if (quo.quotationType === 'produk') return false;
+      if (quo.quotationType === 'jasa') return true;
+    }
   }
-  if (order.notes && (
-    order.notes.toLowerCase().includes('[tipe: jasa]') ||
-    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    order.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (order.quotationType === 'produk' || order.orderType === 'produk') return false;
+  if (order.quotationType === 'jasa' || order.orderType === 'jasa') return true;
+  if (order.notes) {
+    const lower = order.notes.toLowerCase();
+    if (lower.includes('surat penawaran harga (produk)') || lower.includes('[tipe: produk]')) return false;
+    if (
+      lower.includes('surat penawaran harga (jasa)') ||
+      lower.includes('[tipe: jasa]') ||
+      lower.includes('tipe penawaran: jasa')
+    ) return true;
+  }
   return false;
 }
 window.isServiceOrder = isServiceOrder;
@@ -22,20 +30,28 @@ window.isServiceOrder = isServiceOrder;
 // Helper: Memeriksa apakah project bertipe Jasa
 function isProjectService(p) {
   if (!p) return false;
-  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
   if (p.orderId) {
     const order = (state.orders || []).find(o => o.id === p.orderId);
-    if (order && isServiceOrder(order)) return true;
+    if (order) return isServiceOrder(order);
   }
   if (p.quotationId) {
     const quo = (state.quotations || []).find(q => q.id === p.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+    if (quo) {
+      if (quo.quotationType === 'produk') return false;
+      if (quo.quotationType === 'jasa') return true;
+    }
   }
-  if (p.notes && (
-    p.notes.toLowerCase().includes('[tipe: jasa]') ||
-    p.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    p.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (p.projectType === 'produk' || p.quotationType === 'produk') return false;
+  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
+  if (p.notes) {
+    const lower = p.notes.toLowerCase();
+    if (lower.includes('surat penawaran harga (produk)') || lower.includes('[tipe: produk]')) return false;
+    if (
+      lower.includes('surat penawaran harga (jasa)') ||
+      lower.includes('[tipe: jasa]') ||
+      lower.includes('tipe penawaran: jasa')
+    ) return true;
+  }
   return false;
 }
 window.isProjectService = isProjectService;
@@ -282,16 +298,14 @@ function renderDashboardGanttChart() {
     processedOrderIds.add(order.id);
     const project = projects.find(p => p.orderId === order.id);
     const firstItemName = order.items?.[0]?.itemName || 'Produk Pesanan';
-    const startDate = project?.startDate || order.orderDate || '-';
-    const dueDate = project?.dueDate || order.dueDate || '';
-
-    // Milestones summary & timeline check
     const milestones = project?.milestones || [];
     const totalMs = milestones.length;
     const completedMs = milestones.filter(m => m.status === 'Completed').length;
     const inProgressMs = milestones.filter(m => m.status === 'In Progress').length;
     const overdueTasksCount = milestones.filter(m => m.dueDate && m.dueDate < todayStr && m.status !== 'Completed').length;
     const hasTimeline = totalMs > 0;
+    const startDate = hasTimeline ? (project?.startDate || order.orderDate || '-') : '-';
+    const dueDate = hasTimeline ? (project?.dueDate || order.dueDate || '') : '';
 
     // Calculate Progress %
     let progress = 0;
@@ -396,6 +410,7 @@ function renderDashboardGanttChart() {
       completedMs,
       inProgressMs,
       totalMs,
+      hasTimeline,
       overdueTasksCount,
       hasInProgressMilestone: (inProgressMs > 0 || completedMs > 0),
       isDirect: false
@@ -417,14 +432,14 @@ function renderDashboardGanttChart() {
         isDirect: true
       };
 
-      const startDate = project.startDate || '-';
-      const dueDate = project.dueDate || '';
       const milestones = project.milestones || [];
       const totalMs = milestones.length;
       const completedMs = milestones.filter(m => m.status === 'Completed').length;
       const inProgressMs = milestones.filter(m => m.status === 'In Progress').length;
       const overdueTasksCount = milestones.filter(m => m.dueDate && m.dueDate < todayStr && m.status !== 'Completed').length;
       const hasTimeline = totalMs > 0;
+      const startDate = hasTimeline ? (project.startDate || '-') : '-';
+      const dueDate = hasTimeline ? (project.dueDate || '') : '';
 
       let progress = 0;
       if (hasTimeline) {
@@ -522,6 +537,7 @@ function renderDashboardGanttChart() {
         completedMs,
         inProgressMs,
         totalMs,
+        hasTimeline,
         overdueTasksCount,
         hasInProgressMilestone: (inProgressMs > 0 || completedMs > 0),
         isDirect: true
@@ -639,26 +655,33 @@ function renderDashboardGanttChart() {
           ${item.teamCount > 0 ? `<div class="text-muted font-sm" style="font-size: 11px;">+${item.teamCount} anggota tim</div>` : ''}
         </td>
         <td style="vertical-align: middle;">
-          <div style="font-size: 11.5px; color: #1e293b; font-weight: 600;">
-            <span>${item.startDate} &rarr; <strong>${item.dueDate || '-'}</strong></span>
-          </div>
-          ${!item.isCompleted && item.dueDate ? `
-            <div style="margin-top: 3px;">
-              ${item.overdueDays > 0
-                ? `<span class="text-danger font-bold font-sm">Lewat ${item.overdueDays} hari!</span>`
-                : item.diffDays === 0
-                  ? `<span class="text-danger font-bold font-sm">Deadline Hari Ini</span>`
-                  : `<span class="text-muted font-sm">Sisa ${item.diffDays} hari</span>`
-              }
+          ${item.hasTimeline ? `
+            <div style="font-size: 11.5px; color: #1e293b; font-weight: 600;">
+              <span>${item.startDate} &rarr; <strong>${item.dueDate || '-'}</strong></span>
             </div>
-          ` : ''}
+            ${!item.isCompleted && item.dueDate ? `
+              <div style="margin-top: 3px;">
+                ${item.overdueDays > 0
+                  ? `<span class="text-danger font-bold font-sm">Lewat ${item.overdueDays} hari!</span>`
+                  : item.diffDays === 0
+                    ? `<span class="text-danger font-bold font-sm">Deadline Hari Ini</span>`
+                    : `<span class="text-muted font-sm">Sisa ${item.diffDays} hari</span>`
+                }
+              </div>
+            ` : ''}
+          ` : `
+            <span class="badge badge-secondary" style="font-size: 10px; padding: 2px 7px; font-weight: 600;">Belum Input Timeline</span>
+            <div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">Input di Project Management</div>
+          `}
         </td>
         <td style="vertical-align: middle; text-align: center;">
-          ${item.isCompleted
-            ? `<span class="badge badge-success" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="check-check" style="width: 10px; height: 10px;"></i> 0 Overdue</span><div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">Tuntas</div>`
-            : item.overdueTasksCount > 0
-              ? `<span class="badge badge-danger" style="font-size: 10px; padding: 2px 7px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="alert-triangle" style="width: 10px; height: 10px;"></i> ${item.overdueTasksCount} Milestone</span><div style="font-size: 9.5px; color: #dc2626; font-weight: 600; margin-top: 2px;">Lewat Tanggal</div>`
-              : `<span class="badge badge-success" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="check" style="width: 10px; height: 10px;"></i> 0 Overdue</span><div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">On Schedule</div>`
+          ${!item.hasTimeline
+            ? `<span class="badge badge-secondary" style="font-size: 10px; padding: 2px 7px;">-</span><div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">Belum Ada Task</div>`
+            : item.isCompleted
+              ? `<span class="badge badge-success" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="check-check" style="width: 10px; height: 10px;"></i> 0 Overdue</span><div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">Tuntas</div>`
+              : item.overdueTasksCount > 0
+                ? `<span class="badge badge-danger" style="font-size: 10px; padding: 2px 7px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="alert-triangle" style="width: 10px; height: 10px;"></i> ${item.overdueTasksCount} Milestone</span><div style="font-size: 9.5px; color: #dc2626; font-weight: 600; margin-top: 2px;">Lewat Tanggal</div>`
+                : `<span class="badge badge-success" style="font-size: 10px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="check" style="width: 10px; height: 10px;"></i> 0 Overdue</span><div class="text-muted" style="font-size: 9.5px; margin-top: 2px;">On Schedule</div>`
           }
         </td>
         <td style="vertical-align: middle;">
@@ -1360,261 +1383,47 @@ function renderDashboardProjectGantt() {
   const container = document.getElementById('dashboard-project-gantt-view');
   if (!container) return;
 
-  // 1. Data Source Riil dari Seluruh Modul Terkait
+  // 1. Data Source Riil dari Project Management (HANYA yang sudah diinput timeline & milestones)
   const allOrders = state.orders || [];
   const allProjects = state.projects || [];
-  const allExpenses = state.service_expenses || [];
-  const allLogs = state.activity_logs || [];
   const todayStr = new Date().toISOString().split('T')[0];
 
   const combinedProjects = [];
-  const processedOrderIds = new Set();
-  const processedProjectNames = new Set();
 
-  // A. Proyek dari `state.projects` (Direct Project maupun Linked Order)
+  // HANYA tampilkan project yang benar-benar sudah menginput Timeline & Milestone di Project Management
   allProjects.forEach(p => {
     const matchingOrder = p.orderId ? allOrders.find(o => o.id === p.orderId) : null;
-    if (p.orderId) processedOrderIds.add(p.orderId);
-
     const isSvc = isProjectService(p) || (matchingOrder ? isServiceOrder(matchingOrder) : false);
+    if (isSvc) return; // Project Management & Timeline khusus Produk / Project Non-Jasa
+
+    const msList = Array.isArray(p.milestones) ? p.milestones.filter(m => m && m.title) : [];
+    // Jika belum menginput timeline/milestone di Project Management, JANGAN tampilkan di Gantt Chart Dashboard
+    if (msList.length === 0) return;
+
     const orderItems = matchingOrder?.items || [];
     const firstItemName = orderItems[0]?.itemName || '';
-
-    // Nama Project & Customer Riil
-    const projName = p.projectName || matchingOrder?.projectName || (firstItemName ? `${firstItemName}` : (isSvc ? 'Proyek Jasa' : 'Proyek Engineering'));
+    const projName = p.projectName || matchingOrder?.projectName || (firstItemName ? `${firstItemName}` : 'Proyek Engineering');
     const custName = p.customerName || matchingOrder?.customerName || (p.isDirect ? 'Internal Politeknik Takumi' : '-');
-    processedProjectNames.add(projName.toLowerCase().trim());
 
-    const start = p.startDate || matchingOrder?.orderDate || todayStr;
-    const due = p.dueDate || matchingOrder?.dueDate || '';
-
-    // Milestones Riil:
-    // Prioritas 1: Milestones yang sudah diinput pada Project Management
-    let msList = Array.isArray(p.milestones) && p.milestones.length > 0 ? [...p.milestones] : [];
-
-    // Prioritas 2: Jika belum ada milestones, bentuk dari Item Pesanan & Pengeluaran Riil
-    if (msList.length === 0) {
-      if (isSvc && matchingOrder) {
-        // Item jasa nyata dari penawaran / PO
-        orderItems.forEach((itm, idx) => {
-          msList.push({
-            id: `${p.id}-ITM-${idx + 1}`,
-            title: `Layanan: ${itm.itemName} (${itm.qty} ${itm.unit || 'Unit'})`,
-            status: matchingOrder.status === 'Completed' || matchingOrder.status === 'Delivered' ? 'Completed' : 'In Progress',
-            startDate: start,
-            dueDate: due || start,
-            pic: idx === 0 ? (p.projectLead || 'Tim Jasa') : ((p.team && p.team[0]?.name) || p.projectLead || 'Tim Pelaksana'),
-            notes: `Item resmi PO Pelanggan: Rp ${(itm.total || 0).toLocaleString('id-ID')}`
-          });
-        });
-
-        // Pengeluaran operasional nyata dari modul keuangan jasa
-        const relatedExpenses = allExpenses.filter(e => e.orderId === matchingOrder.id || (e.customerName && e.customerName.toLowerCase() === custName.toLowerCase()));
-        relatedExpenses.forEach((exp, eIdx) => {
-          const isDone = exp.status === 'Disetujui' || exp.status === 'Selesai';
-          msList.push({
-            id: `${p.id}-EXP-${eIdx + 1}`,
-            title: `Operasional Lapangan: ${exp.transportRoute || exp.serviceName || 'Transport & Akomodasi'} (${exp.transportType || 'Transportasi'})`,
-            status: isDone ? 'Completed' : 'In Progress',
-            startDate: exp.date || start,
-            dueDate: due || exp.date || start,
-            pic: exp.picName || p.projectLead || 'Koordinator Lapangan',
-            notes: `Biaya: Rp ${(exp.totalExpense || 0).toLocaleString('id-ID')} • Status: ${exp.status || 'Diajukan'}`
-          });
-        });
-
-        // Task BAST & Serah Terima Riil
-        msList.push({
-          id: `${p.id}-BAST`,
-          title: `Serah Terima & BAST ${projName}`,
-          status: matchingOrder.status === 'Completed' || matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending',
-          startDate: due || start,
-          dueDate: due || start,
-          pic: 'Admin Proyek & Keuangan',
-          notes: 'Penyusunan Berita Acara Serah Terima pekerjaan'
-        });
-      } else if (!isSvc && matchingOrder) {
-        // Produk manufaktur nyata
-        orderItems.forEach((itm, idx) => {
-          msList.push({
-            id: `${p.id}-PROD-${idx + 1}`,
-            title: `Fabrikasi & Produksi: ${itm.itemName} (${itm.qty} ${itm.unit || 'Pcs'})`,
-            status: matchingOrder.status === 'In Production' ? 'In Progress' : (matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending'),
-            startDate: start,
-            dueDate: due || start,
-            pic: p.projectLead || 'Tim Produksi',
-            notes: `Pesanan: ${itm.qty} unit`
-          });
-        });
-        msList.push({
-          id: `${p.id}-QC`,
-          title: `Quality Control & Testing ${projName}`,
-          status: matchingOrder.status === 'Testing & QC' ? 'In Progress' : (matchingOrder.status === 'Delivered' ? 'Completed' : 'Pending'),
-          startDate: due || start,
-          dueDate: due || start,
-          pic: 'Tim QC & Engineering',
-          notes: 'Uji fungsi dan pengecekan kelayakan'
-        });
-      }
-    }
+    const start = p.startDate || msList[0]?.startDate || matchingOrder?.orderDate || todayStr;
+    const due = p.dueDate || msList[msList.length - 1]?.dueDate || matchingOrder?.dueDate || '';
 
     combinedProjects.push({
       id: p.id,
       orderId: p.orderId || null,
       projectName: projName,
       customerName: custName,
-      projectLead: p.projectLead || (isSvc ? 'Tim Jasa' : 'Belum diassign'),
-      department: p.department || (isSvc ? 'Service & Ops' : 'Engineering'),
+      projectLead: p.projectLead || 'Belum diassign',
+      department: p.department || 'Engineering',
       status: p.status || (matchingOrder ? (matchingOrder.status === 'Accepted' || matchingOrder.status === 'In Production' ? 'In Progress' : matchingOrder.status) : 'In Progress'),
       startDate: start,
       dueDate: due,
-      progressPercent: typeof p.progressPercent === 'number' && p.progressPercent > 0 ? p.progressPercent : (msList.length > 0 ? Math.round((msList.filter(m => m.status === 'Completed').length / msList.length) * 100) : 0),
+      progressPercent: typeof p.progressPercent === 'number' && p.progressPercent > 0 ? p.progressPercent : Math.round((msList.filter(m => m.status === 'Completed').length / msList.length) * 100),
       milestones: msList,
       team: p.team || [],
       isDirect: Boolean(p.isDirect || !p.orderId),
-      isService: isSvc,
-      order: matchingOrder
-    });
-  });
-
-  // B. Order Penjualan Aktif yang belum memiliki record project
-  allOrders.forEach(ord => {
-    if (!processedOrderIds.has(ord.id) && ord.status !== 'Delivered' && ord.status !== 'Cancelled') {
-      const isSvc = isServiceOrder(ord);
-      const items = ord.items || [];
-      const firstItemName = items[0]?.itemName || (isSvc ? 'Layanan Jasa' : 'Produk Pesanan');
-      const projName = ord.projectName || `${firstItemName}`;
-      const custName = ord.customerName || '-';
-      processedProjectNames.add(projName.toLowerCase().trim());
-
-      const start = ord.orderDate || todayStr;
-      const due = ord.dueDate || '';
-
-      const msList = [];
-      if (isSvc) {
-        items.forEach((itm, idx) => {
-          msList.push({
-            id: `ORD-${ord.id}-ITM-${idx + 1}`,
-            title: `Layanan: ${itm.itemName} (${itm.qty} ${itm.unit || 'Unit'})`,
-            status: ord.status === 'Accepted' ? 'In Progress' : 'Pending',
-            startDate: start,
-            dueDate: due || start,
-            pic: ord.createdBy || 'Tim Jasa',
-            notes: `Total: Rp ${(itm.total || 0).toLocaleString('id-ID')}`
-          });
-        });
-
-        const relatedExpenses = allExpenses.filter(e => e.orderId === ord.id);
-        relatedExpenses.forEach((exp, eIdx) => {
-          msList.push({
-            id: `ORD-${ord.id}-EXP-${eIdx + 1}`,
-            title: `Operasional: ${exp.transportRoute || exp.serviceName} (${exp.transportType || 'Transport'})`,
-            status: exp.status === 'Disetujui' ? 'Completed' : 'In Progress',
-            startDate: exp.date || start,
-            dueDate: due || exp.date || start,
-            pic: exp.picName || 'Koordinator Lapangan',
-            notes: `Biaya: Rp ${(exp.totalExpense || 0).toLocaleString('id-ID')}`
-          });
-        });
-      } else {
-        items.forEach((itm, idx) => {
-          msList.push({
-            id: `ORD-${ord.id}-PROD-${idx + 1}`,
-            title: `Produksi: ${itm.itemName} (${itm.qty} ${itm.unit || 'Pcs'})`,
-            status: ord.status === 'Accepted' || ord.status === 'In Production' ? 'In Progress' : 'Pending',
-            startDate: start,
-            dueDate: due || start,
-            pic: 'Tim Produksi',
-            notes: `Pesanan Pelanggan: ${custName}`
-          });
-        });
-      }
-
-      combinedProjects.push({
-        id: `PRJ-${ord.id}`,
-        orderId: ord.id,
-        projectName: projName,
-        customerName: custName,
-        projectLead: isSvc ? (ord.createdBy || 'Tim Jasa') : 'Belum diassign',
-        department: isSvc ? 'Service & Ops' : 'Engineering',
-        status: ord.status === 'Accepted' || ord.status === 'In Production' ? 'In Progress' : 'Planning',
-        startDate: start,
-        dueDate: due,
-        progressPercent: msList.length > 0 ? Math.round((msList.filter(m => m.status === 'Completed').length / msList.length) * 100) : 15,
-        milestones: msList,
-        team: [],
-        isDirect: false,
-        isService: isSvc,
-        order: ord
-      });
-    }
-  });
-
-  // C. Proyek Mandiri / Internal Riil dari `state.activity_logs`
-  // Mengelompokkan aktivitas real yang sedang berjalan di UBM (misal: "Smart Laundry", "UBM")
-  const logsByProject = {};
-  allLogs.forEach(log => {
-    const pName = (log.projectName || '').trim();
-    if (!pName) return;
-    if (!logsByProject[pName]) logsByProject[pName] = [];
-    logsByProject[pName].push(log);
-  });
-
-  Object.keys(logsByProject).forEach(pName => {
-    // Jangan duplikasi jika project name sudah terdaftar dari project resmi / order
-    if (processedProjectNames.has(pName.toLowerCase())) return;
-
-    const projLogs = logsByProject[pName];
-    // Hanya masukkan jika memiliki log berstatus 'Sedang Berjalan' atau log aktif
-    const hasRunningLogs = projLogs.some(l => l.status === 'Sedang Berjalan');
-    if (!hasRunningLogs) return;
-
-    const runningLogList = projLogs.filter(l => l.status === 'Sedang Berjalan' || l.status === 'Selesai');
-    if (runningLogList.length === 0) return;
-
-    // Ambil tanggal mulai terawal dan tanggal target
-    const dates = runningLogList.map(l => l.startDate).filter(Boolean);
-    const endDates = runningLogList.map(l => l.endDate).filter(Boolean);
-    const startStr = dates.length > 0 ? dates.sort()[0] : todayStr;
-    const dueStr = endDates.length > 0 ? endDates.sort().reverse()[0] : todayStr;
-
-    // PIC terbanyak / terdepan
-    const picCount = {};
-    runningLogList.forEach(l => {
-      if (l.pic) picCount[l.pic] = (picCount[l.pic] || 0) + 1;
-    });
-    const mainPic = Object.keys(picCount).sort((a, b) => picCount[b] - picCount[a])[0] || 'Tim UBM';
-
-    const msList = runningLogList.map((l, lIdx) => ({
-      id: `INT-${pName}-${lIdx + 1}`,
-      title: l.task || 'Aktivitas Proyek',
-      status: l.status === 'Selesai' ? 'Completed' : 'In Progress',
-      startDate: l.startDate || startStr,
-      dueDate: l.endDate || dueStr,
-      pic: l.pic || mainPic,
-      notes: l.notes || ''
-    }));
-
-    const compCount = msList.filter(m => m.status === 'Completed').length;
-    const progress = Math.round((compCount / msList.length) * 100);
-
-    combinedProjects.push({
-      id: `DIR-${pName.replace(/\s+/g, '-').toUpperCase()}`,
-      orderId: null,
-      projectName: pName,
-      customerName: 'Internal Politeknik Takumi',
-      projectLead: mainPic,
-      department: runningLogList[0]?.category || 'Operasional',
-      status: 'In Progress',
-      startDate: startStr,
-      dueDate: dueStr,
-      progressPercent: progress,
-      milestones: msList,
-      team: [],
-      isDirect: true,
-      isInternal: true,
       isService: false,
-      order: null
+      order: matchingOrder
     });
   });
 
@@ -1734,12 +1543,14 @@ function renderDashboardProjectGantt() {
     container.innerHTML = `
       <div style="padding: 48px 24px; text-align: center; color: #64748b;">
         <i data-lucide="folder-kanban" style="width: 48px; height: 48px; color: #94a3b8; margin-bottom: 12px; stroke-width: 1.5;"></i>
-        <h4 style="font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 6px 0;">Tidak Ada Project Ditemukan</h4>
-        <p style="font-size: 12.5px; color: #64748b; margin: 0 0 16px 0; max-width: 440px; margin-left: auto; margin-right: auto;">
-          ${searchQuery ? `Tidak ada project atau task yang cocok dengan kata kunci "<strong>${escapeHtml(searchQuery)}</strong>".` : 'Tidak ada project yang memenuhi filter yang dipilih.'}
+        <h4 style="font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 6px 0;">${searchQuery ? 'Tidak Ada Project Ditemukan' : 'Belum Ada Timeline Project yang Diinput'}</h4>
+        <p style="font-size: 12.5px; color: #64748b; margin: 0 0 16px 0; max-width: 480px; margin-left: auto; margin-right: auto;">
+          ${searchQuery
+            ? `Tidak ada project atau task yang cocok dengan kata kunci "<strong>${escapeHtml(searchQuery)}</strong>".`
+            : 'Project (seperti Smart Door) baru akan tampil pada Gantt Chart setelah Timeline & Task Project diinput pada menu <strong>Project Management</strong> atau <strong>Order Penjualan</strong>.'}
         </p>
         <button type="button" class="btn btn-primary" onclick="navigateTo('projects')" style="display: inline-flex; align-items: center; gap: 6px;">
-          <i data-lucide="plus"></i> Buka Project Management
+          <i data-lucide="folder-kanban"></i> Buka Project Management
         </button>
       </div>
     `;

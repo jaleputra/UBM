@@ -5,16 +5,24 @@
 // Helper: Memeriksa apakah order bertipe Jasa / Layanan (Non-BOM)
 function isServiceOrder(order) {
   if (!order) return false;
-  if (order.orderType === 'jasa' || order.quotationType === 'jasa') return true;
   if (order.quotationId) {
     const quo = (state.quotations || []).find(q => q.id === order.quotationId);
-    if (quo && quo.quotationType === 'jasa') return true;
+    if (quo) {
+      if (quo.quotationType === 'produk') return false;
+      if (quo.quotationType === 'jasa') return true;
+    }
   }
-  if (order.notes && (
-    order.notes.toLowerCase().includes('[tipe: jasa]') ||
-    order.notes.toLowerCase().includes('tipe penawaran: jasa') ||
-    order.notes.toLowerCase().includes('(jasa)')
-  )) return true;
+  if (order.quotationType === 'produk' || order.orderType === 'produk') return false;
+  if (order.quotationType === 'jasa' || order.orderType === 'jasa') return true;
+  if (order.notes) {
+    const lower = order.notes.toLowerCase();
+    if (lower.includes('surat penawaran harga (produk)') || lower.includes('[tipe: produk]')) return false;
+    if (
+      lower.includes('surat penawaran harga (jasa)') ||
+      lower.includes('[tipe: jasa]') ||
+      lower.includes('tipe penawaran: jasa')
+    ) return true;
+  }
   return false;
 }
 

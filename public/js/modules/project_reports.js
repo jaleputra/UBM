@@ -2,15 +2,24 @@
 // UBM - Project Reports Module (Laporan Pelaksanaan Project)
 // =========================================================
 
-// Helper: Cek apakah project bertipe Jasa / Non-BOM
+// Helper: Cek apakah project bertipe Jasa / Non-BOM (Mengacu pada sumber kebenaran Quotation & Order)
 function isProjectService(p) {
   if (!p) return false;
-  if (p.isService) return true;
-  if (p.projectType === 'jasa' || p.quotationType === 'jasa') return true;
-  if (p.orderId) {
-    const order = (state.orders || []).find(o => o.id === p.orderId);
-    if (order && (order.orderType === 'jasa' || order.quotationType === 'jasa' || (order.notes && order.notes.toLowerCase().includes('jasa')))) return true;
+  if (p.orderId && window.state && Array.isArray(state.orders)) {
+    const order = state.orders.find(o => o.id === p.orderId);
+    if (order && typeof isServiceOrder === 'function') {
+      return isServiceOrder(order);
+    }
   }
+  if (p.quotationId && window.state && Array.isArray(state.quotations)) {
+    const quo = state.quotations.find(q => q.id === p.quotationId);
+    if (quo && quo.quotationType) {
+      return String(quo.quotationType).toLowerCase() === 'jasa';
+    }
+  }
+  if (p.quotationType) return String(p.quotationType).toLowerCase() === 'jasa';
+  if (p.projectType) return String(p.projectType).toLowerCase() === 'jasa';
+  if (typeof p.isService === 'boolean') return p.isService;
   return false;
 }
 

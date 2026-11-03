@@ -2790,6 +2790,9 @@
           <p style="font-size: 11.5px; color: var(--text-muted); margin: 2px 0 0 0;">Alokasi Project Lead, penugasan teknisi pelaksana, dan divisi pengerjaan</p>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" id="btn-send-assignment-email-header" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700; display: none;" onclick="sendTeamAssignmentEmail()" title="Khusus Administrator: Kirim PDF Surat Tugas otomatis ke Email Lead & Member">
+            <i data-lucide="mail"></i> Kirim via Email
+          </button>
           <button type="button" class="btn btn-sm btn-outline" style="color: #4338ca; border-color: #c7d2fe;" onclick="exportTeamAssignmentLetterPDF()"><i data-lucide="printer"></i> Cetak Surat Tugas</button>
           <button class="btn-close" onclick="closeModal('team-assignment-modal')"><i data-lucide="x"></i></button>
         </div>
@@ -2840,7 +2843,7 @@
                 <label class="form-label" style="margin: 0;">Project Lead / Penanggung Jawab Utama (PIC) *</label>
                 <span id="pm-lead-lock-badge"></span>
               </div>
-              <select id="pm-lead-name" class="form-control" required>
+              <select id="pm-lead-name" class="form-control" required onchange="if(typeof updateTeamAssignmentEmailPreview === 'function') updateTeamAssignmentEmailPreview()">
                 <option value="">-- Pilih Akun Lead Project --</option>
               </select>
               <small id="pm-lead-hint" class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Pilih akun Lead Project yang berwenang. Setelah disimpan, Lead Project akan terkunci secara permanen.</small>
@@ -2864,14 +2867,26 @@
               <!-- Dynamically populated -->
             </div>
           </div>
+
+          <!-- Administrator Email Dispatch Preview Box (Only shown to Administrator) -->
+          <div id="pm-admin-email-info-box" style="display: none; margin-top: 14px; padding: 12px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 11.5px; color: #065f46;">
+            <!-- Populated dynamically for Administrator -->
+          </div>
         </div>
 
         <!-- FOOTER ACTION -->
-        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
-          <button type="button" class="btn btn-outline" onclick="closeModal('team-assignment-modal')">Batal</button>
-          <button type="button" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5; padding: 9px 24px;" onclick="saveTeamAssignmentData()">
-            <i data-lucide="save"></i> Simpan Penugasan Tim
-          </button>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+          <div>
+            <button type="button" id="btn-send-assignment-email-footer" class="btn btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700; padding: 9px 18px; display: none; align-items: center; gap: 6px;" onclick="sendTeamAssignmentEmail()" title="Khusus Administrator: Kirim File PDF Surat Tugas otomatis ke Email Lead & Member">
+              <i data-lucide="send"></i> Kirim via Email (PDF Surat Tugas)
+            </button>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+            <button type="button" class="btn btn-outline" onclick="closeModal('team-assignment-modal')">Batal</button>
+            <button type="button" class="btn btn-primary" style="background: #4f46e5; border-color: #4f46e5; padding: 9px 24px;" onclick="saveTeamAssignmentData()">
+              <i data-lucide="save"></i> Simpan Penugasan Tim
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -3978,8 +3993,9 @@
   <!-- 6. TOAST CONTAINER -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- External PDF Generation Engine -->
+  <!-- External PDF & Excel (SheetJS) Engines -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <!-- Global Application State Pre-initialization -->
   <script>
@@ -3990,6 +4006,8 @@
       po: [],
       invoices: [],
       purchasing: [],
+      purchasing_process: [],
+      master_items: [],
       bom: [],
       delivery: [],
       projects: [],
@@ -4001,6 +4019,7 @@
       activity_logs: [],
       partnerships: [],
       service_expenses: [],
+      roles: [],
       users: [],
       settings: null,
       stats: null,
@@ -4011,24 +4030,24 @@
   </script>
 
   <!-- Application Logic Modular Scripts -->
-  <script src="js/modules/utils.js?v=20261023_2"></script>
-  <script src="js/modules/auth.js?v=20261023_2"></script>
-  <script src="js/modules/dashboard.js?v=20261023_2"></script>
-  <script src="js/modules/logs.js?v=20261023_2"></script>
-  <script src="js/modules/quotations.js?v=20261023_3"></script>
-  <script src="js/modules/orders.js?v=20261023_2"></script>
-  <script src="js/modules/projects.js?v=20261023_2"></script>
-  <script src="js/modules/bom.js?v=20261023_2"></script>
-  <script src="js/modules/purchasing.js?v=20261023_2"></script>
-  <script src="js/modules/po.js?v=20261023_2"></script>
-  <script src="js/modules/delivery.js?v=20261023_2"></script>
-  <script src="js/modules/invoices.js?v=20261023_2"></script>
-  <script src="js/modules/bast.js?v=20261023_2"></script>
-  <script src="js/modules/project_reports.js?v=20261023_2"></script>
-  <script src="js/modules/service.js?v=20261023_2"></script>
-  <script src="js/modules/maintenance.js?v=20261023_2"></script>
-  <script src="js/modules/finance.js?v=20261023_2"></script>
-  <script src="js/modules/settings.js?v=20261023_2"></script>
-  <script src="js/app.js?v=20261023_2"></script>
+  <script src="js/modules/utils.js?v=20261102_3"></script>
+  <script src="js/modules/auth.js?v=20261102_5"></script>
+  <script src="js/modules/dashboard.js?v=20261102_3"></script>
+  <script src="js/modules/logs.js?v=20261029_1"></script>
+  <script src="js/modules/quotations.js?v=20261102_2"></script>
+  <script src="js/modules/orders.js?v=20261102_3"></script>
+  <script src="js/modules/projects.js?v=20261102_5"></script>
+  <script src="js/modules/bom.js?v=20261102_3"></script>
+  <script src="js/modules/purchasing.js?v=20261029_1"></script>
+  <script src="js/modules/po.js?v=20261029_1"></script>
+  <script src="js/modules/delivery.js?v=20261029_1"></script>
+  <script src="js/modules/invoices.js?v=20261029_1"></script>
+  <script src="js/modules/bast.js?v=20261029_1"></script>
+  <script src="js/modules/project_reports.js?v=20261102_3"></script>
+  <script src="js/modules/service.js?v=20261029_1"></script>
+  <script src="js/modules/maintenance.js?v=20261029_1"></script>
+  <script src="js/modules/finance.js?v=20261102_3"></script>
+  <script src="js/modules/settings.js?v=20261102_5"></script>
+  <script src="js/app.js?v=20261102_5"></script>
 </body>
 </html>

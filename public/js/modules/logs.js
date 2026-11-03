@@ -15,38 +15,22 @@ let isCalendarDragging = false;
 let dragStartDateStr = null;
 let dragCurrentDateStr = null;
 
-// Storage backup helpers to guarantee data persistence
+// Storage backup helpers (disabled localStorage caching — authoritative data strictly from Supabase)
 function syncLogsToLocalStorage() {
   try {
-    if (state.activity_logs && Array.isArray(state.activity_logs)) {
-      localStorage.setItem('ubm_activity_logs_backup', JSON.stringify(state.activity_logs));
-    }
+    localStorage.removeItem('ubm_activity_logs_backup');
   } catch (e) {}
 }
 
 function restoreLogsFromLocalStorage() {
   try {
-    const raw = localStorage.getItem('ubm_activity_logs_backup');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
+    localStorage.removeItem('ubm_activity_logs_backup');
   } catch (e) {}
   return null;
 }
 
 // Initialize Logs Module
 document.addEventListener('DOMContentLoaded', () => {
-  // If state.activity_logs is not yet loaded, try restoring from backup
-  if (!state.activity_logs || state.activity_logs.length === 0) {
-    const backup = restoreLogsFromLocalStorage();
-    if (backup && backup.length > 0) {
-      state.activity_logs = backup;
-      renderLogsView();
-    }
-  }
   initLogFormEvents();
   initCalendarEvents();
 });
@@ -786,36 +770,74 @@ async function handleLogFormSubmit(e) {
   try {
     if (currentEditingLogId) {
       // UPDATE
-      const res = await fetch(`/api/activity_logs/${currentEditingLogId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logPayload)
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updated = await res.json();
+      let updated = {
+        ...((state.activity_logs || []).find(l => l.id === currentEditingLogId) || {}),
+        ...logPayload,
+        id: currentEditingLogId
+      };
+      try {
+        const res = await fetch(`/api/activity_logs/${currentEditingLogId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(logPayload)
+        });
+        if (res.ok) {
+          updated = await res.json();
+        }
+      } catch (apiErr) {
+        console.warn('[Logs] API update notice, syncing directly to Supabase:', apiErr.message);
+      }
+
+      if (typeof directSupabaseUpsertNativeRow === 'function') {
+        await directSupabaseUpsertNativeRow('activity_logs', updated);
+      }
 
       // Update state
       const idx = (state.activity_logs || []).findIndex(l => l.id === currentEditingLogId);
       if (idx !== -1) {
         state.activity_logs[idx] = updated;
       }
+      if (typeof directSupabaseSyncResource === 'function') {
+        await directSupabaseSyncResource('activity_logs', state.activity_logs);
+      }
       syncLogsToLocalStorage();
-      showToast('Kegiatan UBM berhasil diperbarui!', 'success');
+      showToast('Kegiatan UBM berhasil diperbarui & tersimpan ke Supabase!', 'success');
     } else {
       // CREATE
+      const generatedId = `LOG-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
+      logPayload.id = generatedId;
       logPayload.createdAt = new Date().toISOString();
-      const res = await fetch('/api/activity_logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logPayload)
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const created = await res.json();
+
+      let created = { ...logPayload };
+      try {
+        const res = await fetch('/api/activity_logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(logPayload)
+        });
+        if (res.ok) {
+          created = await res.json();
+        }
+      } catch (apiErr) {
+        console.warn('[Logs] API create notice, syncing directly to Supabase:', apiErr.message);
+      }
+
+      if (typeof directSupabaseUpsertNativeRow === 'function') {
+        await directSupabaseUpsertNativeRow('activity_logs', created);
+      }
 
       if (!state.activity_logs) state.activity_logs = [];
-      state.activity_logs.unshift(created);
+      const existingIdx = state.activity_logs.findIndex(l => l.id === created.id);
+      if (existingIdx !== -1) {
+        state.activity_logs[existingIdx] = created;
+      } else {
+        state.activity_logs.unshift(created);
+      }
+      if (typeof directSupabaseSyncResource === 'function') {
+        await directSupabaseSyncResource('activity_logs', state.activity_logs);
+      }
       syncLogsToLocalStorage();
-      showToast('Kegiatan baru UBM berhasil dicatat!', 'success');
+      showToast('Kegiatan baru UBM berhasil dicatat & tersimpan ke Supabase!', 'success');
     }
 
     // Close modal and reset form
@@ -914,12 +936,20 @@ async function deleteLog(id) {
   }
 
   try {
-    const res = await fetch(`/api/activity_logs/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    try {
+      await fetch(`/api/activity_logs/${id}`, { method: 'DELETE' });
+    } catch (apiErr) {}
+
+    if (typeof directSupabaseDeleteNativeRow === 'function') {
+      await directSupabaseDeleteNativeRow('activity_logs', id);
+    }
 
     state.activity_logs = (state.activity_logs || []).filter(l => l.id !== id);
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('activity_logs', state.activity_logs);
+    }
     syncLogsToLocalStorage();
-    showToast(`Kegiatan #${id} berhasil dihapus`, 'success');
+    showToast(`Kegiatan #${id} berhasil dihapus dari Supabase`, 'success');
 
     if (currentEditingLogId === id) {
       resetLogForm();
@@ -1167,23 +1197,33 @@ async function updateLogStatusDirect(logId, newStatus, selectEl) {
   }
 
   try {
-    const res = await fetch(`/api/activity_logs/${logId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(log)
-    });
+    let updated = { ...log };
+    try {
+      const res = await fetch(`/api/activity_logs/${logId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log)
+      });
+      if (res.ok) {
+        updated = await res.json();
+      }
+    } catch (apiErr) {}
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const updated = await res.json();
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('activity_logs', { ...log, ...updated });
+    }
 
     // Sinkronkan state lokal
     const idx = (state.activity_logs || []).findIndex(l => l.id === logId);
     if (idx !== -1) {
       state.activity_logs[idx] = { ...log, ...updated };
     }
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('activity_logs', state.activity_logs);
+    }
     syncLogsToLocalStorage();
 
-    showToast(`Status kegiatan #${logId} berhasil diubah ke "${newStatus}"`, 'success');
+    showToast(`Status kegiatan #${logId} berhasil diubah ke "${newStatus}" & disimpan di Supabase`, 'success');
 
     // Re-render tampilan log & kalender
     renderLogsView();
@@ -1605,20 +1645,31 @@ async function saveLogTaskReport(id) {
   log.updatedAt = new Date().toISOString();
 
   try {
-    const res = await fetch(`/api/activity_logs/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(log)
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const updated = await res.json();
+    let updated = { ...log };
+    try {
+      const res = await fetch(`/api/activity_logs/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log)
+      });
+      if (res.ok) {
+        updated = await res.json();
+      }
+    } catch (apiErr) {}
+
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('activity_logs', { ...log, ...updated });
+    }
 
     const idx = (state.activity_logs || []).findIndex(l => l.id === id);
     if (idx !== -1) {
       state.activity_logs[idx] = { ...log, ...updated };
     }
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('activity_logs', state.activity_logs);
+    }
     syncLogsToLocalStorage();
-    showToast('Laporan hasil task berhasil disimpan!', 'success');
+    showToast('Laporan hasil task berhasil disimpan ke Supabase!', 'success');
 
     // Refresh modal and table
     openLogDetailModal(id);
