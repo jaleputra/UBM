@@ -1902,7 +1902,8 @@ end run
         } else if (resourceName === 'delivery') {
           await syncDeliveryRelationsOnSave(updatedItem);
         } else if (resourceName === 'purchasing') {
-          if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
+          const checkStatus = updatedItem.status || existingItem.status;
+          if (checkStatus === 'Disetujui' || checkStatus === 'Stock' || checkStatus === 'Approved') {
             await syncPurchasingProcessAndMasterItems(items);
           }
         } else if (resourceName === 'purchasing_process') {

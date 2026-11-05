@@ -233,7 +233,12 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
         if (itemStatus === 'Sesuai' && procRow.itemName) {
           const key = `${procRow.itemName.toLowerCase()}:::${procRow.specs.toLowerCase()}`;
           const safeSlug = procRow.itemName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) || 'ITEM';
-          const masterId = `MST-${safeSlug}-${idx}`;
+          let hex = '';
+          for (let k = 0; k < Math.min(key.length, 4); k++) {
+            hex += key.charCodeAt(k).toString(16).padStart(2, '0');
+          }
+          const hashSuffix = hex.slice(0, 8).toUpperCase();
+          const masterId = `MST-${safeSlug}-${hashSuffix}`;
           if (!masterMap.has(key)) {
             masterMap.set(key, {
               id: masterId,
@@ -245,7 +250,18 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
               unitCost: procRow.purchasePrice,
               totalCost: procRow.qty * procRow.purchasePrice,
               departments: pr.department ? [pr.department] : [],
-              sources: [{ prId: pr.id, itemIndex: idx, qty: procRow.qty, unitCost: procRow.purchasePrice }],
+              sources: [{
+                prId: pr.id,
+                itemIndex: idx,
+                requestor: pr.requestor || '-',
+                department: pr.department || 'Umum',
+                requestDate: pr.requestDate || '-',
+                orderDate: procRow.orderDate || '-',
+                arrivalDate: procRow.arrivalDate || '-',
+                qty: procRow.qty,
+                unitCost: procRow.purchasePrice,
+                total: procRow.totalCost
+              }],
               status: procRow.qty > 0 ? 'Sesuai & Tersedia' : 'Habis (0)',
               updatedAt: new Date().toISOString()
             });
@@ -254,6 +270,21 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
             ex.qty += procRow.qty;
             if (procRow.purchasePrice > 0) ex.unitCost = procRow.purchasePrice;
             ex.totalCost = ex.qty * ex.unitCost;
+            if (pr.department && !ex.departments.includes(pr.department)) {
+              ex.departments.push(pr.department);
+            }
+            ex.sources.push({
+              prId: pr.id,
+              itemIndex: idx,
+              requestor: pr.requestor || '-',
+              department: pr.department || 'Umum',
+              requestDate: pr.requestDate || '-',
+              orderDate: procRow.orderDate || '-',
+              arrivalDate: procRow.arrivalDate || '-',
+              qty: procRow.qty,
+              unitCost: procRow.purchasePrice,
+              total: procRow.totalCost
+            });
           }
         }
       }
@@ -841,21 +872,7 @@ async function saveProcessPurchasingItem(e) {
   const itemStatus = document.getElementById('proc-item-status')?.value || 'Belum Dipesan';
   const notes = document.getElementById('proc-item-notes')?.value.trim() || '';
 
-  // VALIDASI: Jika status diubah menjadi Sesuai (Master), Link Pemesanan WAJIB diisi!
-  if (itemStatus === 'Sesuai' && !orderLink) {
-    showToast('⚠️ Link Pemesanan wajib diisi jika status barang diubah menjadi Sesuai (Master)!', 'warning');
-    const orderLinkInput = document.getElementById('proc-item-order-link');
-    if (orderLinkInput) {
-      orderLinkInput.focus();
-      orderLinkInput.style.borderColor = '#dc2626';
-      orderLinkInput.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.25)';
-      setTimeout(() => {
-        orderLinkInput.style.borderColor = '';
-        orderLinkInput.style.boxShadow = '';
-      }, 3000);
-    }
-    return;
-  }
+  const effectiveOrderLink = orderLink || targetItem.orderLink || '-';
 
   const qty = parseFloat(targetItem.qty) || 1;
   const total = qty * purchasePrice;
@@ -867,7 +884,7 @@ async function saveProcessPurchasingItem(e) {
   const updatedItemData = {
     ...targetItem,
     orderDate,
-    orderLink,
+    orderLink: effectiveOrderLink,
     purchasePrice,
     actualPrice: purchasePrice,
     total: total,
@@ -987,30 +1004,8 @@ async function updateProcessItemStatusDirect(prId, itemIndex, newStatus) {
 
   if (oldStatus === newStatus) return;
 
-  // VALIDASI: Jika memilih status "Sesuai" dari tabel langsung, cek apakah link pemesanan sudah ada
   if (newStatus === 'Sesuai' && (!targetItem.orderLink || !targetItem.orderLink.trim())) {
-    showToast('⚠️ Link Pemesanan belum diisi! Silakan isi Link Pemesanan terlebih dahulu sebelum mengubah status ke Sesuai.', 'warning');
-    renderPurchasingProcessTable();
-    // Buka modal secara otomatis dan arahkan user ke input Link Pemesanan
-    openProcessPurchasingItemModal(prId, itemIndex, false);
-    setTimeout(() => {
-      const statusSelect = document.getElementById('proc-item-status');
-      if (statusSelect) {
-        statusSelect.value = 'Sesuai';
-        handleProcStatusChange();
-      }
-      const linkInput = document.getElementById('proc-item-order-link');
-      if (linkInput) {
-        linkInput.focus();
-        linkInput.style.borderColor = '#dc2626';
-        linkInput.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.25)';
-        setTimeout(() => {
-          linkInput.style.borderColor = '';
-          linkInput.style.boxShadow = '';
-        }, 3000);
-      }
-    }, 250);
-    return;
+    targetItem.orderLink = '-';
   }
 
   // Optimistic update
