@@ -305,6 +305,49 @@ function getAuthoritativeProjectFinances() {
     if (!f) return;
     const pid = String(f.projectId || f.id || '').trim();
     const oid = String(f.orderId || '').trim();
+
+    // SINKRONISASI OTOMATIS: Sesuaikan HARGA MODAL (HPP) dengan data komponen BOM terbaru jika bukan custom manual
+    if (!f.isCustomCost) {
+      const linkedBom = (state.bom || []).find(b =>
+        (pid && (b.projectId === pid || b.orderId === pid)) ||
+        (oid && (b.orderId === oid || b.projectId === oid)) ||
+        (f.quotationId && b.quotationId === f.quotationId) ||
+        (f.projectName && b.productName && f.projectName.toLowerCase().trim() === b.productName.toLowerCase().trim()) ||
+        (f.projectName && b.projectName && f.projectName.toLowerCase().trim() === b.projectName.toLowerCase().trim())
+      );
+
+      if (linkedBom) {
+        let bomMaterialCost = 0;
+        if (Array.isArray(linkedBom.components) && linkedBom.components.length > 0) {
+          bomMaterialCost = linkedBom.components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost ?? c.actualPrice ?? c.purchasePrice ?? 0))), 0);
+        } else {
+          bomMaterialCost = parseFloat(linkedBom.materialCost || linkedBom.totalEstimatedCost || linkedBom.totalCost || 0);
+        }
+
+        if (bomMaterialCost > 0 && Math.abs((parseFloat(f.materialCost) || 0) - bomMaterialCost) > 0.01) {
+          f.materialCost = bomMaterialCost;
+          f.laborCost = parseFloat(f.laborCost ?? linkedBom.laborCost ?? 0);
+          f.overheadCost = parseFloat(f.overheadCost ?? linkedBom.overheadCost ?? 0);
+          f.modalTotal = f.materialCost + f.laborCost + f.overheadCost;
+          const sellingPrice = parseFloat(f.sellingPrice || f.contractSellingPrice || 0);
+          f.grossProfit = sellingPrice - f.modalTotal;
+          f.netProfit = f.grossProfit - (parseFloat(f.claimedWarranty) || 0);
+          f.profitMargin = sellingPrice > 0 ? Number(((f.netProfit / sellingPrice) * 100).toFixed(2)) : 0;
+          f.profitLevel = f.profitMargin >= 30 ? 'HIGH' : (f.profitMargin >= 10 ? 'GOOD' : (f.profitMargin >= 0 ? 'LOW' : 'LOSS'));
+          f.updatedAt = new Date().toISOString();
+
+          if (!f.orderId && linkedBom.orderId) f.orderId = linkedBom.orderId;
+          if (!f.projectId && linkedBom.projectId) f.projectId = linkedBom.projectId;
+
+          fetch(`/api/project_finances/${f.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(f)
+          }).catch(err => console.warn('[Finance Auto-Sync] Update failed:', err.message));
+        }
+      }
+    }
+
     list.push(f);
     if (pid) seenProjectIds.add(pid);
     if (oid) seenOrderIds.add(oid);
@@ -2521,7 +2564,191 @@ function exportPartnershipCSV() {
   showToast('Data Kerjasama berhasil diekspor ke CSV!', 'success');
 }
 
+/**
+ * Sinkronisasi nilai Harga Modal (HPP) proyek pada tabel Keuangan (project_finances)
+ * dan projects ketika ada penambahan/perubahan komponen pada Master BOM proyek terkait.
+ * @param {Object|string} bomInput - Objek BOM atau bomId yang komponennya berubah
+ */
+async function syncBOMToProjectFinances(bomInput) {
+  try {
+    if (!bomInput) return;
+    let bom = typeof bomInput === 'string'
+      ? (state.bom || []).find(b => b.id === bomInput)
+      : bomInput;
+    if (!bom) return;
+
+    // 1. Hitung total biaya material dari komponen-komponen riil BOM
+    const components = Array.isArray(bom.components) ? bom.components : [];
+    const materialCost = components.reduce((sum, c) => {
+      const qty = parseFloat(c.qty) || 0;
+      const unitCost = parseFloat(c.unitCost ?? c.actualPrice ?? c.purchasePrice ?? 0) || 0;
+      return sum + (qty * unitCost);
+    }, 0);
+
+    const laborCost = parseFloat(bom.laborCost || 0);
+    const overheadCost = parseFloat(bom.overheadCost || 0);
+    const modalTotal = materialCost + laborCost + overheadCost;
+
+    bom.materialCost = materialCost;
+    bom.totalEstimatedCost = modalTotal;
+
+    // 2. Cari project terkait (multi-attribute match)
+    const allProjects = typeof getAllProjectsForFinance === 'function' ? getAllProjectsForFinance() : (state.projects || []);
+    let project = allProjects.find(p =>
+      (bom.projectId && (p.id === bom.projectId || p.orderId === bom.projectId)) ||
+      (bom.orderId && (p.orderId === bom.orderId || p.id === bom.orderId)) ||
+      (p.bomId && p.bomId === bom.id) ||
+      (bom.quotationId && p.quotationId === bom.quotationId) ||
+      (bom.productName && p.projectName && bom.productName.toLowerCase().trim() === p.projectName.toLowerCase().trim()) ||
+      (bom.projectName && p.projectName && bom.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim())
+    );
+
+    // 3. Cari order terkait jika ada
+    let order = (state.orders || []).find(o =>
+      (bom.orderId && o.id === bom.orderId) ||
+      (bom.projectId && (o.id === bom.projectId || (o.id.startsWith('ORD-') && `PRJ-${o.id.replace('ORD-', '')}` === bom.projectId))) ||
+      (project && (project.orderId === o.id || project.id === o.id)) ||
+      (bom.productName && o.projectName && bom.productName.toLowerCase().trim() === o.projectName.toLowerCase().trim()) ||
+      (bom.projectName && o.projectName && bom.projectName.toLowerCase().trim() === o.projectName.toLowerCase().trim())
+    );
+
+    // Pastikan referensi projectId dan orderId pada BOM terhubung dengan benar
+    let bomNeedsSave = false;
+    if (!bom.projectId && project?.id) {
+      bom.projectId = project.id;
+      bomNeedsSave = true;
+    }
+    if (!bom.orderId && (project?.orderId || order?.id)) {
+      bom.orderId = project?.orderId || order?.id;
+      bomNeedsSave = true;
+    }
+    if (bomNeedsSave && bom.id) {
+      fetch(`/api/bom/${bom.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bom)
+      }).catch(e => console.warn('[syncBOMToProjectFinances] BOM update error:', e));
+    }
+
+    // 4. Update modalCost pada objek project jika tidak diset secara custom manual
+    if (project && (!project.modalCost || !project.modalCost.isManualCustom)) {
+      project.modalCost = {
+        material: materialCost,
+        labor: laborCost,
+        overhead: overheadCost,
+        total: modalTotal,
+        updatedAt: new Date().toISOString()
+      };
+      if (!project.bomId && bom.id) project.bomId = bom.id;
+
+      fetch(`/api/projects/${project.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(project)
+      }).catch(e => console.warn('[syncBOMToProjectFinances] Project update error:', e));
+    }
+
+    // 5. Cari record project_finances yang sesuai
+    const finRecords = state.project_finances || [];
+    let finRecord = finRecords.find(f =>
+      (bom.projectId && (f.projectId === bom.projectId || f.id === bom.projectId || f.id === `FIN-${bom.projectId.replace('PRJ-', '')}`)) ||
+      (bom.orderId && (f.orderId === bom.orderId || f.id === `FIN-${bom.orderId.replace('ORD-', '')}`)) ||
+      (project && (f.projectId === project.id || f.orderId === project.orderId || f.id === `FIN-${project.id.replace('PRJ-', '')}`)) ||
+      (order && (f.orderId === order.id || f.id === `FIN-${order.id.replace('ORD-', '')}`)) ||
+      (bom.productName && f.projectName && bom.productName.toLowerCase().trim() === f.productName.toLowerCase().trim()) ||
+      (bom.projectName && f.projectName && bom.projectName.toLowerCase().trim() === f.projectName.toLowerCase().trim()) ||
+      (project?.projectName && f.projectName && project.projectName.toLowerCase().trim() === f.projectName.toLowerCase().trim())
+    );
+
+    if (finRecord) {
+      // Jika bukan custom cost manual, update HPP dan kalkulasi profit
+      if (!finRecord.isCustomCost) {
+        finRecord.materialCost = materialCost;
+        finRecord.laborCost = laborCost;
+        finRecord.overheadCost = overheadCost;
+        finRecord.modalTotal = modalTotal;
+
+        const sellingPrice = parseFloat(finRecord.sellingPrice || finRecord.contractSellingPrice || order?.grandTotal || 0);
+        finRecord.grossProfit = sellingPrice - modalTotal;
+        finRecord.netProfit = finRecord.grossProfit - (parseFloat(finRecord.claimedWarranty) || 0);
+        finRecord.profitMargin = sellingPrice > 0 ? Number(((finRecord.netProfit / sellingPrice) * 100).toFixed(2)) : 0;
+        finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
+        finRecord.updatedAt = new Date().toISOString();
+
+        if (!finRecord.projectId && (project?.id || bom.projectId)) finRecord.projectId = project?.id || bom.projectId;
+        if (!finRecord.orderId && (project?.orderId || order?.id || bom.orderId)) finRecord.orderId = project?.orderId || order?.id || bom.orderId;
+
+        await fetch(`/api/project_finances/${finRecord.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finRecord)
+        });
+      }
+    } else {
+      // Buat record baru di project_finances jika belum ada
+      const targetProjId = project?.id || bom.projectId || (order ? (order.id.startsWith('ORD-') ? order.id.replace('ORD-', 'PRJ-') : `PRJ-${order.id}`) : `PRJ-${Date.now()}`);
+      const targetOrderId = order?.id || project?.orderId || bom.orderId || '';
+      const contractSellingPrice = parseFloat(order?.grandTotal || order?.subtotal || project?.totalBudget || 0);
+      const finId = `FIN-${targetProjId.replace('PRJ-', '')}`;
+
+      const newRecord = {
+        id: finId,
+        projectId: targetProjId,
+        orderId: targetOrderId,
+        quotationId: order?.quotationId || project?.quotationId || '',
+        invoiceId: targetOrderId ? `INV-${targetOrderId.replace('ORD-', '')}` : '',
+        projectName: bom.productName || bom.projectName || project?.projectName || order?.projectName || 'Project UBM',
+        customerName: project?.customerName || order?.customerName || '-',
+        projectLead: project?.projectLead || order?.projectLead || 'Tim Engineering',
+        status: project?.status || 'In Production',
+        contractSellingPrice: contractSellingPrice,
+        sellingPrice: contractSellingPrice,
+        materialCost: materialCost,
+        laborCost: laborCost,
+        overheadCost: overheadCost,
+        modalTotal: modalTotal,
+        allocatedWarranty: 0,
+        claimedWarranty: 0,
+        remainingWarranty: 0,
+        grossProfit: contractSellingPrice - modalTotal,
+        netProfit: contractSellingPrice - modalTotal,
+        profitMargin: contractSellingPrice > 0 ? Number((((contractSellingPrice - modalTotal) / contractSellingPrice) * 100).toFixed(2)) : 0,
+        profitLevel: 'HIGH',
+        invoiceStatus: 'Unpaid',
+        invoiceGrandTotal: contractSellingPrice,
+        totalPaidAmount: 0,
+        balanceDue: contractSellingPrice,
+        isCustomCost: false,
+        notes: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (newRecord.profitMargin >= 30) newRecord.profitLevel = 'HIGH';
+      else if (newRecord.profitMargin >= 10) newRecord.profitLevel = 'GOOD';
+      else if (newRecord.profitMargin >= 0) newRecord.profitLevel = 'LOW';
+      else newRecord.profitLevel = 'LOSS';
+
+      if (!state.project_finances) state.project_finances = [];
+      state.project_finances.push(newRecord);
+
+      await fetch('/api/project_finances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord)
+      }).catch(e => console.warn('[syncBOMToProjectFinances] POST new error:', e));
+    }
+
+    // Refresh tabel keuangan jika halaman aktif
+    if (typeof renderFinanceTable === 'function' && document.getElementById('table-finance-body')) {
+      renderFinanceTable();
+    }
+  } catch (err) {
+    console.error('[syncBOMToProjectFinances] Error:', err);
+  }
+}
+
 // Global window exposure
+window.syncBOMToProjectFinances = syncBOMToProjectFinances;
 window.getAllProjectsForFinance = getAllProjectsForFinance;
 window.getAuthoritativeProjectFinances = getAuthoritativeProjectFinances;
 window.getProjectFinancialData = getProjectFinancialData;

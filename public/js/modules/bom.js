@@ -1793,8 +1793,14 @@ async function handleBOMPageSubmit(e) {
     }
 
     if (res.ok) {
+      const savedBOM = await res.json().catch(() => ({ ...payload, id: targetEditId }));
       // 1. KURANGI STOK PADA DATABASE INVENTORY SECARA PERMANEN
       await deductBOMComponentsStock(components);
+
+      // Sinkronisasi HARGA MODAL (HPP) ke Keuangan Project (Profitabilitas Proyek UBM)
+      if (typeof window.syncBOMToProjectFinances === 'function') {
+        await window.syncBOMToProjectFinances(savedBOM || payload);
+      }
 
       // Otomatis ubah status order terkait ke In Production
       if (payload.orderId) {
@@ -2295,22 +2301,9 @@ async function executeAddDirectComponentToBOMPage() {
         await deductBOMComponentsStock([newComponent]);
       }
 
-      // Update keuangan project di Supabase
-      const finRecord = (state.project_finances || []).find(f => f.projectId === boundBOM.projectId || f.orderId === boundBOM.orderId);
-      if (finRecord) {
-        finRecord.materialCost = boundBOM.materialCost;
-        finRecord.modalTotal = boundBOM.materialCost + (parseFloat(finRecord.laborCost) || 0) + (parseFloat(finRecord.overheadCost) || 0);
-        finRecord.grossProfit = (parseFloat(finRecord.sellingPrice) || 0) - finRecord.modalTotal;
-        finRecord.netProfit = finRecord.grossProfit - (parseFloat(finRecord.claimedWarranty) || 0);
-        finRecord.profitMargin = finRecord.sellingPrice > 0 ? Number(((finRecord.netProfit / finRecord.sellingPrice) * 100).toFixed(2)) : 0;
-        finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
-        finRecord.updatedAt = new Date().toISOString();
-
-        await fetch(`/api/project_finances/${finRecord.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finRecord)
-        }).catch(e => console.warn(e));
+      // Update dan sinkronisasi HARGA MODAL (HPP) ke Keuangan Project (Profitabilitas Proyek UBM)
+      if (typeof window.syncBOMToProjectFinances === 'function') {
+        await window.syncBOMToProjectFinances(boundBOM);
       }
 
       // Re-render UI komponen di formulir BOM (komponen sebelumnya tetap terkunci)

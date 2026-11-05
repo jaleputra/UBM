@@ -4134,21 +4134,8 @@ async function executeAddDirectComponentToBOM() {
     }
 
     // 4. Update data finansial proyek di tabel project_finances Supabase
-    const finRecord = (state.project_finances || []).find(f => f.projectId === activeProj.id || f.orderId === activeProj.orderId);
-    if (finRecord) {
-      finRecord.materialCost = linkedBom.materialCost;
-      finRecord.modalTotal = linkedBom.materialCost + (parseFloat(finRecord.laborCost) || 0) + (parseFloat(finRecord.overheadCost) || 0);
-      finRecord.grossProfit = (parseFloat(finRecord.sellingPrice) || 0) - finRecord.modalTotal;
-      finRecord.netProfit = finRecord.grossProfit - (parseFloat(finRecord.claimedWarranty) || 0);
-      finRecord.profitMargin = finRecord.sellingPrice > 0 ? Number(((finRecord.netProfit / finRecord.sellingPrice) * 100).toFixed(2)) : 0;
-      finRecord.profitLevel = finRecord.profitMargin >= 30 ? 'HIGH' : (finRecord.profitMargin >= 10 ? 'GOOD' : (finRecord.profitMargin >= 0 ? 'LOW' : 'LOSS'));
-      finRecord.updatedAt = new Date().toISOString();
-
-      await fetch(`/api/project_finances/${finRecord.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finRecord)
-      }).catch(e => console.warn(e));
+    if (typeof window.syncBOMToProjectFinances === 'function') {
+      await window.syncBOMToProjectFinances(linkedBom);
     }
 
     // 5. Muat ulang resource terkait
