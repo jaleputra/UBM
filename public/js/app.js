@@ -349,36 +349,37 @@ async function loadAllData() {
 async function fetchResource(resource) {
   let result = null;
 
-  // 1. Fetch via Express / Netlify Serverless API endpoint (Authoritative Supabase Single Source of Truth)
-  try {
-    const cacheBuster = `_t=${Date.now()}`;
-    const url = `/api/${resource}?${cacheBuster}`;
-    const res = await fetch(url, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
-    });
-    if (res.ok) {
-      result = await res.json();
-    }
-  } catch (err) {
-    console.warn(`[Data Fetch /api/${resource}] Server notice, mencoba direct Supabase:`, err.message);
-  }
-
-  // 2. Direct Supabase reconciliation:
-  // Jika API gagal atau mengembalikan data parsial/fallback (misal di live serverless),
-  // ambil langsung dari Supabase agar data di live dan di local selalu lengkap 100%
-  if (typeof directSupabaseFetchResource === 'function' && resource !== 'settings') {
+  // 1. Prioritas Utama: Ambil langsung dari Supabase Database (Real-time Single Source of Truth)
+  // Menghubungkan browser langsung ke PostgreSQL Supabase, bebas delay serverless dan bebas cold cache disk
+  if (typeof directSupabaseFetchResource === 'function') {
     try {
       const directData = await directSupabaseFetchResource(resource);
-      if (Array.isArray(directData) && directData.length > 0) {
-        if (!Array.isArray(result) || directData.length > result.length) {
-          result = directData;
-        }
+      if (directData !== null && directData !== undefined) {
+        result = directData;
       }
-    } catch (e) {}
+    } catch (err) {
+      console.warn(`[Direct Supabase Fetch ${resource}] Notice:`, err.message);
+    }
+  }
+
+  // 2. Fallback jika koneksi direct Supabase gagal (misal mode offline atau sandbox)
+  if (result === null || result === undefined) {
+    try {
+      const cacheBuster = `_t=${Date.now()}`;
+      const url = `/api/${resource}?${cacheBuster}`;
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (res.ok) {
+        result = await res.json();
+      }
+    } catch (err) {
+      console.warn(`[Fallback /api/${resource}] Fetch notice:`, err.message);
+    }
   }
 
   if (resource === 'settings') {
@@ -606,6 +607,23 @@ async function deleteResource(resource, id) {
       }
     }
 
+    // 1. Optimistic UI update: hapus dari state seketika agar antarmuka responsif tanpa jeda
+    const originalItems = Array.isArray(state[resource]) ? [...state[resource]] : [];
+    if (Array.isArray(state[resource])) {
+      state[resource] = state[resource].filter(item => item.id !== id);
+      renderCurrentView();
+      updateSidebarBadges();
+    }
+
+    // 2. Hapus langsung dari Supabase Native Table & Cloud Sync Store secara instan
+    if (typeof directSupabaseDeleteNativeRow === 'function') {
+      directSupabaseDeleteNativeRow(resource, id).catch(() => {});
+    }
+    if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state[resource])) {
+      directSupabaseSyncResource(resource, state[resource]).catch(() => {});
+    }
+
+    // 3. Panggil API backend untuk sinkronisasi relasi (BOM, PO, Master Barang, db.json)
     const res = await fetch(`/api/${resource}/${id}`, {
       method: 'DELETE'
     });
@@ -642,7 +660,11 @@ async function deleteResource(resource, id) {
       updateSidebarBadges();
       loadDashboardData();
     } else {
-      showToast('Gagal menghapus data', 'error');
+      // Rollback jika server backend menolak
+      state[resource] = originalItems;
+      renderCurrentView();
+      updateSidebarBadges();
+      showToast('Gagal menghapus data dari server', 'error');
     }
   } catch (err) {
     console.error(`Error deleting ${resource}:`, err);

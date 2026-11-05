@@ -132,33 +132,6 @@
   ],
   "purchasing": [
     {
-      "id": "PR-2026-2357-629",
-      "items": [
-        {
-          "qty": 2,
-          "unit": "pcs",
-          "total": 3000,
-          "itemName": "Led Merah",
-          "unitPrice": 1500,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:32:02.357+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:32:02.357+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
       "id": "PR-2026-7454-970",
       "items": [
         {
@@ -375,60 +348,6 @@
       "totalEstimated": 3000
     },
     {
-      "id": "PR-2026-2785-154",
-      "items": [
-        {
-          "qty": 2,
-          "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:42.785+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:42.785+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-9641-922",
-      "items": [
-        {
-          "qty": 2,
-          "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:39.641+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:39.641+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
       "id": "PR-2026-3311-590",
       "items": [
         {
@@ -612,7 +531,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 16800000,
-      "updatedAt": "2026-11-05T06:32:06.423+00:00",
+      "updatedAt": "2026-11-05T07:03:45.925+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-04",
@@ -637,7 +556,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 1200000,
-      "updatedAt": "2026-11-05T06:32:08.524+00:00",
+      "updatedAt": "2026-11-05T07:03:46.119+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -662,7 +581,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 645000,
-      "updatedAt": "2026-11-05T06:32:08.933+00:00",
+      "updatedAt": "2026-11-05T07:03:46.338+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -687,7 +606,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 60000,
-      "updatedAt": "2026-11-05T06:32:09.138+00:00",
+      "updatedAt": "2026-11-05T07:03:46.513+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -712,7 +631,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 360000,
-      "updatedAt": "2026-11-05T06:32:09.541+00:00",
+      "updatedAt": "2026-11-05T07:03:46.686+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -737,7 +656,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 187500,
-      "updatedAt": "2026-11-05T06:32:09.776+00:00",
+      "updatedAt": "2026-11-05T07:03:46.886+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -762,7 +681,7 @@
       "orderLink": "https://shopee.co.id",
       "requestor": "Reza Ilyasa",
       "totalCost": 1755000,
-      "updatedAt": "2026-11-05T06:32:10.238+00:00",
+      "updatedAt": "2026-11-05T07:03:47.125+00:00",
       "department": "Fabrikasi & Las",
       "itemStatus": "Sesuai",
       "arrivalDate": "2026-11-02",
@@ -811,7 +730,7 @@
       "unitCost": 1200000,
       "createdAt": "2026-11-04T09:05:03.311+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:37.445+00:00",
+      "updatedAt": "2026-11-05T07:03:46.338+00:00",
       "usedInBom": 15,
       "inboundQty": 15,
       "departments": [
@@ -845,7 +764,7 @@
       "unitCost": 215000,
       "createdAt": "2026-11-02T14:02:42.768+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:37.747+00:00",
+      "updatedAt": "2026-11-05T07:03:46.513+00:00",
       "usedInBom": 3,
       "inboundQty": 3,
       "departments": [
@@ -879,7 +798,7 @@
       "unitCost": 60000,
       "createdAt": "2026-11-02T14:02:42.768+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:38.158+00:00",
+      "updatedAt": "2026-11-05T07:03:46.685+00:00",
       "usedInBom": 1,
       "inboundQty": 1,
       "departments": [
@@ -913,7 +832,7 @@
       "unitCost": 12000,
       "createdAt": "2026-11-02T14:02:42.768+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:38.331+00:00",
+      "updatedAt": "2026-11-05T07:03:46.886+00:00",
       "usedInBom": 30,
       "inboundQty": 30,
       "departments": [
@@ -947,7 +866,7 @@
       "unitCost": 12500,
       "createdAt": "2026-11-02T14:02:42.768+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:38.495+00:00",
+      "updatedAt": "2026-11-05T07:03:47.125+00:00",
       "usedInBom": 15,
       "inboundQty": 15,
       "departments": [
@@ -981,7 +900,7 @@
       "unitCost": 117000,
       "createdAt": "2026-11-02T14:02:42.768+00:00",
       "totalCost": 0,
-      "updatedAt": "2026-11-04T09:07:38.643+00:00",
+      "updatedAt": "2026-11-05T07:03:47.281+00:00",
       "usedInBom": 15,
       "inboundQty": 15,
       "departments": [

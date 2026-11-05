@@ -527,7 +527,7 @@ async function directSupabaseFetchResource(resource) {
   try {
     if (resource && resource !== 'settings') {
       const nativeUrl = resource === 'delivery'
-        ? `${UBM_SUPABASE_URL}/rest/v1/delivery?id=not.like.__SYS_SYNC_*&select=*&order=created_at.desc`
+        ? `${UBM_SUPABASE_URL}/rest/v1/delivery?id=not.like.__SYS_SYNC_%25&select=*&order=created_at.desc`
         : `${UBM_SUPABASE_URL}/rest/v1/${resource}?select=*&order=created_at.desc`;
       const nativeRes = await fetch(nativeUrl, {
         headers: {
@@ -539,7 +539,14 @@ async function directSupabaseFetchResource(resource) {
       if (nativeRes.ok) {
         const nativeRows = await nativeRes.json();
         if (Array.isArray(nativeRows)) {
-          return nativeRows.map(r => convertObjToCamel(r));
+          return nativeRows.map(r => {
+            const item = convertObjToCamel(r);
+            if (resource === 'po') {
+              if (item.expectedDate && !item.expectedDelivery) item.expectedDelivery = item.expectedDate;
+              if (item.grandTotal !== undefined && item.totalAmount === undefined) item.totalAmount = Number(item.grandTotal);
+            }
+            return item;
+          });
         }
       }
     }
@@ -556,6 +563,9 @@ async function directSupabaseFetchResource(resource) {
       const data = await res.json();
       if (Array.isArray(data)) {
         if (data[0] && data[0].items !== undefined) {
+          if (resource === 'settings' && Array.isArray(data[0].items)) {
+            return data[0].items[0] || {};
+          }
           return data[0].items;
         }
         return resource === 'settings' ? null : [];

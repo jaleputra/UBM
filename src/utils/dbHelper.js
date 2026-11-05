@@ -588,16 +588,12 @@ async function fetchAuthoritativeList(resourceName) {
           finalItems.push(mergeNativeAndCloudRecord(nativeItem, cItem, resourceName));
         }
 
-        // 2. Check items in cloudList that are not in nativeMap
+        // 2. Check items in cloudList that are not in nativeMap:
+        // Since native table exists and is authoritative, any items in cloudList not in nativeMap
+        // were deleted in Supabase. Mark cloud for update to purge them, and NEVER resurrect them.
         if (cloudList && cloudList.length > 0) {
           for (const cItem of cloudList) {
-            if (nativeMap.has(cItem.id)) continue;
-
-            if (cItem._syncedNative) {
-              // Item was previously synced to native table, and is now gone from native table -> deleted in Supabase Table Editor!
-              cloudNeedsUpdate = true;
-            } else {
-              finalItems.push(cItem);
+            if (!nativeMap.has(cItem.id)) {
               cloudNeedsUpdate = true;
             }
           }
