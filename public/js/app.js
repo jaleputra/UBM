@@ -347,6 +347,8 @@ async function loadAllData() {
 }
 
 async function fetchResource(resource) {
+  let result = null;
+
   // 1. Fetch via Express / Netlify Serverless API endpoint (Authoritative Supabase Single Source of Truth)
   try {
     const cacheBuster = `_t=${Date.now()}`;
@@ -359,46 +361,45 @@ async function fetchResource(resource) {
       }
     });
     if (res.ok) {
-      const data = await res.json();
-      if (resource === 'settings') {
-        state.settings = data;
-      } else {
-        state[resource] = Array.isArray(data) ? data : [];
-        if (resource === 'users' && Array.isArray(data) && data.length > 0) {
-          try { localStorage.setItem('ubm_cached_users', JSON.stringify(data)); } catch (e) {}
-        }
-        if (resource === 'partnerships' && Array.isArray(data)) {
-          try { localStorage.removeItem('ubm_cached_partnerships'); } catch (e) {}
-        }
-        if (resource === 'service_expenses' && Array.isArray(data)) {
-          try { localStorage.removeItem('ubm_cached_service_expenses'); } catch (e) {}
-        }
-        if (resource === 'activity_logs' && Array.isArray(data)) {
-          try { localStorage.removeItem('ubm_activity_logs_backup'); } catch (e) {}
-          if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
-            renderLogsView();
-          }
-        }
-      }
-      return data;
+      result = await res.json();
     }
   } catch (err) {
     console.warn(`[Data Fetch /api/${resource}] Server notice, mencoba direct Supabase:`, err.message);
   }
 
-  // 2. Fallback Universal: Fetch langsung ke Supabase Cloud Store jika endpoint API sedang offline
-  if (typeof directSupabaseFetchResource === 'function') {
+  // 2. Direct Supabase reconciliation:
+  // Jika API gagal atau mengembalikan data parsial/fallback (misal di live serverless),
+  // ambil langsung dari Supabase agar data di live dan di local selalu lengkap 100%
+  if (typeof directSupabaseFetchResource === 'function' && resource !== 'settings') {
     try {
       const directData = await directSupabaseFetchResource(resource);
-      if (directData !== null && directData !== undefined) {
-        if (resource === 'settings') {
-          state.settings = directData;
-        } else {
-          state[resource] = Array.isArray(directData) ? directData : [];
+      if (Array.isArray(directData) && directData.length > 0) {
+        if (!Array.isArray(result) || directData.length > result.length) {
+          result = directData;
         }
-        return state[resource];
       }
     } catch (e) {}
+  }
+
+  if (resource === 'settings') {
+    state.settings = result;
+  } else {
+    state[resource] = Array.isArray(result) ? result : [];
+    if (resource === 'users' && Array.isArray(result) && result.length > 0) {
+      try { localStorage.setItem('ubm_cached_users', JSON.stringify(result)); } catch (e) {}
+    }
+    if (resource === 'partnerships' && Array.isArray(result)) {
+      try { localStorage.removeItem('ubm_cached_partnerships'); } catch (e) {}
+    }
+    if (resource === 'service_expenses' && Array.isArray(result)) {
+      try { localStorage.removeItem('ubm_cached_service_expenses'); } catch (e) {}
+    }
+    if (resource === 'activity_logs' && Array.isArray(result)) {
+      try { localStorage.removeItem('ubm_activity_logs_backup'); } catch (e) {}
+      if (state.currentView === 'logs' && typeof renderLogsView === 'function') {
+        renderLogsView();
+      }
+    }
   }
 
   if (!state[resource]) state[resource] = (resource === 'settings' ? null : []);

@@ -186,6 +186,10 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
       await directSupabaseUpsertNativeRow('purchasing', prRecord);
     }
 
+    // Hanya sinkronkan purchasing_process & master_items jika status Disetujui
+    const isApproved = prRecord && (prRecord.status === 'Disetujui' || prRecord.status === 'Stock' || prRecord.status === 'Approved');
+    if (!isApproved) return;
+
     const prList = state.purchasing || [];
     const approvedPRs = prList.filter(p => p.status === 'Disetujui' || p.status === 'Stock' || p.status === 'Approved');
     const masterMap = new Map();
@@ -2109,8 +2113,18 @@ async function submitPurchasing(e, editId = '') {
     });
   }
 
+  // Cegah multiple submit dengan disable tombol
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> Menyimpan...';
+  }
+
   const totalEstimated = calculatePurchasingTotals();
+  const targetId = isActuallyEdit ? editId : `PR-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
+
   const payload = {
+    id: targetId,
     requestor: formData.get('requestor') || 'Umum',
     department: formData.get('department') || 'Engineering & Produksi',
     requestDate: formData.get('requestDate') || new Date().toISOString().split('T')[0],
@@ -2120,49 +2134,57 @@ async function submitPurchasing(e, editId = '') {
     status: isActuallyEdit ? (existingPR?.status || formData.get('status') || 'Pengajuan') : 'Pengajuan',
     items,
     totalEstimated,
-    notes: formData.get('notes') || ''
+    notes: formData.get('notes') || '',
+    createdAt: isActuallyEdit ? (existingPR?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
-  try {
-    let res;
-    if (isActuallyEdit) {
-      res = await fetch(`/api/purchasing/${editId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      res = await fetch('/api/purchasing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    if (res.ok) {
-      const savedPR = await res.json().catch(() => null);
-      if (savedPR && savedPR.id) {
-        await directSyncPurchasingTablesToSupabase(savedPR);
-      }
-      closeModal('form-modal');
-      showToast(`Request Pengadaan berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'} & tersimpan di Supabase!`, 'success');
-      await Promise.allSettled([
-        fetchResource('purchasing'),
-        fetchResource('purchasing_process'),
-        fetchResource('master_items')
-      ]);
-      switchPurchasingTab('docs');
-      renderPurchasingTable();
-      renderPurchasingProcessTable();
-      renderPurchasingItemsTable();
-      updateSidebarBadges();
-    } else {
-      showToast('Gagal menyimpan request pengadaan', 'error');
-    }
-  } catch (err) {
-    console.error('Error saving purchasing:', err);
-    showToast('Terjadi kesalahan jaringan', 'error');
+  // 1. OPTIMISTIC UPDATE: Terapkan ke state & UI seketika tanpa membuat user menunggu
+  if (!state.purchasing) state.purchasing = [];
+  const existingIndex = state.purchasing.findIndex(p => p.id === targetId);
+  if (existingIndex !== -1) {
+    state.purchasing[existingIndex] = { ...state.purchasing[existingIndex], ...payload };
+  } else {
+    state.purchasing.unshift(payload);
   }
+
+  // Tutup modal langsung & perbarui tabel serta badge
+  closeModal('form-modal');
+  switchPurchasingTab('docs');
+  renderPurchasingTable();
+  updateSidebarBadges();
+  showToast(`✅ Request Pengadaan ${targetId} berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'}!`, 'success');
+
+  // 2. SIMPAN KE DATABASE (API & Direct Supabase) SECARA PARALEL DI BACKGROUND
+  const apiCall = fetch(isActuallyEdit ? `/api/purchasing/${targetId}` : '/api/purchasing', {
+    method: isActuallyEdit ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const directCall = (typeof directSupabaseUpsertNativeRow === 'function')
+    ? directSupabaseUpsertNativeRow('purchasing', payload)
+    : Promise.resolve();
+
+  Promise.allSettled([apiCall, directCall]).then(async () => {
+    // Jika PR berstatus Disetujui, jalankan sinkronisasi barang ke proses & master di background
+    if (payload.status === 'Disetujui' || payload.status === 'Stock' || payload.status === 'Approved') {
+      if (typeof directSyncPurchasingTablesToSupabase === 'function') {
+        directSyncPurchasingTablesToSupabase(payload).catch(() => {});
+      }
+      if (typeof renderPurchasingProcessTable === 'function') renderPurchasingProcessTable();
+      if (typeof renderPurchasingItemsTable === 'function') renderPurchasingItemsTable();
+    }
+    // Refresh quiet di background untuk menjamin konsistensi 100%
+    if (typeof fetchResource === 'function') {
+      fetchResource('purchasing').then(() => {
+        renderPurchasingTable();
+        updateSidebarBadges();
+      }).catch(() => {});
+    }
+  }).catch(err => {
+    console.warn('[Purchasing Background Save Notice]:', err);
+  });
 }
 
 function viewPurchasingDetail(prId) {

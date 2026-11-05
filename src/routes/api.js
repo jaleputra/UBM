@@ -1747,7 +1747,9 @@ end run
         } else if (resourceName === 'delivery') {
           await syncDeliveryRelationsOnSave(newItem);
         } else if (resourceName === 'purchasing') {
-          await syncPurchasingProcessAndMasterItems(items);
+          if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
+            await syncPurchasingProcessAndMasterItems(items);
+          }
         } else if (resourceName === 'purchasing_process') {
           await syncProcessItemBackToPurchasing(newItem);
         }
@@ -1851,7 +1853,9 @@ end run
         } else if (resourceName === 'delivery') {
           await syncDeliveryRelationsOnSave(updatedItem);
         } else if (resourceName === 'purchasing') {
-          await syncPurchasingProcessAndMasterItems(items);
+          if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
+            await syncPurchasingProcessAndMasterItems(items);
+          }
         } else if (resourceName === 'purchasing_process') {
           await syncProcessItemBackToPurchasing(updatedItem);
         }

@@ -597,10 +597,7 @@ async function fetchAuthoritativeList(resourceName) {
               // Item was previously synced to native table, and is now gone from native table -> deleted in Supabase Table Editor!
               cloudNeedsUpdate = true;
             } else {
-              // Item was in Cloud Sync but not yet pushed to native table -> push to native table now
-              const upRes = await upsertNativeSupabaseRow(resourceName, cItem);
-              const syncedItem = { ...cItem, _syncedNative: upRes.synced };
-              finalItems.push(syncedItem);
+              finalItems.push(cItem);
               cloudNeedsUpdate = true;
             }
           }
@@ -610,7 +607,7 @@ async function fetchAuthoritativeList(resourceName) {
         writeDB(db);
 
         if (cloudNeedsUpdate) {
-          await setCloudSync(resourceName, finalItems);
+          setCloudSync(resourceName, finalItems).catch(() => {});
         }
         return finalItems;
       } else if (nativeErr) {
