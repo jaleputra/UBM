@@ -245,6 +245,59 @@ const NULLABLE_DATE_COLS = new Set([
   'date'
 ]);
 
+// ==================== PO DOCUMENT CARRIER HELPERS ====================
+function embedPOInNotes(notes, poDoc) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '').trim();
+  if (!poDoc || (!poDoc.url && !poDoc.name)) return cleanNotes;
+  const payload = JSON.stringify({
+    name: poDoc.name || 'PO-Pelanggan.pdf',
+    url: poDoc.url || '',
+    uploadedAt: poDoc.uploadedAt || new Date().toISOString()
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_PO_DATA:${payload}-->` : `<!--UBM_PO_DATA:${payload}-->`;
+}
+
+function extractPOFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_PO_DATA:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && (parsed.url || parsed.name)) {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function cleanDisplayNotes(notes) {
+  if (!notes || typeof notes !== 'string') return '';
+  return notes.replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '').trim();
+}
+
+function ensureOrderPOData(order) {
+  if (!order) return order;
+  if (!order.poDocument && !order.poFileUrl) {
+    const fromNotes = extractPOFromNotes(order.notes);
+    if (fromNotes) {
+      order.poDocument = fromNotes;
+      order.poFileUrl = fromNotes.url || '';
+      order.poFileName = fromNotes.name || 'PO-Pelanggan.pdf';
+    }
+  } else if (order.poDocument && !order.poFileUrl) {
+    order.poFileUrl = order.poDocument.url || '';
+    order.poFileName = order.poDocument.name || 'PO-Pelanggan.pdf';
+  } else if (!order.poDocument && order.poFileUrl) {
+    order.poDocument = {
+      name: order.poFileName || 'PO-Pelanggan.pdf',
+      url: order.poFileUrl,
+      uploadedAt: order.updatedAt || new Date().toISOString()
+    };
+  }
+  return order;
+}
+
 function prepareNativeTablePayload(resourceName, rawItem) {
   if (!rawItem || typeof rawItem !== 'object') return {};
   const item = { ...rawItem };
@@ -263,6 +316,12 @@ function prepareNativeTablePayload(resourceName, rawItem) {
     item.taxRate = Number(item.taxRate ?? 11);
     item.taxAmount = Number(item.taxAmount ?? 0);
     item.grandTotal = Number(item.grandTotal ?? item.subtotal ?? 0);
+
+    // Guaranteed PO carrier in notes for Supabase orders table
+    const poDoc = item.poDocument || (item.poFileUrl ? { name: item.poFileName || 'PO-Pelanggan.pdf', url: item.poFileUrl } : null);
+    if (poDoc) {
+      item.notes = embedPOInNotes(item.notes, poDoc);
+    }
   } else if (resourceName === 'po') {
     item.vendorName = item.vendorName || 'Vendor';
     item.poDate = toSqlDateOrNull(item.poDate, true);
@@ -524,6 +583,9 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
       if (item.expectedDate && !item.expectedDelivery) item.expectedDelivery = item.expectedDate;
       if (item.grandTotal !== undefined && item.totalAmount === undefined) item.totalAmount = Number(item.grandTotal);
     }
+    if (resourceName === 'orders') {
+      ensureOrderPOData(item);
+    }
     return item;
   }
 
@@ -539,6 +601,9 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
   if (resourceName === 'po') {
     if (merged.expectedDate && !merged.expectedDelivery) merged.expectedDelivery = merged.expectedDate;
     if (merged.grandTotal !== undefined && merged.totalAmount === undefined) merged.totalAmount = Number(merged.grandTotal);
+  }
+  if (resourceName === 'orders') {
+    ensureOrderPOData(merged);
   }
   return merged;
 }
@@ -666,6 +731,10 @@ module.exports = {
   saveAuthoritativeList,
   mergeResourceLists,
   missingSupabaseTables,
+  embedPOInNotes,
+  extractPOFromNotes,
+  cleanDisplayNotes,
+  ensureOrderPOData,
   CLOUD_SYNC_PREFIX,
   DB_FILE: LOCAL_DB_FILE
 };

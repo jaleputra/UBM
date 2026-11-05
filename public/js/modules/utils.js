@@ -522,6 +522,66 @@ async function directSupabaseDeleteNativeRow(resource, id) {
   }
 }
 
+// ==================== PO DOCUMENT CARRIER HELPERS ====================
+function embedPOInNotes(notes, poDoc) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '').trim();
+  if (!poDoc || (!poDoc.url && !poDoc.name)) return cleanNotes;
+  const payload = JSON.stringify({
+    name: poDoc.name || 'PO-Pelanggan.pdf',
+    url: poDoc.url || '',
+    uploadedAt: poDoc.uploadedAt || new Date().toISOString()
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_PO_DATA:${payload}-->` : `<!--UBM_PO_DATA:${payload}-->`;
+}
+
+function extractPOFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_PO_DATA:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && (parsed.url || parsed.name)) {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function cleanDisplayNotes(notes) {
+  if (!notes || typeof notes !== 'string') return '';
+  return notes.replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '').trim();
+}
+
+function ensureOrderPOData(order) {
+  if (!order) return order;
+  if (!order.poDocument && !order.poFileUrl) {
+    const fromNotes = extractPOFromNotes(order.notes) || extractPOFromNotes(order._rawNotes);
+    if (fromNotes) {
+      order.poDocument = fromNotes;
+      order.poFileUrl = fromNotes.url || '';
+      order.poFileName = fromNotes.name || 'PO-Pelanggan.pdf';
+    }
+  } else if (order.poDocument && !order.poFileUrl) {
+    order.poFileUrl = order.poDocument.url || '';
+    order.poFileName = order.poDocument.name || 'PO-Pelanggan.pdf';
+  } else if (!order.poDocument && order.poFileUrl) {
+    order.poDocument = {
+      name: order.poFileName || 'PO-Pelanggan.pdf',
+      url: order.poFileUrl,
+      uploadedAt: order.updatedAt || new Date().toISOString()
+    };
+  }
+
+  // Preserve raw notes with embedded PO while cleaning display notes
+  if (order.notes && typeof order.notes === 'string' && order.notes.includes('<!--UBM_PO_DATA:')) {
+    order._rawNotes = order.notes;
+    order.notes = cleanDisplayNotes(order.notes);
+  }
+
+  return order;
+}
+
 // Universal direct Supabase helper for any resource (Native Table + Cloud Store)
 async function directSupabaseFetchResource(resource) {
   try {
@@ -539,8 +599,38 @@ async function directSupabaseFetchResource(resource) {
       if (nativeRes.ok) {
         const nativeRows = await nativeRes.json();
         if (Array.isArray(nativeRows)) {
+          // If resource is orders, also fetch cloud sync to merge rich PO document data
+          let cloudOrdersMap = null;
+          if (resource === 'orders') {
+            try {
+              const syncKey = `__SYS_SYNC_orders__`;
+              const cRes = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
+                headers: {
+                  'apikey': UBM_SUPABASE_KEY,
+                  'Authorization': `Bearer ${UBM_SUPABASE_KEY}`,
+                  'Cache-Control': 'no-cache, no-store'
+                }
+              });
+              if (cRes.ok) {
+                const cData = await cRes.json();
+                if (Array.isArray(cData) && cData[0] && Array.isArray(cData[0].items)) {
+                  cloudOrdersMap = new Map(cData[0].items.map(o => [o.id, o]));
+                }
+              }
+            } catch (e) {}
+          }
+
           return nativeRows.map(r => {
             const item = convertObjToCamel(r);
+            if (resource === 'orders') {
+              if (cloudOrdersMap && cloudOrdersMap.has(item.id)) {
+                const cOrder = cloudOrdersMap.get(item.id);
+                if (!item.poDocument && cOrder.poDocument) item.poDocument = cOrder.poDocument;
+                if (!item.poFileUrl && cOrder.poFileUrl) item.poFileUrl = cOrder.poFileUrl;
+                if (!item.poFileName && cOrder.poFileName) item.poFileName = cOrder.poFileName;
+              }
+              ensureOrderPOData(item);
+            }
             if (resource === 'po') {
               if (item.expectedDate && !item.expectedDelivery) item.expectedDelivery = item.expectedDate;
               if (item.grandTotal !== undefined && item.totalAmount === undefined) item.totalAmount = Number(item.grandTotal);
@@ -565,6 +655,9 @@ async function directSupabaseFetchResource(resource) {
         if (data[0] && data[0].items !== undefined) {
           if (resource === 'settings' && Array.isArray(data[0].items)) {
             return data[0].items[0] || {};
+          }
+          if (resource === 'orders' && Array.isArray(data[0].items)) {
+            return data[0].items.map(o => ensureOrderPOData(o));
           }
           return data[0].items;
         }
@@ -605,6 +698,10 @@ async function directSupabaseSyncResource(resource, items) {
   }
 }
 
+window.embedPOInNotes = embedPOInNotes;
+window.extractPOFromNotes = extractPOFromNotes;
+window.cleanDisplayNotes = cleanDisplayNotes;
+window.ensureOrderPOData = ensureOrderPOData;
 window.directSupabaseUpsertNativeRow = directSupabaseUpsertNativeRow;
 window.directSupabaseDeleteNativeRow = directSupabaseDeleteNativeRow;
 window.directSupabaseFetchResource = directSupabaseFetchResource;

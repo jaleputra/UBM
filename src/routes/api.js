@@ -52,17 +52,17 @@ function processPOFileStorage(item, id) {
       fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
       const fileUrl = `/uploads/po/${filename}`;
-      processed.poFileUrl = fileUrl;
-      if (processed.poDocument) {
-        processed.poDocument.url = fileUrl;
-      } else {
-        processed.poDocument = {
-          name: processed.poFileName || filename,
-          url: fileUrl,
-          uploadedAt: new Date().toISOString()
-        };
-      }
-      console.log(`📄 [PO Storage] File PDF tersimpan di disk: ${fileUrl}`);
+      // Retain the base64 data URL in url for guaranteed universal live rendering across all domains & Supabase
+      processed.poFileUrl = rawUrl;
+      processed.poLocalFileUrl = fileUrl;
+      processed.poFileName = processed.poFileName || filename;
+      processed.poDocument = {
+        name: processed.poFileName || filename,
+        url: rawUrl,
+        localUrl: fileUrl,
+        uploadedAt: new Date().toISOString()
+      };
+      console.log(`📄 [PO Storage] File PDF tersimpan di disk (${fileUrl}) & data URL dipertahankan.`);
     } catch (e) {
       // In read-only serverless environment, retain inline data URL
       processed.poFileUrl = rawUrl;

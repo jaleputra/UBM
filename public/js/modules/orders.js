@@ -80,7 +80,7 @@ function renderOrdersTable() {
   if (!tbody) return;
 
   const statusFilter = document.getElementById('filter-order-status')?.value || document.getElementById('order-status-filter')?.value || 'ALL';
-  let list = state.orders || [];
+  let list = (state.orders || []).map(o => (typeof ensureOrderPOData === 'function' ? ensureOrderPOData(o) : o));
 
   if (statusFilter !== 'ALL') {
     list = list.filter(o => o.status === statusFilter);
@@ -751,7 +751,7 @@ function openOrderModal(orderData = null) {
           <label class="form-label" style="font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
             <i data-lucide="file-text" style="width: 14px; height: 14px; color: #64748b;"></i> Catatan Khusus & Syarat Pengerjaan
           </label>
-          <textarea name="notes" class="form-control" rows="6" placeholder="Instruksi toleransi presisi, perlakuan khusus, syarat termin pembayaran, dll...">${escapeAttr(orderData?.notes || '')}</textarea>
+          <textarea name="notes" class="form-control" rows="6" placeholder="Instruksi toleransi presisi, perlakuan khusus, syarat termin pembayaran, dll...">${escapeAttr(typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(orderData?.notes || '') : (orderData?.notes || ''))}</textarea>
         </div>
 
         <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px 18px;">
@@ -938,45 +938,60 @@ async function saveDirectUploadedPO(orderId) {
     order.status = 'Accepted';
   }
 
+  // Embed PO document metadata and data URL into order.notes for guaranteed persistence in Supabase
+  if (typeof embedPOInNotes === 'function') {
+    order.notes = embedPOInNotes(order.notes, order.poDocument);
+  }
+
   // Update optimistik lokal langsung agar UI tabel dan tombol aksi langsung aktif seketika
   const localIdx = (state.orders || []).findIndex(o => o.id === orderId);
   if (localIdx !== -1) {
     state.orders[localIdx] = { ...state.orders[localIdx], ...order };
   }
   renderOrdersTable();
+  updateSidebarBadges();
 
   try {
-    const res = await fetch(`/api/orders/${orderId}`, {
+    // 1. Direct Native Supabase upsert (saves directly to Supabase PostgreSQL orders table)
+    const directNativeCall = (typeof directSupabaseUpsertNativeRow === 'function')
+      ? directSupabaseUpsertNativeRow('orders', order)
+      : Promise.resolve();
+
+    // 2. Direct Cloud Store sync to Supabase delivery table (__SYS_SYNC_orders__)
+    const directSyncCall = (typeof directSupabaseSyncResource === 'function')
+      ? directSupabaseSyncResource('orders', state.orders)
+      : Promise.resolve();
+
+    // 3. Server API PUT request
+    const apiCall = fetch(`/api/orders/${orderId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(order)
     });
 
-    if (res.ok) {
-      closeModal('form-modal');
-      showToast(`Dokumen PO Pelanggan untuk Order #${orderId} berhasil diunggah! Seluruh menu aksi telah aktif.`, 'success');
+    closeModal('form-modal');
+    showToast(`✅ Dokumen PO Pelanggan untuk Order #${orderId} berhasil disimpan ke Supabase! Seluruh menu aksi telah aktif.`, 'success');
 
-      // Ambil data terbaru dari server dan pertahankan metadata poDocument
-      const savedOrder = await res.json().catch(() => ({}));
-      await Promise.allSettled([
-        fetchResource('orders'),
-        fetchResource('quotations'),
-        fetchResource('invoices'),
-        fetchResource('projects')
-      ]);
-      const target = (state.orders || []).find(o => o.id === orderId);
-      if (target) {
-        if (!target.poDocument) target.poDocument = order.poDocument;
-        if (!target.poFileUrl) target.poFileUrl = savedOrder.poFileUrl || order.poFileUrl;
-        if (!target.poFileName) target.poFileName = savedOrder.poFileName || order.poFileName;
-      }
-      renderOrdersTable();
-      updateSidebarBadges();
-      if (window.lucide) lucide.createIcons();
-    } else {
-      const err = await res.json().catch(() => ({}));
-      showToast(err.error || 'Gagal menyimpan PO', 'error');
+    await Promise.allSettled([directNativeCall, directSyncCall, apiCall]);
+
+    // 4. Refresh resources dari Supabase
+    await Promise.allSettled([
+      fetchResource('orders'),
+      fetchResource('quotations'),
+      fetchResource('invoices'),
+      fetchResource('projects')
+    ]);
+
+    const target = (state.orders || []).find(o => o.id === orderId);
+    if (target) {
+      if (!target.poDocument) target.poDocument = order.poDocument;
+      if (!target.poFileUrl) target.poFileUrl = order.poFileUrl;
+      if (!target.poFileName) target.poFileName = order.poFileName;
+      if (typeof ensureOrderPOData === 'function') ensureOrderPOData(target);
     }
+    renderOrdersTable();
+    updateSidebarBadges();
+    if (window.lucide) lucide.createIcons();
   } catch (err) {
     console.error('Error saving direct PO:', err);
     showToast('Terjadi kesalahan jaringan saat menyimpan PO', 'error');
@@ -1234,7 +1249,9 @@ async function submitOrder(e, editId = '') {
     orderDate: formData.get('orderDate'),
     dueDate: formData.get('dueDate'),
     status: !editId ? 'Pengajuan' : (formData.get('status') || existingOrder?.status || 'Pengajuan'),
-    notes: formData.get('notes'),
+    notes: (typeof embedPOInNotes === 'function' && poDocument)
+      ? embedPOInNotes(formData.get('notes'), poDocument)
+      : formData.get('notes'),
     poDocument: poDocument,
     poFileUrl: poFileUrl,
     poFileName: poFileName,
@@ -1279,6 +1296,13 @@ async function submitOrder(e, editId = '') {
     if (res.ok) {
       closeModal('form-modal');
 
+      if (typeof directSupabaseUpsertNativeRow === 'function' && editId) {
+        directSupabaseUpsertNativeRow('orders', { id: editId, ...payload }).catch(() => {});
+      }
+      if (typeof directSupabaseSyncResource === 'function') {
+        directSupabaseSyncResource('orders', state.orders).catch(() => {});
+      }
+
       await Promise.allSettled([
         fetchResource('orders'),
         fetchResource('quotations'),
@@ -1307,6 +1331,7 @@ async function submitOrder(e, editId = '') {
 function viewOrderDetail(orderId) {
   const order = state.orders.find(o => o.id === orderId);
   if (!order) return;
+  if (typeof ensureOrderPOData === 'function') ensureOrderPOData(order);
 
   const project = (state.projects || []).find(p => p.orderId === orderId);
   const orderBOMs = (state.bom || []).filter(b => b.orderId === orderId || (b.productName && order.items?.some(it => it.itemName.toLowerCase().includes(b.productName.toLowerCase()))));
@@ -1672,10 +1697,42 @@ function viewOrderDetail(orderId) {
         </div>
       </div>
 
-      ${order.notes ? `
+      <!-- DOKUMEN PO STATUS CARD -->
+      ${hasPO ? `
+        <div class="mt-3 p-3 rounded font-sm" style="background: #f0fdf4; border: 1px solid #bbf7d0; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 700; color: #166534; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="file-check" style="width: 16px; height: 16px;"></i> Dokumen PO Pelanggan Terlampir
+            </div>
+            <div class="text-muted font-xs" style="margin-top: 2px;">
+              Berkas: <strong>${escapeHtml(order.poDocument?.name || order.poFileName || 'PO-Pelanggan.pdf')}</strong>
+              ${order.poDocument?.uploadedAt ? ` &bull; Diunggah: ${order.poDocument.uploadedAt.split('T')[0]}` : ''}
+            </div>
+          </div>
+          <button type="button" class="btn btn-xs btn-outline" style="color: #059669; border-color: #a7f3d0; background: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="viewOrderPODocument('${order.id}')">
+            <i data-lucide="eye"></i> Buka Dokumen PO
+          </button>
+        </div>
+      ` : `
+        <div class="mt-3 p-3 rounded font-sm" style="background: #fff1f2; border: 1px solid #fecdd3; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 700; color: #9f1239; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="alert-circle" style="width: 16px; height: 16px;"></i> Dokumen PO Pelanggan Belum Diunggah
+            </div>
+            <div class="font-xs" style="color: #881337; margin-top: 2px;">
+              Unggah berkas PDF PO untuk mengaktifkan seluruh aksi modul order & project.
+            </div>
+          </div>
+          <button type="button" class="btn btn-xs btn-primary" style="background: #e11d48; border-color: #e11d48; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="closeModal('preview-modal'); openUploadPOModal('${order.id}')">
+            <i data-lucide="upload-cloud"></i> Upload PO Sekarang
+          </button>
+        </div>
+      `}
+
+      ${(order.notes && (typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(order.notes) : order.notes)) ? `
         <div class="mt-3 p-3 bg-light rounded font-sm">
           <strong>Catatan Khusus:</strong><br>
-          ${order.notes}
+          ${escapeHtml(typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(order.notes) : order.notes)}
         </div>
       ` : ''}
 
