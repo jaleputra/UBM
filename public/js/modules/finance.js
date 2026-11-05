@@ -48,6 +48,7 @@ function getProjectFinancialData(project) {
     (inv.orderId === project.id) ||
     (project.orderId && inv.id === `INV-${project.orderId.replace('ORD-', '')}`) ||
     (inv.id === `INV-${project.id.replace('PRJ-', '')}`) ||
+    (inv.quotationId && (inv.quotationId === project.quotationId || inv.quotationId === order?.quotationId)) ||
     (inv.notes && (
       (project.orderId && inv.notes.includes(project.orderId)) ||
       (project.id && inv.notes.includes(project.id))
@@ -348,6 +349,62 @@ function getAuthoritativeProjectFinances() {
       }
     }
 
+    // SINKRONISASI OTOMATIS: Sesuaikan Status Tagihan & Realisasi Pembayaran dengan Data Invoice Terkini
+    const linkedInvoices = (state.invoices || []).filter(inv =>
+      (f.invoiceId && inv.id === f.invoiceId) ||
+      (oid && inv.orderId === oid) ||
+      (pid && (inv.orderId === pid || inv.id === `INV-${pid.replace('PRJ-', '')}`)) ||
+      (f.quotationId && inv.quotationId === f.quotationId) ||
+      (inv.notes && ((oid && inv.notes.includes(oid)) || (pid && inv.notes.includes(pid))))
+    );
+
+    if (linkedInvoices.length > 0) {
+      const primaryInv = linkedInvoices[0];
+      const invGrandTotal = linkedInvoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal) || 0), 0);
+      const totalPaid = linkedInvoices.reduce((sum, inv) => sum + (parseFloat(inv.paidAmount) || 0), 0);
+      const balanceDue = Math.max(0, invGrandTotal - totalPaid);
+      const allPaid = linkedInvoices.every(inv => inv.status === 'Paid' || (parseFloat(inv.paidAmount) >= parseFloat(inv.grandTotal)));
+      const hasPartial = linkedInvoices.some(inv => inv.status === 'Partial' || (parseFloat(inv.paidAmount) > 0));
+
+      let newStatus = 'Unpaid';
+      if (allPaid || (totalPaid >= invGrandTotal && invGrandTotal > 0)) {
+        newStatus = 'Paid';
+      } else if (hasPartial || totalPaid > 0) {
+        newStatus = 'Partial';
+      }
+
+      let invChanged = false;
+      if (f.invoiceStatus !== newStatus) {
+        f.invoiceStatus = newStatus;
+        invChanged = true;
+      }
+      if (primaryInv.id && f.invoiceId !== primaryInv.id) {
+        f.invoiceId = primaryInv.id;
+        invChanged = true;
+      }
+      if (Math.abs((parseFloat(f.totalPaidAmount) || 0) - totalPaid) > 0.01) {
+        f.totalPaidAmount = totalPaid;
+        invChanged = true;
+      }
+      if (Math.abs((parseFloat(f.balanceDue) || 0) - balanceDue) > 0.01) {
+        f.balanceDue = balanceDue;
+        invChanged = true;
+      }
+      if (invGrandTotal > 0 && Math.abs((parseFloat(f.invoiceGrandTotal) || 0) - invGrandTotal) > 0.01) {
+        f.invoiceGrandTotal = invGrandTotal;
+        invChanged = true;
+      }
+
+      if (invChanged) {
+        f.updatedAt = new Date().toISOString();
+        fetch(`/api/project_finances/${f.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(f)
+        }).catch(err => console.warn('[Finance Invoice Auto-Sync] Update notice:', err.message));
+      }
+    }
+
     list.push(f);
     if (pid) seenProjectIds.add(pid);
     if (oid) seenOrderIds.add(oid);
@@ -506,17 +563,48 @@ function renderFinanceTable() {
     totalClaims += claimedWarranty;
     totalNetProfit += netProfit;
 
+    // Cek invoice terkait secara real-time dari state.invoices
+    const linkedInvoices = (state.invoices || []).filter(inv =>
+      (f.invoiceId && inv.id === f.invoiceId) ||
+      (f.orderId && inv.orderId === f.orderId) ||
+      (f.projectId && (inv.orderId === f.projectId || inv.id === `INV-${f.projectId.replace('PRJ-', '')}`)) ||
+      (f.quotationId && inv.quotationId === f.quotationId)
+    );
+
+    let activeInvoiceStatus = f.invoiceStatus || 'Unpaid';
+    let activeInvoiceGrandTotal = parseFloat(f.invoiceGrandTotal ?? contractSellingPrice);
+    let activePaidAmount = parseFloat(f.totalPaidAmount ?? 0);
+    let activeBalanceDue = parseFloat(f.balanceDue ?? contractSellingPrice);
+    let activeInvoiceId = f.invoiceId || (f.orderId ? `INV-${f.orderId.replace('ORD-', '')}` : '-');
+
+    if (linkedInvoices.length > 0) {
+      activeInvoiceId = linkedInvoices[0].id || activeInvoiceId;
+      activeInvoiceGrandTotal = linkedInvoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal) || 0), 0);
+      activePaidAmount = linkedInvoices.reduce((sum, inv) => sum + (parseFloat(inv.paidAmount) || 0), 0);
+      activeBalanceDue = Math.max(0, activeInvoiceGrandTotal - activePaidAmount);
+      const allPaid = linkedInvoices.every(inv => inv.status === 'Paid' || (parseFloat(inv.paidAmount) >= parseFloat(inv.grandTotal)));
+      const hasPartial = linkedInvoices.some(inv => inv.status === 'Partial' || (parseFloat(inv.paidAmount) > 0));
+
+      if (allPaid || (activePaidAmount >= activeInvoiceGrandTotal && activeInvoiceGrandTotal > 0)) {
+        activeInvoiceStatus = 'Paid';
+      } else if (hasPartial || activePaidAmount > 0) {
+        activeInvoiceStatus = 'Partial';
+      } else {
+        activeInvoiceStatus = 'Unpaid';
+      }
+    }
+
     return {
       recordId: f.id,
       project: p,
       quotation: { id: f.quotationId },
       order: { id: f.orderId },
-      invoiceId: f.invoiceId || (f.orderId ? `INV-${f.orderId.replace('ORD-', '')}` : '-'),
-      invoiceStatus: f.invoiceStatus || 'Unpaid',
-      invoiceGrandTotal: parseFloat(f.invoiceGrandTotal ?? contractSellingPrice),
-      totalPaidAmount: parseFloat(f.totalPaidAmount ?? 0),
-      balanceDue: parseFloat(f.balanceDue ?? contractSellingPrice),
-      paymentPercentage: (f.invoiceGrandTotal && f.invoiceGrandTotal > 0) ? Math.min(100, (parseFloat(f.totalPaidAmount || 0) / parseFloat(f.invoiceGrandTotal)) * 100) : 0,
+      invoiceId: activeInvoiceId,
+      invoiceStatus: activeInvoiceStatus,
+      invoiceGrandTotal: activeInvoiceGrandTotal,
+      totalPaidAmount: activePaidAmount,
+      balanceDue: activeBalanceDue,
+      paymentPercentage: activeInvoiceGrandTotal > 0 ? Math.min(100, (activePaidAmount / activeInvoiceGrandTotal) * 100) : (activePaidAmount > 0 ? 100 : 0),
       contractSellingPrice,
       sellingPrice,
       modalTotal,

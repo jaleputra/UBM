@@ -82,7 +82,7 @@
         }
       ],
       "notes": "Faktur Tagihan Resmi untuk Sales Order / Project ORD-2026-3468-481",
-      "status": "Unpaid",
+      "status": "Paid",
       "dueDate": "2026-11-03",
       "orderId": "ORD-2026-3468-481",
       "taxRate": 0,
@@ -90,11 +90,11 @@
       "subtotal": 62415000,
       "createdAt": "2026-11-02T13:52:49.347+00:00",
       "taxAmount": 0,
-      "updatedAt": "2026-11-02T13:52:49.347+00:00",
-      "balanceDue": 62415000,
+      "updatedAt": "2026-11-05T07:50:25.10133+00:00",
+      "balanceDue": 0,
       "grandTotal": 62415000,
       "itemsTotal": 62415000,
-      "paidAmount": 0,
+      "paidAmount": 62415000,
       "invoiceDate": "2026-11-02",
       "quotationId": "QUO-2026-6839-743",
       "warrantyFee": 0,
@@ -132,34 +132,7 @@
   ],
   "purchasing": [
     {
-      "id": "PR-2026-7454-970",
-      "items": [
-        {
-          "qty": 2,
-          "unit": "pcs",
-          "total": 3000,
-          "itemName": "Lampu LED merah",
-          "unitPrice": 1500,
-          "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:28:57.454+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:28:57.454+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-8986-423",
+      "id": "PR-2026-6919-172",
       "items": [
         {
           "qty": 2,
@@ -171,181 +144,118 @@
           "actualPrice": 1500,
           "purchasePrice": 1500,
           "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:48.986+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:48.986+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-8851-831",
-      "items": [
+        },
         {
           "qty": 2,
           "unit": "Pcs",
           "total": 3000,
-          "itemName": "Lampu LED Merah",
+          "itemName": "Lampu LED Biru",
           "unitPrice": 1500,
           "itemStatus": "Belum Dipesan",
           "actualPrice": 1500,
           "purchasePrice": 1500,
           "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:48.851+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:48.851+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-8518-571",
-      "items": [
+        },
+        {
+          "qty": 4,
+          "unit": "Pcs",
+          "total": 2000,
+          "itemName": "Holder LED 5mm",
+          "unitPrice": 500,
+          "itemStatus": "Belum Dipesan",
+          "actualPrice": 500,
+          "purchasePrice": 500,
+          "estimatedPrice": 500
+        },
         {
           "qty": 2,
           "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
+          "total": 153000,
+          "itemName": "ESP 32 DEVKIT V1 DOIT",
+          "unitPrice": 76500,
           "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:48.518+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:48.518+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-8241-578",
-      "items": [
+          "actualPrice": 76500,
+          "purchasePrice": 76500,
+          "estimatedPrice": 76500
+        },
         {
           "qty": 2,
           "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
+          "total": 65600,
+          "itemName": "Adaptor 5V 3A DC Jack",
+          "unitPrice": 32800,
           "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:48.241+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:48.241+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-7969-719",
-      "items": [
+          "actualPrice": 32800,
+          "purchasePrice": 32800,
+          "estimatedPrice": 32800
+        },
         {
           "qty": 2,
           "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
+          "total": 31000,
+          "itemName": "Relay 5V",
+          "unitPrice": 15500,
           "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:47.969+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:47.969+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-7076-704",
-      "items": [
+          "actualPrice": 15500,
+          "purchasePrice": 15500,
+          "estimatedPrice": 15500
+        },
+        {
+          "qty": 1,
+          "unit": "Pcs",
+          "total": 34500,
+          "itemName": "Kabel Jumper",
+          "unitPrice": 34500,
+          "itemStatus": "Belum Dipesan",
+          "actualPrice": 34500,
+          "purchasePrice": 34500,
+          "estimatedPrice": 34500
+        },
         {
           "qty": 2,
           "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
+          "total": 63000,
+          "itemName": "Extention Board",
+          "unitPrice": 31500,
           "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
-        }
-      ],
-      "status": "Pengajuan",
-      "purpose": "smart laundry nagomi",
-      "urgency": "High",
-      "createdAt": "2026-11-05T06:27:47.076+00:00",
-      "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:47.076+00:00",
-      "approvedBy": "-",
-      "department": "Umum & Operasional",
-      "requestDate": "2026-11-05",
-      "_syncedNative": true,
-      "totalEstimated": 3000
-    },
-    {
-      "id": "PR-2026-5034-556",
-      "items": [
+          "actualPrice": 31500,
+          "purchasePrice": 31500,
+          "estimatedPrice": 31500
+        },
         {
           "qty": 2,
           "unit": "Pcs",
-          "total": 3000,
-          "itemName": "Lampu LED Merah",
-          "unitPrice": 1500,
+          "total": 16000,
+          "itemName": "Breadboard",
+          "unitPrice": 8000,
           "itemStatus": "Belum Dipesan",
-          "actualPrice": 1500,
-          "purchasePrice": 1500,
-          "estimatedPrice": 1500
+          "actualPrice": 8000,
+          "purchasePrice": 8000,
+          "estimatedPrice": 8000
+        },
+        {
+          "qty": 1,
+          "unit": "Pcs",
+          "total": 170000,
+          "itemName": "PLA",
+          "unitPrice": 170000,
+          "itemStatus": "Belum Dipesan",
+          "actualPrice": 170000,
+          "purchasePrice": 170000,
+          "estimatedPrice": 170000
         }
       ],
       "status": "Pengajuan",
       "purpose": "smart laundry nagomi",
       "urgency": "High",
-      "createdAt": "2026-11-05T06:27:45.034+00:00",
+      "createdAt": "2026-11-05T07:43:36.919+00:00",
       "requestor": "Lambok Rommy Sulaeman, S.E., M.M.",
-      "updatedAt": "2026-11-05T06:27:45.034+00:00",
+      "updatedAt": "2026-11-05T07:43:36.919+00:00",
       "approvedBy": "-",
       "department": "Umum & Operasional",
       "requestDate": "2026-11-05",
       "_syncedNative": true,
-      "totalEstimated": 3000
+      "totalEstimated": 541100
     },
     {
       "id": "PR-2026-3311-590",
@@ -500,7 +410,6 @@
           "estimatedPrice": 117000
         }
       ],
-      "notes": "",
       "status": "Disetujui",
       "purpose": "Project Smart Door",
       "urgency": "High",
@@ -510,7 +419,6 @@
       "approvedBy": "-",
       "department": "Fabrikasi & Las",
       "requestDate": "2026-10-30",
-      "requiredDate": "2026-11-03",
       "_syncedNative": true,
       "totalEstimated": 4207500
     }
@@ -2291,8 +2199,8 @@
       "laborCost": 0,
       "netProfit": 41407500,
       "projectId": "PRJ-2026-0469-681",
-      "updatedAt": "2026-11-04T09:33:13.891Z",
-      "balanceDue": 62415000,
+      "updatedAt": "2026-11-05T07:50:09.565Z",
+      "balanceDue": 0,
       "modalTotal": 21007500,
       "grossProfit": 41407500,
       "profitLevel": "HIGH",
@@ -2305,14 +2213,14 @@
       "overheadCost": 0,
       "profitMargin": 66.34,
       "sellingPrice": 62415000,
-      "invoiceStatus": "Unpaid",
+      "_syncedNative": false,
+      "invoiceStatus": "Paid",
       "claimedWarranty": 0,
-      "totalPaidAmount": 0,
+      "totalPaidAmount": 62415000,
       "allocatedWarranty": 0,
       "invoiceGrandTotal": 62415000,
       "remainingWarranty": 0,
-      "contractSellingPrice": 62415000,
-      "_syncedNative": false
+      "contractSellingPrice": 62415000
     }
   ],
   "settings": {

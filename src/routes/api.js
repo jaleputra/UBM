@@ -497,6 +497,53 @@ module.exports = function(broadcastReload) {
     }
   }
 
+  async function syncInvoiceRelationsOnSave(invoiceItem) {
+    if (!invoiceItem || !invoiceItem.id) return;
+    try {
+      const finances = await fetchAuthoritativeList('project_finances');
+      if (!Array.isArray(finances) || finances.length === 0) return;
+
+      let changed = false;
+      const targetOrderId = invoiceItem.orderId;
+      const targetInvId = invoiceItem.id;
+
+      for (let i = 0; i < finances.length; i++) {
+        const fin = finances[i];
+        const isMatch = (fin.invoiceId && fin.invoiceId === targetInvId) ||
+          (targetOrderId && fin.orderId === targetOrderId) ||
+          (fin.projectId && (targetOrderId === fin.projectId || targetInvId === `INV-${fin.projectId.replace('PRJ-', '')}`));
+
+        if (isMatch) {
+          const invGrandTotal = Number(invoiceItem.grandTotal || fin.contractSellingPrice || 0);
+          const isPaid = invoiceItem.status === 'Paid';
+          const invPaid = Number(invoiceItem.paidAmount !== undefined ? invoiceItem.paidAmount : (isPaid ? invGrandTotal : 0));
+          const balanceDue = Math.max(0, invGrandTotal - invPaid);
+          const newStatus = isPaid || (invPaid >= invGrandTotal && invGrandTotal > 0) ? 'Paid' : (invPaid > 0 ? 'Partial' : (invoiceItem.status || 'Unpaid'));
+
+          finances[i] = {
+            ...fin,
+            invoiceId: targetInvId,
+            invoiceStatus: newStatus,
+            invoiceGrandTotal: invGrandTotal,
+            totalPaidAmount: invPaid,
+            balanceDue: balanceDue,
+            updatedAt: new Date().toISOString()
+          };
+          const upFin = await upsertNativeSupabaseRow('project_finances', finances[i]);
+          finances[i]._syncedNative = upFin.synced;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await saveAuthoritativeList('project_finances', finances);
+        broadcastReload({ type: 'reload', resource: 'project_finances' });
+      }
+    } catch (err) {
+      console.warn('⚠️ [Relational Sync] Invoice -> Project Finances error:', err.message);
+    }
+  }
+
   // Sinkronisasi otomatis Tab 2 (purchasing_process) & Tab 3 (master_items) ke tabel Supabase setiap kali dokumen PR berubah
   async function syncPurchasingProcessAndMasterItems(customPurchasingList = null) {
     try {
@@ -1752,6 +1799,8 @@ end run
           }
         } else if (resourceName === 'purchasing_process') {
           await syncProcessItemBackToPurchasing(newItem);
+        } else if (resourceName === 'invoices') {
+          await syncInvoiceRelationsOnSave(newItem);
         }
 
         broadcastReload({ type: 'reload', resource: resourceName });
@@ -1858,6 +1907,8 @@ end run
           }
         } else if (resourceName === 'purchasing_process') {
           await syncProcessItemBackToPurchasing(updatedItem);
+        } else if (resourceName === 'invoices') {
+          await syncInvoiceRelationsOnSave(updatedItem);
         }
 
         broadcastReload({ type: 'reload', resource: resourceName });
@@ -1883,6 +1934,8 @@ end run
           await syncOrderRelationsOnDelete(req.params.id, deletedItem);
         } else if (resourceName === 'purchasing' || resourceName === 'bom' || resourceName === 'project_reports') {
           await syncPurchasingProcessAndMasterItems();
+        } else if (resourceName === 'invoices') {
+          await syncInvoiceRelationsOnSave({ id: req.params.id, status: 'Unpaid', paidAmount: 0, grandTotal: 0 });
         }
 
         broadcastReload({ type: 'reload', resource: resourceName });

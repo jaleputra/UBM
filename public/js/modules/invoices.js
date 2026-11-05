@@ -619,10 +619,18 @@ async function submitInvoice(e, editId = '') {
   }
 
   const totals = calculateInvoiceTotals();
-  const paidAmount = parseFloat(formData.get('paidAmount')) || 0;
-  let status = formData.get('status');
-  if (paidAmount >= totals.grandTotal) status = 'Paid';
-  else if (paidAmount > 0) status = 'Partial';
+  let status = formData.get('status') || 'Unpaid';
+  let paidAmount = parseFloat(formData.get('paidAmount')) || 0;
+  if (status === 'Paid') {
+    if (paidAmount < totals.grandTotal) {
+      paidAmount = totals.grandTotal;
+    }
+  } else if (paidAmount >= totals.grandTotal && totals.grandTotal > 0) {
+    status = 'Paid';
+  } else if (paidAmount > 0) {
+    status = 'Partial';
+  }
+  const balanceDue = Math.max(0, totals.grandTotal - paidAmount);
 
   const payload = {
     orderId: formData.get('orderId'),
@@ -644,8 +652,9 @@ async function submitInvoice(e, editId = '') {
     taxRate: totals.taxRate,
     taxAmount: totals.taxAmount,
     grandTotal: totals.grandTotal,
-    balanceDue: totals.balanceDue,
-    paymentTerms: formData.get('paymentTerms')
+    balanceDue,
+    paymentTerms: formData.get('paymentTerms'),
+    notes: formData.get('notes')
   };
 
   try {
@@ -667,7 +676,10 @@ async function submitInvoice(e, editId = '') {
     if (res.ok) {
       closeModal('form-modal');
       showToast(`Faktur Tagihan berhasil ${editId ? 'diperbarui' : 'diterbitkan'}!`, 'success');
-      await fetchResource('invoices');
+      await Promise.allSettled([
+        fetchResource('invoices'),
+        fetchResource('project_finances')
+      ]);
       renderInvoicesTable();
       updateSidebarBadges();
       if (typeof renderFinanceTable === 'function') renderFinanceTable();
@@ -962,10 +974,12 @@ async function savePayment(e, invId) {
 
   const newPaidAmount = (inv.paidAmount || 0) + paymentAmount;
   const newStatus = newPaidAmount >= inv.grandTotal ? 'Paid' : 'Partial';
+  const newBalanceDue = Math.max(0, (inv.grandTotal || 0) - newPaidAmount);
 
   const payload = {
     ...inv,
     paidAmount: newPaidAmount,
+    balanceDue: newBalanceDue,
     status: newStatus
   };
 
@@ -979,7 +993,10 @@ async function savePayment(e, invId) {
     if (res.ok) {
       closeModal('form-modal');
       showToast(`Pembayaran ${formatRupiah(paymentAmount)} berhasil dicatat!`, 'success');
-      await fetchResource('invoices');
+      await Promise.allSettled([
+        fetchResource('invoices'),
+        fetchResource('project_finances')
+      ]);
       renderInvoicesTable();
       updateSidebarBadges();
       loadDashboardData();
