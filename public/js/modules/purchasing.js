@@ -567,15 +567,15 @@ function renderPurchasingProcessTable() {
     let statusSelectHtml = '';
     if (isItemSesuai) {
       statusSelectHtml = `
-        <span class="badge" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #86efac; background-color: #dcfce7; color: #15803d; cursor: default;" title="Status terkunci: Sesuai (Resmi masuk Database Master Barang)">
+        <span class="badge" style="font-size: 11px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #86efac; background-color: #dcfce7; color: #15803d; cursor: pointer;" onclick="openProcessPurchasingItemModal('${item.prId}', ${item.itemIndex}, true)" title="Status terkunci: Sesuai (Resmi masuk Database Master Barang). Klik untuk lihat detail.">
           <i data-lucide="check-circle" style="width: 13px; height: 13px;"></i> Sesuai
         </span>
       `;
     } else {
       statusSelectHtml = `
         <select class="procurement-status-select ${statusClass}" 
-                onchange="updateProcessItemStatusDirect('${item.prId}', ${item.itemIndex}, this.value)"
-                title="Ubah status pemeriksaan barang">
+                onchange="triggerProcessItemStatusModal('${item.prId}', ${item.itemIndex}, this.value, this)"
+                title="Pilih status untuk mengisi formulir proses & pemeriksaan barang">
           <option value="Belum Dipesan" ${item.itemStatus === 'Belum Dipesan' ? 'selected' : ''}>🟡 Belum Dipesan</option>
           <option value="Dalam Pengiriman" ${item.itemStatus === 'Dalam Pengiriman' ? 'selected' : ''}>🔵 Dalam Pengiriman</option>
           <option value="Sesuai" ${item.itemStatus === 'Sesuai' ? 'selected' : ''}>🟢 Sesuai (Master)</option>
@@ -650,7 +650,7 @@ function renderPurchasingProcessTable() {
 // MODAL INPUT / UPDATE PROSES PEMBELIAN
 // =========================================================
 
-function openProcessPurchasingItemModal(prId, itemIndex, isViewOnly = false) {
+function openProcessPurchasingItemModal(prId, itemIndex, isViewOnly = false, prefillStatus = null) {
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr || !pr.items || !pr.items[itemIndex]) {
     showToast('Data barang PR tidak ditemukan', 'error');
@@ -695,28 +695,30 @@ function openProcessPurchasingItemModal(prId, itemIndex, isViewOnly = false) {
   const statusSelect = document.getElementById('proc-item-status');
   const notesInput = document.getElementById('proc-item-notes');
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   if (orderDateInput) {
-    orderDateInput.value = item.orderDate || '';
+    orderDateInput.value = item.orderDate || (!isLocked ? todayStr : '');
     orderDateInput.disabled = isLocked;
   }
   if (orderLinkInput) {
-    orderLinkInput.value = item.orderLink || '';
+    orderLinkInput.value = (item.orderLink && item.orderLink !== '-') ? item.orderLink : '';
     orderLinkInput.disabled = isLocked;
   }
   if (priceInput) {
-    priceInput.value = currentPrice;
+    priceInput.value = currentPrice > 0 ? currentPrice : (item.estimatedPrice || '');
     priceInput.disabled = isLocked;
   }
   if (arrivalDateInput) {
-    arrivalDateInput.value = item.arrivalDate || item.receivedDate || '';
+    arrivalDateInput.value = item.arrivalDate || item.receivedDate || (!isLocked ? todayStr : '');
     arrivalDateInput.disabled = isLocked;
   }
   if (recipientInput) {
-    recipientInput.value = item.recipientName || item.recipient || item.receivedBy || '';
+    recipientInput.value = item.recipientName || item.recipient || item.receivedBy || (!isLocked ? (pr.requestor || '') : '');
     recipientInput.disabled = isLocked;
   }
   if (statusSelect) {
-    statusSelect.value = item.itemStatus || 'Belum Dipesan';
+    statusSelect.value = prefillStatus || item.itemStatus || 'Belum Dipesan';
     statusSelect.disabled = isLocked;
     statusSelect.onchange = handleProcStatusChange;
   }
@@ -765,20 +767,11 @@ function openProcessPurchasingItemModal(prId, itemIndex, isViewOnly = false) {
 
 function handleProcStatusChange() {
   const statusSelect = document.getElementById('proc-item-status');
-  const reqMark = document.getElementById('proc-link-required-mark');
-  const hint = document.getElementById('proc-link-hint');
   const orderLinkInput = document.getElementById('proc-item-order-link');
 
   const isSesuai = statusSelect && statusSelect.value === 'Sesuai';
-  if (reqMark) reqMark.style.display = isSesuai ? 'inline' : 'none';
-  if (hint) {
-    hint.style.display = isSesuai ? 'block' : 'none';
-    hint.style.color = isSesuai ? '#b91c1c' : '#64748b';
-  }
   if (orderLinkInput) {
-    orderLinkInput.placeholder = isSesuai 
-      ? 'Wajib diisi: https://tokopedia.com/... atau https://shopee.co.id/...'
-      : 'Opsional: https://tokopedia.com/... (Bisa dikosongkan)';
+    orderLinkInput.placeholder = 'https://tokopedia.com/... atau nama toko fisik / supplier (Wajib)';
   }
 }
 
@@ -863,17 +856,49 @@ async function saveProcessPurchasingItem(e) {
     return;
   }
 
-  const orderDate = document.getElementById('proc-item-order-date')?.value || '';
-  const orderLink = document.getElementById('proc-item-order-link')?.value.trim() || '';
-  const purchasePrice = parseFloat(document.getElementById('proc-item-price')?.value) || 0;
-  const arrivalDate = document.getElementById('proc-item-arrival-date')?.value || '';
-  const recipientName = document.getElementById('proc-item-recipient')?.value.trim() || '';
-  const itemPhoto = document.getElementById('proc-item-photo-data')?.value || '';
-  const itemStatus = document.getElementById('proc-item-status')?.value || 'Belum Dipesan';
-  const notes = document.getElementById('proc-item-notes')?.value.trim() || '';
+  const orderDate = (document.getElementById('proc-item-order-date')?.value || '').trim();
+  const orderLink = (document.getElementById('proc-item-order-link')?.value || '').trim();
+  const priceVal = document.getElementById('proc-item-price')?.value;
+  const purchasePrice = parseFloat(priceVal) || 0;
+  const arrivalDate = (document.getElementById('proc-item-arrival-date')?.value || '').trim();
+  const recipientName = (document.getElementById('proc-item-recipient')?.value || '').trim();
+  const itemPhoto = (document.getElementById('proc-item-photo-data')?.value || '').trim();
+  const itemStatus = (document.getElementById('proc-item-status')?.value || '').trim();
+  const notes = (document.getElementById('proc-item-notes')?.value || '').trim();
+
+  // VALIDASI KETAT: Semua wajib diisi KECUALI Upload Foto dan Catatan
+  if (!orderDate) {
+    showToast('⚠️ Tanggal Pemesanan wajib diisi!', 'warning');
+    document.getElementById('proc-item-order-date')?.focus();
+    return;
+  }
+  if (!orderLink) {
+    showToast('⚠️ Link Pemesanan / Toko Pembelian wajib diisi!', 'warning');
+    document.getElementById('proc-item-order-link')?.focus();
+    return;
+  }
+  if (isNaN(purchasePrice) || purchasePrice <= 0) {
+    showToast('⚠️ Harga Beli Satuan wajib diisi dan harus lebih dari Rp 0!', 'warning');
+    document.getElementById('proc-item-price')?.focus();
+    return;
+  }
+  if (!arrivalDate) {
+    showToast('⚠️ Tanggal Barang Sampai wajib diisi!', 'warning');
+    document.getElementById('proc-item-arrival-date')?.focus();
+    return;
+  }
+  if (!recipientName) {
+    showToast('⚠️ Nama Penerima Barang wajib diisi!', 'warning');
+    document.getElementById('proc-item-recipient')?.focus();
+    return;
+  }
+  if (!itemStatus) {
+    showToast('⚠️ Status Pemeriksaan Barang wajib dipilih!', 'warning');
+    document.getElementById('proc-item-status')?.focus();
+    return;
+  }
 
   const effectiveOrderLink = orderLink || targetItem.orderLink || '-';
-
   const qty = parseFloat(targetItem.qty) || 1;
   const total = qty * purchasePrice;
 
@@ -904,7 +929,7 @@ async function saveProcessPurchasingItem(e) {
   if (itemStatus === 'Sesuai') {
     showToast(`✅ Data barang "${targetItem.itemName}" disimpan! Status SESUAI ➔ Resmi masuk ke Database Master Barang (Terkunci).`, 'success');
   } else {
-    showToast(`✅ Data proses pembelian "${targetItem.itemName}" berhasil disimpan!`, 'success');
+    showToast(`✅ Data proses pembelian "${targetItem.itemName}" berhasil disimpan! Status: ${itemStatus}`, 'success');
   }
   renderPurchasingTable();
   renderPurchasingProcessTable();
@@ -986,90 +1011,35 @@ async function saveProcessPurchasingItem(e) {
   }
 }
 
-// Update status barang cepat langsung dari select tabel proses pembelian
-async function updateProcessItemStatusDirect(prId, itemIndex, newStatus) {
+// Buka popup proses pembelian & pemeriksaan barang saat ingin merubah status barang
+function triggerProcessItemStatusModal(prId, itemIndex, targetStatus, selectElem) {
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr || !pr.items || !pr.items[itemIndex]) {
     showToast('Data barang tidak ditemukan', 'error');
     return;
   }
 
-  const targetItem = pr.items[itemIndex];
-  const oldStatus = targetItem.itemStatus || 'Belum Dipesan';
-  if (oldStatus === 'Sesuai') {
-    showToast('🔒 Status barang sudah "Sesuai" (Terkunci) dan tidak dapat diubah lagi!', 'warning');
-    renderPurchasingProcessTable();
+  const currentItem = pr.items[itemIndex];
+  const currentStatus = currentItem.itemStatus || 'Belum Dipesan';
+
+  if (currentStatus === 'Sesuai') {
+    showToast('🔒 Status barang sudah "Sesuai" (Terkunci) dan tidak dapat diubah lagi.', 'info');
+    if (selectElem) selectElem.value = 'Sesuai';
     return;
   }
 
-  if (oldStatus === newStatus) return;
-
-  if (newStatus === 'Sesuai' && (!targetItem.orderLink || !targetItem.orderLink.trim())) {
-    targetItem.orderLink = '-';
+  // Kembalikan value select di tabel ke status saat ini agar tidak berubah sebelum form diisi dan disimpan
+  if (selectElem) {
+    selectElem.value = currentStatus;
   }
 
-  // Optimistic update
-  targetItem.itemStatus = newStatus;
+  // Buka popup modal proses pembelian dengan status yang dipilih
+  openProcessPurchasingItemModal(prId, itemIndex, false, targetStatus);
+}
 
-  if (newStatus === 'Sesuai') {
-    showToast(`🟢 Barang "${targetItem.itemName}" diset SESUAI! Otomatis masuk ke Database Master Barang (Status Terkunci).`, 'success');
-  } else if (newStatus === 'Tidak Sesuai') {
-    showToast(`🔴 Barang "${targetItem.itemName}" diset TIDAK SESUAI.`, 'info');
-  } else if (newStatus === 'Dikembalikan') {
-    showToast(`↩️ Barang "${targetItem.itemName}" diset DIKEMBALIKAN (Retur ke Vendor).`, 'info');
-  } else {
-    showToast(`🟡 Status proses barang "${targetItem.itemName}" diubah menjadi ${newStatus}.`, 'info');
-  }
-
-  renderPurchasingProcessTable();
-  renderPurchasingItemsTable();
-  updateSidebarBadges();
-
-  const payload = {
-    ...pr,
-    items: pr.items
-  };
-
-  try {
-    const procId = `PRC-${prId}-${itemIndex}`;
-    const [res] = await Promise.all([
-      fetch(`/api/purchasing/${prId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }),
-      fetch(`/api/purchasing_process/${encodeURIComponent(procId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: procId, prId, itemIndex, itemStatus: newStatus })
-      }).catch(() => null)
-    ]);
-
-    if (res.ok) {
-      await directSyncPurchasingTablesToSupabase(pr);
-      await Promise.allSettled([
-        fetchResource('purchasing'),
-        fetchResource('purchasing_process'),
-        fetchResource('master_items')
-      ]);
-      renderPurchasingProcessTable();
-      renderPurchasingItemsTable();
-      updateSidebarBadges();
-    } else {
-      targetItem.itemStatus = oldStatus;
-      showToast('Gagal mengubah status barang di database', 'error');
-      renderPurchasingProcessTable();
-      renderPurchasingItemsTable();
-      updateSidebarBadges();
-    }
-  } catch (err) {
-    console.error('Error updating process item status:', err);
-    targetItem.itemStatus = oldStatus;
-    showToast('Terjadi kesalahan jaringan', 'error');
-    renderPurchasingProcessTable();
-    renderPurchasingItemsTable();
-    updateSidebarBadges();
-  }
+// Handler kompatibilitas: Mengarahkan langsung ke popup proses & pemeriksaan formulir
+function updateProcessItemStatusDirect(prId, itemIndex, newStatus) {
+  triggerProcessItemStatusModal(prId, itemIndex, newStatus);
 }
 
 // Lightbox preview foto barang
