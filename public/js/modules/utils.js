@@ -550,7 +550,258 @@ function extractPOFromNotes(notes) {
 
 function cleanDisplayNotes(notes) {
   if (!notes || typeof notes !== 'string') return '';
-  return notes.replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '').trim();
+  return notes
+    .replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '')
+    .replace(/<!--UBM_BOM_META:[\s\S]*?-->/g, '')
+    .replace(/<!--UBM_APPROVAL_DATA:[\s\S]*?-->/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim();
+}
+
+// ==================== ORDER DUAL APPROVAL CARRIER HELPERS ====================
+function embedApprovalInNotes(notes, approvalData) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_APPROVAL_DATA:[\s\S]*?-->/g, '').trim();
+  if (!approvalData || (approvalData.approvalKetuaUbm === undefined && approvalData.approvalWadir1 === undefined)) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    approvalKetuaUbm: Boolean(approvalData.approvalKetuaUbm),
+    approvalKetuaUbmBy: approvalData.approvalKetuaUbmBy || '',
+    approvalKetuaUbmDate: approvalData.approvalKetuaUbmDate || '',
+    approvalWadir1: Boolean(approvalData.approvalWadir1),
+    approvalWadir1By: approvalData.approvalWadir1By || '',
+    approvalWadir1Date: approvalData.approvalWadir1Date || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_APPROVAL_DATA:${payload}-->` : `<!--UBM_APPROVAL_DATA:${payload}-->`;
+}
+
+function extractApprovalFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_APPROVAL_DATA:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensureOrderApprovalData(order) {
+  if (!order || typeof order !== 'object') return order;
+
+  // 1. Ekstrak dari notes atau _rawNotes
+  const meta = extractApprovalFromNotes(order.notes) || extractApprovalFromNotes(order._rawNotes);
+  if (meta) {
+    if (order.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
+      order.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
+    }
+    if (!order.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
+      order.approvalKetuaUbmBy = meta.approvalKetuaUbmBy;
+    }
+    if (!order.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
+      order.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
+    }
+    if (order.approvalWadir1 === undefined && meta.approvalWadir1 !== undefined) {
+      order.approvalWadir1 = Boolean(meta.approvalWadir1);
+    }
+    if (!order.approvalWadir1By && meta.approvalWadir1By) {
+      order.approvalWadir1By = meta.approvalWadir1By;
+    }
+    if (!order.approvalWadir1Date && meta.approvalWadir1Date) {
+      order.approvalWadir1Date = meta.approvalWadir1Date;
+    }
+  }
+
+  // 2. Kriteria Auto-Approval untuk project sebelumnya yang tombol aksinya sudah aktif
+  // Proyek yang sudah memiliki dokumen PO atau sudah dalam status Accepted/Confirmed/In Production/Delivered
+  const isLegacyActive = Boolean(
+    order.poDocument ||
+    order.poFileUrl ||
+    order.poFileName ||
+    ['Accepted', 'Confirmed', 'In Production', 'Delivered'].includes(order.status)
+  );
+
+  if (isLegacyActive) {
+    if (order.approvalKetuaUbm !== true) {
+      order.approvalKetuaUbm = true;
+      order.approvalKetuaUbmBy = order.approvalKetuaUbmBy || 'Ketua UBM (Auto-Approved Proyek Berjalan)';
+      order.approvalKetuaUbmDate = order.approvalKetuaUbmDate || order.orderDate || new Date().toISOString();
+    }
+    if (order.approvalWadir1 !== true) {
+      order.approvalWadir1 = true;
+      order.approvalWadir1By = order.approvalWadir1By || 'Wakil Direktur I (Auto-Approved Proyek Berjalan)';
+      order.approvalWadir1Date = order.approvalWadir1Date || order.orderDate || new Date().toISOString();
+    }
+    if (order.status === 'Pengajuan' || !order.status) {
+      order.status = 'Accepted';
+    }
+  } else {
+    // Order baru: harus persetujuan asli
+    order.approvalKetuaUbm = Boolean(order.approvalKetuaUbm);
+    order.approvalWadir1 = Boolean(order.approvalWadir1);
+  }
+
+  // Benamkan ke notes agar tidak hilang saat dikirim ke backend / disimpan ke Supabase
+  if (order.approvalKetuaUbm || order.approvalWadir1) {
+    const targetNotes = order._rawNotes || order.notes || '';
+    const embedded = embedApprovalInNotes(targetNotes, order);
+    order._rawNotes = embedded;
+    order.notes = embedded;
+  }
+
+  return order;
+}
+
+// ==================== QUOTATION DUAL APPROVAL CARRIER HELPERS ====================
+function embedQuotationApprovalInNotes(notes, approvalData) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+  if (!approvalData || (approvalData.approvalKetuaUbm === undefined && approvalData.approvalDirektur === undefined)) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    approvalKetuaUbm: Boolean(approvalData.approvalKetuaUbm),
+    approvalKetuaUbmBy: approvalData.approvalKetuaUbmBy || '',
+    approvalKetuaUbmDate: approvalData.approvalKetuaUbmDate || '',
+    approvalDirektur: Boolean(approvalData.approvalDirektur),
+    approvalDirekturBy: approvalData.approvalDirekturBy || '',
+    approvalDirekturDate: approvalData.approvalDirekturDate || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_QUO_APPROVAL:${payload}-->` : `<!--UBM_QUO_APPROVAL:${payload}-->`;
+}
+
+function extractQuotationApprovalFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_QUO_APPROVAL:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensureQuotationApprovalData(quo) {
+  if (!quo || typeof quo !== 'object') return quo;
+
+  // 1. Ekstrak dari notes atau _rawNotes
+  const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
+  if (meta) {
+    if (quo.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
+      quo.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
+    }
+    if (!quo.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
+      quo.approvalKetuaUbmBy = meta.approvalKetuaUbmBy;
+    }
+    if (!quo.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
+      quo.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
+    }
+    if (quo.approvalDirektur === undefined && meta.approvalDirektur !== undefined) {
+      quo.approvalDirektur = Boolean(meta.approvalDirektur);
+    }
+    if (!quo.approvalDirekturBy && meta.approvalDirekturBy) {
+      quo.approvalDirekturBy = meta.approvalDirekturBy;
+    }
+    if (!quo.approvalDirekturDate && meta.approvalDirekturDate) {
+      quo.approvalDirekturDate = meta.approvalDirekturDate;
+    }
+  }
+
+  // 2. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau status Accepted
+  const ordersList = (window.state && Array.isArray(state.orders)) ? state.orders : [];
+  const isConverted = Boolean(
+    quo.orderId ||
+    ordersList.some(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id))) ||
+    quo.status === 'Accepted'
+  );
+
+  if (isConverted) {
+    if (quo.approvalKetuaUbm !== true) {
+      quo.approvalKetuaUbm = true;
+      quo.approvalKetuaUbmBy = quo.approvalKetuaUbmBy || 'Ketua UBM (Auto-Approved Quotation Berjalan)';
+      quo.approvalKetuaUbmDate = quo.approvalKetuaUbmDate || quo.quotationDate || new Date().toISOString();
+    }
+    if (quo.approvalDirektur !== true) {
+      quo.approvalDirektur = true;
+      quo.approvalDirekturBy = quo.approvalDirekturBy || 'Direktur (Auto-Approved Quotation Berjalan)';
+      quo.approvalDirekturDate = quo.approvalDirekturDate || quo.quotationDate || new Date().toISOString();
+    }
+    if (quo.status === 'Pengajuan' || !quo.status) {
+      quo.status = 'Accepted';
+    }
+  } else {
+    // Quotation baru: harus persetujuan asli
+    quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
+    quo.approvalDirektur = Boolean(quo.approvalDirektur);
+  }
+
+  // Benamkan ke notes agar tidak hilang saat dikirim ke backend / disimpan ke Supabase
+  if (quo.approvalKetuaUbm || quo.approvalDirektur) {
+    const targetNotes = quo._rawNotes || quo.notes || '';
+    const embedded = embedQuotationApprovalInNotes(targetNotes, quo);
+    quo._rawNotes = embedded;
+    quo.notes = embedded;
+  }
+
+  return quo;
+}
+
+// ==================== BOM PROJECT & ORDER LINKAGE CARRIER HELPERS ====================
+function embedBOMMetaInNotes(notes, meta) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_BOM_META:[\s\S]*?-->/g, '').trim();
+  if (!meta || (!meta.orderId && !meta.projectId && !meta.projectName && !meta.customerName)) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    orderId: meta.orderId || '',
+    projectId: meta.projectId || '',
+    projectName: meta.projectName || '',
+    customerName: meta.customerName || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_BOM_META:${payload}-->` : `<!--UBM_BOM_META:${payload}-->`;
+}
+
+function extractBOMMetaFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_BOM_META:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensureBOMProjectData(bom, stateOrDb = null) {
+  if (!bom || typeof bom !== 'object') return bom;
+  const meta = extractBOMMetaFromNotes(bom.notes) || extractBOMMetaFromNotes(bom._rawNotes);
+  if (meta) {
+    if (!bom.orderId && meta.orderId) bom.orderId = meta.orderId;
+    if (!bom.projectId && meta.projectId) bom.projectId = meta.projectId;
+    if (!bom.projectName && meta.projectName) bom.projectName = meta.projectName;
+    if (!bom.customerName && meta.customerName) bom.customerName = meta.customerName;
+  }
+  if (bom.orderId && (!bom.projectName || !bom.customerName)) {
+    const orders = stateOrDb?.orders || (typeof state !== 'undefined' && state?.orders) || [];
+    const ord = Array.isArray(orders) ? orders.find(o => o.id === bom.orderId) : null;
+    if (ord) {
+      if (!bom.customerName) bom.customerName = ord.customerName || '';
+      if (!bom.projectName) bom.projectName = `Project ${ord.id} - ${ord.customerName || ''}`;
+    }
+  }
+  if (bom.notes && typeof bom.notes === 'string' && bom.notes.includes('<!--UBM_BOM_META:')) {
+    bom._rawNotes = bom.notes;
+    bom.notes = cleanDisplayNotes(bom.notes);
+  }
+  return bom;
 }
 
 function ensureOrderPOData(order) {
@@ -582,6 +833,131 @@ function ensureOrderPOData(order) {
   return order;
 }
 
+// ==================== QUOTATION DUAL APPROVAL CARRIER HELPERS ====================
+function embedQuotationApprovalInNotes(notes, approvalData) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+  if (!approvalData || (approvalData.approvalKetuaUbm === undefined && approvalData.approvalDirektur === undefined)) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    approvalKetuaUbm: Boolean(approvalData.approvalKetuaUbm),
+    approvalKetuaUbmBy: approvalData.approvalKetuaUbmBy || '',
+    approvalKetuaUbmDate: approvalData.approvalKetuaUbmDate || '',
+    approvalDirektur: Boolean(approvalData.approvalDirektur),
+    approvalDirekturBy: approvalData.approvalDirekturBy || '',
+    approvalDirekturDate: approvalData.approvalDirekturDate || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_QUO_APPROVAL:${payload}-->` : `<!--UBM_QUO_APPROVAL:${payload}-->`;
+}
+
+function extractQuotationApprovalFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_QUO_APPROVAL:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensureQuotationApprovalData(quo) {
+  if (!quo || typeof quo !== 'object') return quo;
+
+  // 1. Ekstrak dari notes atau _rawNotes
+  const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
+  if (meta) {
+    if (quo.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
+      quo.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
+    }
+    if (!quo.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
+      quo.approvalKetuaUbmBy = meta.approvalKetuaUbmBy;
+    }
+    if (!quo.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
+      quo.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
+    }
+    if (quo.approvalDirektur === undefined && meta.approvalDirektur !== undefined) {
+      quo.approvalDirektur = Boolean(meta.approvalDirektur);
+    }
+    if (!quo.approvalDirekturBy && meta.approvalDirekturBy) {
+      quo.approvalDirekturBy = meta.approvalDirekturBy;
+    }
+    if (!quo.approvalDirekturDate && meta.approvalDirekturDate) {
+      quo.approvalDirekturDate = meta.approvalDirekturDate;
+    }
+  }
+
+  // 2. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau status Accepted
+  const ordersList = (window.state && Array.isArray(state.orders)) ? state.orders : [];
+  const isConverted = Boolean(
+    quo.orderId ||
+    ordersList.some(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id))) ||
+    quo.status === 'Accepted'
+  );
+
+  if (isConverted) {
+    if (quo.approvalKetuaUbm !== true) {
+      quo.approvalKetuaUbm = true;
+      quo.approvalKetuaUbmBy = quo.approvalKetuaUbmBy || 'Ketua UBM (Auto-Approved Quotation Berjalan)';
+      quo.approvalKetuaUbmDate = quo.approvalKetuaUbmDate || quo.quotationDate || new Date().toISOString();
+    }
+    if (quo.approvalDirektur !== true) {
+      quo.approvalDirektur = true;
+      quo.approvalDirekturBy = quo.approvalDirekturBy || 'Direktur (Auto-Approved Quotation Berjalan)';
+      quo.approvalDirekturDate = quo.approvalDirekturDate || quo.quotationDate || new Date().toISOString();
+    }
+    if (quo.status === 'Pengajuan' || !quo.status) {
+      quo.status = 'Accepted';
+    }
+  } else {
+    // Quotation baru: harus persetujuan asli
+    quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
+    quo.approvalDirektur = Boolean(quo.approvalDirektur);
+  }
+
+  // Benamkan ke notes agar tidak hilang saat dikirim ke backend / disimpan ke Supabase
+  if (quo.approvalKetuaUbm || quo.approvalDirektur) {
+    const targetNotes = quo._rawNotes || quo.notes || '';
+    const embedded = embedQuotationApprovalInNotes(targetNotes, quo);
+    quo._rawNotes = embedded;
+    quo.notes = embedded;
+  }
+
+  return quo;
+}
+
+function ensureProjectData(project) {
+  if (!project || typeof project !== 'object') return project;
+  if (!project.poDocument && !project.poFileUrl) {
+    const fromNotes = extractPOFromNotes(project.notes) || extractPOFromNotes(project._rawNotes);
+    if (fromNotes) {
+      project.poDocument = fromNotes;
+      project.poFileUrl = fromNotes.url || '';
+      project.poFileName = fromNotes.name || 'PO-Pelanggan.pdf';
+    }
+  } else if (project.poDocument && !project.poFileUrl) {
+    project.poFileUrl = project.poDocument.url || '';
+    project.poFileName = project.poDocument.name || 'PO-Pelanggan.pdf';
+  } else if (!project.poDocument && project.poFileUrl) {
+    project.poDocument = {
+      name: project.poFileName || 'PO-Pelanggan.pdf',
+      url: project.poFileUrl,
+      uploadedAt: project.updatedAt || new Date().toISOString()
+    };
+  }
+
+  // Preserve raw notes with embedded PO or comments while cleaning display notes
+  if (project.notes && typeof project.notes === 'string' && (project.notes.includes('<!--UBM_PO_DATA:') || project.notes.includes('<!--UBM_BOM_META:') || project.notes.includes('<!--'))) {
+    project._rawNotes = project.notes;
+    project.notes = cleanDisplayNotes(project.notes);
+  }
+
+  return project;
+}
+
 // Universal direct Supabase helper for any resource (Native Table + Cloud Store)
 async function directSupabaseFetchResource(resource) {
   try {
@@ -599,11 +975,12 @@ async function directSupabaseFetchResource(resource) {
       if (nativeRes.ok) {
         const nativeRows = await nativeRes.json();
         if (Array.isArray(nativeRows)) {
-          // If resource is orders, also fetch cloud sync to merge rich PO document data
+          // If resource is orders or bom, also fetch cloud sync to merge rich relational data
           let cloudOrdersMap = null;
-          if (resource === 'orders') {
+          let cloudBOMMap = null;
+          if (resource === 'orders' || resource === 'bom') {
             try {
-              const syncKey = `__SYS_SYNC_orders__`;
+              const syncKey = `__SYS_SYNC_${resource}__`;
               const cRes = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
                 headers: {
                   'apikey': UBM_SUPABASE_KEY,
@@ -614,7 +991,11 @@ async function directSupabaseFetchResource(resource) {
               if (cRes.ok) {
                 const cData = await cRes.json();
                 if (Array.isArray(cData) && cData[0] && Array.isArray(cData[0].items)) {
-                  cloudOrdersMap = new Map(cData[0].items.map(o => [o.id, o]));
+                  if (resource === 'orders') {
+                    cloudOrdersMap = new Map(cData[0].items.map(o => [o.id, o]));
+                  } else if (resource === 'bom') {
+                    cloudBOMMap = new Map(cData[0].items.map(b => [b.id, b]));
+                  }
                 }
               }
             } catch (e) {}
@@ -628,8 +1009,40 @@ async function directSupabaseFetchResource(resource) {
                 if (!item.poDocument && cOrder.poDocument) item.poDocument = cOrder.poDocument;
                 if (!item.poFileUrl && cOrder.poFileUrl) item.poFileUrl = cOrder.poFileUrl;
                 if (!item.poFileName && cOrder.poFileName) item.poFileName = cOrder.poFileName;
+                if (item.approvalKetuaUbm === undefined && cOrder.approvalKetuaUbm !== undefined) {
+                  item.approvalKetuaUbm = cOrder.approvalKetuaUbm;
+                }
+                if (!item.approvalKetuaUbmBy && cOrder.approvalKetuaUbmBy) {
+                  item.approvalKetuaUbmBy = cOrder.approvalKetuaUbmBy;
+                }
+                if (!item.approvalKetuaUbmDate && cOrder.approvalKetuaUbmDate) {
+                  item.approvalKetuaUbmDate = cOrder.approvalKetuaUbmDate;
+                }
+                if (item.approvalWadir1 === undefined && cOrder.approvalWadir1 !== undefined) {
+                  item.approvalWadir1 = cOrder.approvalWadir1;
+                }
+                if (!item.approvalWadir1By && cOrder.approvalWadir1By) {
+                  item.approvalWadir1By = cOrder.approvalWadir1By;
+                }
+                if (!item.approvalWadir1Date && cOrder.approvalWadir1Date) {
+                  item.approvalWadir1Date = cOrder.approvalWadir1Date;
+                }
               }
               ensureOrderPOData(item);
+              ensureOrderApprovalData(item);
+            }
+            if (resource === 'bom') {
+              if (cloudBOMMap && cloudBOMMap.has(item.id)) {
+                const cBom = cloudBOMMap.get(item.id);
+                if (!item.orderId && cBom.orderId) item.orderId = cBom.orderId;
+                if (!item.projectId && cBom.projectId) item.projectId = cBom.projectId;
+                if (!item.projectName && cBom.projectName) item.projectName = cBom.projectName;
+                if (!item.customerName && cBom.customerName) item.customerName = cBom.customerName;
+              }
+              ensureBOMProjectData(item);
+            }
+            if (resource === 'projects') {
+              ensureProjectData(item);
             }
             if (resource === 'po') {
               if (item.expectedDate && !item.expectedDelivery) item.expectedDelivery = item.expectedDate;
@@ -657,7 +1070,16 @@ async function directSupabaseFetchResource(resource) {
             return data[0].items[0] || {};
           }
           if (resource === 'orders' && Array.isArray(data[0].items)) {
-            return data[0].items.map(o => ensureOrderPOData(o));
+            return data[0].items.map(o => ensureOrderApprovalData(ensureOrderPOData(o)));
+          }
+          if (resource === 'quotations' && Array.isArray(data[0].items)) {
+            return data[0].items.map(q => ensureQuotationApprovalData(q));
+          }
+          if (resource === 'bom' && Array.isArray(data[0].items)) {
+            return data[0].items.map(b => ensureBOMProjectData(b));
+          }
+          if (resource === 'projects' && Array.isArray(data[0].items)) {
+            return data[0].items.map(p => ensureProjectData(p));
           }
           return data[0].items;
         }
@@ -700,12 +1122,89 @@ async function directSupabaseSyncResource(resource, items) {
 
 window.embedPOInNotes = embedPOInNotes;
 window.extractPOFromNotes = extractPOFromNotes;
+window.embedBOMMetaInNotes = embedBOMMetaInNotes;
+window.extractBOMMetaFromNotes = extractBOMMetaFromNotes;
+window.ensureBOMProjectData = ensureBOMProjectData;
 window.cleanDisplayNotes = cleanDisplayNotes;
 window.ensureOrderPOData = ensureOrderPOData;
+window.ensureProjectData = ensureProjectData;
+window.embedApprovalInNotes = embedApprovalInNotes;
+window.extractApprovalFromNotes = extractApprovalFromNotes;
+window.ensureOrderApprovalData = ensureOrderApprovalData;
+window.embedQuotationApprovalInNotes = embedQuotationApprovalInNotes;
+window.extractQuotationApprovalFromNotes = extractQuotationApprovalFromNotes;
+window.ensureQuotationApprovalData = ensureQuotationApprovalData;
 window.directSupabaseUpsertNativeRow = directSupabaseUpsertNativeRow;
 window.directSupabaseDeleteNativeRow = directSupabaseDeleteNativeRow;
 window.directSupabaseFetchResource = directSupabaseFetchResource;
 window.directSupabaseSyncResource = directSupabaseSyncResource;
+
+// ==================== QR CODE GENERATOR HELPER ====================
+function generateQRCodeSvg(text, cellSize = 2.3, margin = 1) {
+  if (!text || typeof text !== 'string') return '';
+  try {
+    const qrEngine = (typeof qrcode !== 'undefined') ? qrcode : (window.qrcode || null);
+    if (typeof qrEngine === 'function') {
+      const qr = qrEngine(0, 'M');
+      qr.addData(text);
+      qr.make();
+      return qr.createSvgTag(cellSize, margin);
+    }
+  } catch (err) {
+    console.warn('QR Code generation notice:', err.message);
+  }
+
+  // Fallback to URL-based QR code if qrcode library is not ready
+  const encoded = encodeURIComponent(text);
+  return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encoded}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+}
+window.generateQRCodeSvg = generateQRCodeSvg;
+
+function getVerificationBaseUrl() {
+  // 1. Cek jika pengguna mengatur Public URL / Domain resmi pada profil instansi
+  const compSettings = (typeof getCompanySettings === 'function')
+    ? getCompanySettings()
+    : (window.state?.settings || {});
+
+  if (compSettings.publicUrl && typeof compSettings.publicUrl === 'string' && compSettings.publicUrl.trim().startsWith('http')) {
+    return compSettings.publicUrl.trim().replace(/\/+$/, '');
+  }
+
+  // 1b. Cek jika website institusi berawalan http/https
+  if (compSettings.website && typeof compSettings.website === 'string' && compSettings.website.trim().startsWith('http')) {
+    return compSettings.website.trim().replace(/\/+$/, '');
+  }
+
+  if (typeof window === 'undefined') return 'https://unitbisnistakumi.netlify.app';
+
+  // 2. Cek apakah aplikasi saat ini diakses di domain publik (misal: Netlify, Vercel, VPS, takumi.ac.id)
+  const origin = window.location.origin;
+  const hostname = window.location.hostname;
+  const isLocal = !hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+
+  if (!isLocal && origin && origin.startsWith('http')) {
+    return origin.replace(/\/+$/, '');
+  }
+
+  // 3. Default resmi: Gunakan domain Netlify resmi (https://unitbisnistakumi.netlify.app)
+  // agar siapa pun yang memindai QR code dari HP / internet umum dapat mengaksesnya secara instan
+  return 'https://unitbisnistakumi.netlify.app';
+}
+window.getVerificationBaseUrl = getVerificationBaseUrl;
+
+function getSignatureVerificationUrl(name, role, doc, title) {
+  const baseUrl = getVerificationBaseUrl();
+  const cleanName = (name || '').replace(/\.+$/, '');
+  return `${baseUrl}/verifikasi?name=${encodeURIComponent(cleanName)}&role=${encodeURIComponent(role || '')}&doc=${encodeURIComponent(doc || '')}&title=${encodeURIComponent(title || '')}`;
+}
+window.getSignatureVerificationUrl = getSignatureVerificationUrl;
+
+function getSignaturePdfDownloadUrl(name, role, doc, title) {
+  const baseUrl = getVerificationBaseUrl();
+  const cleanName = (name || '').replace(/\.+$/, '');
+  return `${baseUrl}/api/download-signature-pdf?name=${encodeURIComponent(cleanName)}&role=${encodeURIComponent(role || '')}&doc=${encodeURIComponent(doc || '')}&title=${encodeURIComponent(title || '')}`;
+}
+window.getSignaturePdfDownloadUrl = getSignaturePdfDownloadUrl;
 
 // ==================== SERVICE (JASA) DETECTION HELPERS ====================
 function isServiceOrder(order) {

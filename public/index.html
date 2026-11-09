@@ -28,9 +28,30 @@
         body: JSON.stringify({ type: 'unhandledrejection', reason: event.reason ? (event.reason.stack || event.reason.message || String(event.reason)) : '' })
       }).catch(function(){});
     });
+
+    // Public QR Code Verification Interceptor (Bypasses Login Screen Completely)
+    (function() {
+      try {
+        var p = (window.location.pathname || '').toLowerCase();
+        var s = window.location.search || '';
+        var h = (window.location.hash || '').toLowerCase();
+        var params = new URLSearchParams(s);
+        if (p.includes('verifikasi') || p.includes('verify') || h.includes('verifikasi') || h.includes('verify') || (params.has('name') && (params.has('doc') || params.has('role') || params.has('title')))) {
+          var style = document.createElement('style');
+          style.id = 'hide-auth-for-verify';
+          style.innerHTML = '#ubm-auth-screen { display: none !important; } #main-app-layout { display: none !important; }';
+          document.head.appendChild(style);
+        }
+      } catch (e) {}
+    })();
   </script>
 </head>
 <body class="theme-light">
+  <!-- ==================== UBM PUBLIC VERIFICATION SCREEN (NO LOGIN NEEDED) ==================== -->
+  <div id="ubm-public-verification-view" style="display: none; width: 100%; min-height: 100vh; background: #f8fafc; padding: 24px 16px 40px; flex-direction: column; align-items: center; justify-content: flex-start; z-index: 999999; position: relative;">
+    <!-- Injected dynamically via handlePublicVerificationView() -->
+  </div>
+
   <!-- ==================== UBM ENTERPRISE AUTHENTICATION SCREEN ==================== -->
   <div id="ubm-auth-screen" class="auth-screen-wrapper" style="display: flex;">
     <div class="auth-card-container">
@@ -922,16 +943,17 @@
             <div class="table-quotations-container">
               <table class="data-table table-quotations" id="table-quotations-main">
                 <colgroup>
-                  <col style="width: 10%;">
-                  <col style="width: 16%;">
-                  <col style="width: 11%;">
-                  <col style="width: 8.5%;">
-                  <col style="width: 8.5%;">
-                  <col style="width: 12%;">
-                  <col style="width: 5.5%;">
-                  <col style="width: 10.5%;">
-                  <col style="width: 7%;">
-                  <col style="width: 11%;">
+                  <col style="width: 9%;">      <!-- No. Quotation -->
+                  <col style="width: 13.5%;">   <!-- Calon Pelanggan -->
+                  <col style="width: 9.5%;">    <!-- Kontak / WhatsApp -->
+                  <col style="width: 7%;">      <!-- Tgl Penawaran -->
+                  <col style="width: 7%;">      <!-- Masa Berlaku -->
+                  <col style="width: 9.5%;">    <!-- Garansi & Ketentuan -->
+                  <col style="width: 4.5%;">    <!-- Item -->
+                  <col style="width: 9.5%;">    <!-- Total Penawaran -->
+                  <col style="width: 10%;">     <!-- Ketua UBM -->
+                  <col style="width: 10%;">     <!-- Direktur -->
+                  <col style="width: 10.5%;">   <!-- Aksi -->
                 </colgroup>
                 <thead>
                   <tr>
@@ -942,8 +964,9 @@
                     <th>Masa Berlaku</th>
                     <th>Garansi & Ketentuan</th>
                     <th style="text-align: center;">Item</th>
-                    <th>Total Penawaran</th>
-                    <th style="text-align: center;">Status</th>
+                    <th style="text-align: right;">Total Penawaran</th>
+                    <th style="text-align: center;">Ketua UBM</th>
+                    <th style="text-align: center;">Direktur</th>
                     <th class="text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -978,16 +1001,17 @@
             <div class="table-orders-container">
               <table class="data-table table-orders" id="table-orders-main">
                 <colgroup>
-                  <col style="width: 10%;">    <!-- No. Order -->
-                  <col style="width: 11.5%;">  <!-- Pelanggan (diperkecil) -->
-                  <col style="width: 12%;">    <!-- Project Lead -->
-                  <col style="width: 9%;">     <!-- Dokumen PO -->
-                  <col style="width: 8%;">     <!-- Tanggal Order -->
-                  <col style="width: 8%;">     <!-- Due Date -->
-                  <col style="width: 5%;">     <!-- Item -->
-                  <col style="width: 11.5%;">  <!-- Total Nilai -->
-                  <col style="width: 10.5%;">  <!-- Status -->
-                  <col style="width: 14.5%;">  <!-- Aksi -->
+                  <col style="width: 8.5%;">   <!-- No. Order -->
+                  <col style="width: 11%;">    <!-- Pelanggan -->
+                  <col style="width: 10.5%;">  <!-- Project Lead -->
+                  <col style="width: 7.5%;">   <!-- Dokumen PO -->
+                  <col style="width: 7%;">     <!-- Tanggal Order -->
+                  <col style="width: 7%;">     <!-- Due Date -->
+                  <col style="width: 4.5%;">   <!-- Item -->
+                  <col style="width: 10%;">    <!-- Total Nilai -->
+                  <col style="width: 10.5%;">  <!-- Ketua UBM -->
+                  <col style="width: 10.5%;">  <!-- Wakil Direktur I -->
+                  <col style="width: 13%;">    <!-- Aksi -->
                 </colgroup>
                 <thead>
                   <tr>
@@ -999,7 +1023,8 @@
                     <th>Due Date</th>
                     <th style="text-align: center;">Item</th>
                     <th style="text-align: right;">Total Nilai</th>
-                    <th style="text-align: center;">Status</th>
+                    <th style="text-align: center;">Ketua UBM</th>
+                    <th style="text-align: center;">Wakil Direktur I</th>
                     <th class="text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -1257,6 +1282,7 @@
               </div>
               <div class="btn-group">
                 <button class="btn btn-outline" onclick="exportDataToCSV('bom')"><i data-lucide="download"></i> Export CSV</button>
+                <button class="btn btn-primary" id="btn-create-master-bom" onclick="handleCreateMasterBOMClick()"><i data-lucide="plus"></i> Buat Master BOM</button>
               </div>
             </div>
 
@@ -2520,6 +2546,61 @@
 
   <!-- ==================== MODALS ==================== -->
 
+  <!-- 0. MANDATORY FIRST-LOGIN & RESET PASSWORD FORCE-CHANGE MODAL -->
+  <div class="modal-overlay modal-locked" id="modal-force-change-password" style="z-index: 99999; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px);">
+    <div class="modal-container" style="max-width: 520px; border-top: 4px solid #2563eb; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+      <div class="modal-header" style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 16px 20px;">
+        <h3 style="font-size: 15.5px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="shield-alert" style="color: #2563eb; width: 22px; height: 22px;"></i>
+          Wajib Ganti Password Akun
+        </h3>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 13px 16px; margin-bottom: 20px; font-size: 12.5px; color: #1e40af; line-height: 1.55;">
+          Halo <strong id="force-change-user-name">Pengguna</strong>, ini adalah login pertama Anda atau password akun Anda baru saja di-reset oleh Admin/Ketua UBM.
+          <br><br>
+          <span style="display: flex; align-items: center; gap: 6px; font-weight: 700;">
+            <i data-lucide="lock" style="width: 14px; height: 14px;"></i> Demi Keamanan Akun Anda:
+          </span>
+          Silakan buat password baru pribadi Anda sekarang. Password ini bersifat rahasia dan <strong>hanya Anda yang mengetahuinya</strong> (Admin tidak dapat melihatnya).
+        </div>
+
+        <form id="form-force-change-password" onsubmit="submitForceChangePassword(event)">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px; color: #1e293b;">Password Baru *</label>
+            <div style="position: relative;">
+              <input type="password" id="force-pass-new" class="form-control" required placeholder="Minimal 6 karakter" minlength="6" style="padding-right: 38px; font-family: monospace; font-size: 13px;">
+              <button type="button" onclick="toggleForceChangePassword('force-pass-new', 'force-eye-1')" style="position: absolute; right: 10px; top: 9px; background: none; border: none; cursor: pointer; color: #64748b; padding: 0;">
+                <i data-lucide="eye" id="force-eye-1" style="width: 17px; height: 17px;"></i>
+              </button>
+            </div>
+            <span class="font-xs text-muted" style="margin-top: 4px; display: block;">Gunakan kombinasi huruf, angka, atau simbol agar aman.</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 18px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px; color: #1e293b;">Ulangi Password Baru (Konfirmasi) *</label>
+            <div style="position: relative;">
+              <input type="password" id="force-pass-confirm" class="form-control" required placeholder="Ketik ulang password baru Anda" minlength="6" style="padding-right: 38px; font-family: monospace; font-size: 13px;">
+              <button type="button" onclick="toggleForceChangePassword('force-pass-confirm', 'force-eye-2')" style="position: absolute; right: 10px; top: 9px; background: none; border: none; cursor: pointer; color: #64748b; padding: 0;">
+                <i data-lucide="eye" id="force-eye-2" style="width: 17px; height: 17px;"></i>
+              </button>
+            </div>
+            <div id="force-change-error-alert" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 12px; color: #dc2626; font-size: 12px; font-weight: 600; margin-top: 8px;"></div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 24px;">
+            <button type="button" class="btn btn-outline" onclick="handleUbmLogout()" style="width: 32%; font-size: 12px; font-weight: 600;">
+              <i data-lucide="log-out"></i> Batal / Keluar
+            </button>
+            <button type="submit" id="btn-submit-force-change" class="btn btn-primary" style="flex: 1; font-weight: 700; padding: 10px 18px; background: #2563eb; border-color: #2563eb; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+              <i data-lucide="check-circle-2"></i> <span>Simpan & Aktifkan Password Baru</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- 1. GENERIC DYNAMIC FORM MODAL (Create / Edit) -->
   <div class="modal-overlay" id="form-modal">
     <div class="modal-container">
@@ -2847,6 +2928,11 @@
           <!-- Banner Informasi Tanggal Order & Due Date Riil (Bukan Tanggal Quotation) -->
           <div id="pm-order-info-banner" style="margin-top: 12px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 11.5px; background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
             <div style="display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="building" style="width: 13px; height: 13px; color: #0284c7;"></i>
+              <span style="color: #64748b;">Pelanggan:</span>
+              <strong id="pm-info-customer" style="color: #0f172a;">-</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 5px;">
               <i data-lucide="calendar" style="width: 13px; height: 13px; color: #2563eb;"></i>
               <span style="color: #64748b;">Tanggal Order:</span>
               <strong id="pm-info-order-date" style="color: #0f172a;">-</strong>
@@ -2861,6 +2947,16 @@
               <span style="color: #64748b;">Kategori:</span>
               <span id="pm-info-order-type" style="font-weight: 700;">-</span>
             </div>
+          </div>
+          <!-- Preview Catatan Khusus & Ketentuan Penugasan Surat Tugas -->
+          <div id="pm-notes-preview-container" style="display: none; margin-top: 10px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 10px 14px; font-size: 11.5px; color: #92400e;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+              <strong style="display: flex; align-items: center; gap: 5px;">
+                <i data-lucide="file-text" style="width: 13px; height: 13px; color: #d97706;"></i> Catatan Khusus & Syarat Pengerjaan (Ketentuan Penugasan Surat Tugas):
+              </strong>
+              <span class="badge" style="background: #fde68a; color: #92400e; font-size: 10px; font-weight: 700;">Masuk ke Surat Tugas</span>
+            </div>
+            <div id="pm-info-notes" style="white-space: pre-wrap; font-family: monospace; font-size: 11px; color: #78350f;"></div>
           </div>
         </div>
 
@@ -4031,9 +4127,10 @@
   <!-- 6. TOAST CONTAINER -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- External PDF & Excel (SheetJS) Engines -->
+  <!-- External PDF, Excel (SheetJS) & QR Code Engines -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="js/libs/qrcode.min.js"></script>
 
   <!-- Global Application State Pre-initialization -->
   <script>
@@ -4068,14 +4165,14 @@
   </script>
 
   <!-- Application Logic Modular Scripts -->
-  <script src="js/modules/utils.js?v=20261105_3"></script>
-  <script src="js/modules/auth.js?v=20261102_5"></script>
+  <script src="js/modules/utils.js?v=20261105_6"></script>
+  <script src="js/modules/auth.js?v=20261105_8"></script>
   <script src="js/modules/dashboard.js?v=20261102_3"></script>
   <script src="js/modules/logs.js?v=20261029_1"></script>
-  <script src="js/modules/quotations.js?v=20261102_2"></script>
-  <script src="js/modules/orders.js?v=20261105_1"></script>
-  <script src="js/modules/projects.js?v=20261104_1"></script>
-  <script src="js/modules/bom.js?v=20261104_1"></script>
+  <script src="js/modules/quotations.js?v=20261109_1"></script>
+  <script src="js/modules/orders.js?v=20261105_5"></script>
+  <script src="js/modules/projects.js?v=20261105_6"></script>
+  <script src="js/modules/bom.js?v=20261105_6"></script>
   <script src="js/modules/purchasing.js?v=20261105_4"></script>
   <script src="js/modules/po.js?v=20261029_1"></script>
   <script src="js/modules/delivery.js?v=20261029_1"></script>
@@ -4085,7 +4182,7 @@
   <script src="js/modules/service.js?v=20261103_1"></script>
   <script src="js/modules/maintenance.js?v=20261029_1"></script>
   <script src="js/modules/finance.js?v=20261105_2"></script>
-  <script src="js/modules/settings.js?v=20261102_5"></script>
-  <script src="js/app.js?v=20261105_2"></script>
+  <script src="js/modules/settings.js?v=20261105_6"></script>
+  <script src="js/app.js?v=20261105_4"></script>
 </body>
 </html>

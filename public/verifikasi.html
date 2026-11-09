@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verifikasi Keabsahan Tanda Tangan Digital - UBM Politeknik Takumi</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2310b981'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'/%3E%3C/svg%3E">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      max-width: 600px;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      border: 1px solid #a7f3d0;
+    }
+    .badge-pill span.dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+    }
+    .header h1 {
+      font-size: 21px;
+      font-weight: 800;
+      color: #1e3a8a;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+    .header p {
+      font-size: 13px;
+      color: #64748b;
+    }
+    .badge-card-container {
+      width: 100%;
+      max-width: 540px;
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+      border: 1px solid #e2e8f0;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .svg-wrapper {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      border-radius: 14px;
+      background: #f8fafc;
+    }
+    .svg-wrapper svg,
+    .svg-wrapper img {
+      width: 100%;
+      height: auto;
+      max-width: 520px;
+      display: block;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .btn-success {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .btn-success:hover {
+      background: #059669;
+    }
+    .btn-outline {
+      background: #ffffff;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    .btn-outline:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
+    .verification-info {
+      width: 100%;
+      max-width: 540px;
+      background: #ffffff;
+      border-radius: 16px;
+      border: 1px solid #e2e8f0;
+      padding: 20px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .verification-info h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #047857;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 9px 0;
+      border-bottom: 1px dashed #f1f5f9;
+      gap: 12px;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #64748b;
+      font-weight: 500;
+      min-width: 130px;
+    }
+    .info-value {
+      font-weight: 600;
+      color: #0f172a;
+      text-align: right;
+      word-break: break-word;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid #a7f3d0;
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 999;
+    }
+    .toast.show {
+      opacity: 1;
+    }
+    .footer {
+      text-align: center;
+      font-size: 11.5px;
+      color: #94a3b8;
+      margin-top: auto;
+      padding-top: 16px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="badge-pill">
+      <span class="dot"></span>
+      SISTEM VERIFIKASI PENGESAHAN RESMI
+    </div>
+    <h1>Unit Bisnis Mandiri (UBM)</h1>
+    <p>Politeknik Takumi &bull; Keabsahan Tanda Tangan Digital Resmi</p>
+  </div>
+
+  <div class="badge-card-container">
+    <div class="svg-wrapper" id="badge-container">
+      <!-- Gambar Kartu Badge Pengesahan SVG -->
+    </div>
+    <div class="actions">
+      <a id="btn-download-pdf" href="#" class="btn btn-primary" title="Unduh berkas sertifikat pengesahan resmi dalam format PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Unduh PDF Resmi
+      </a>
+      <button id="btn-download-png" class="btn btn-success" type="button" title="Unduh gambar kartu verifikasi dalam format PNG">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        Simpan Gambar (.png)
+      </button>
+      <a id="btn-download-svg" href="#" download="Verifikasi_Tanda_Tangan.svg" class="btn btn-outline" title="Unduh format vektor SVG">
+        Format SVG
+      </a>
+      <button id="btn-copy-link" class="btn btn-outline" type="button" title="Salin tautan verifikasi ini">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        Salin Tautan
+      </button>
+    </div>
+  </div>
+
+  <div class="verification-info">
+    <h2>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      Hasil Pindai &amp; Validasi Keabsahan Digital
+    </h2>
+
+    <div class="info-row">
+      <span class="info-label">Status Dokumen</span>
+      <span class="info-value">
+        <span class="status-badge">&#10003; RESMI &amp; TERVERIFIKASI</span>
+      </span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Pernyataan</span>
+      <span class="info-value" id="info-approved-by" style="color: #047857; font-size: 14.5px;">
+        Approved by Rizaldi Putra, M.Kom
+      </span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Pejabat Pengesah</span>
+      <span class="info-value" id="info-name">Rizaldi Putra, M.Kom.</span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Jabatan Resmi</span>
+      <span class="info-value" id="info-role">Ketua Unit Bisnis Mandiri (UBM)</span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Nomor Dokumen</span>
+      <span class="info-value" id="info-doc">ST/UBM-ENG/2026/001</span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Perihal Dokumen</span>
+      <span class="info-value" id="info-title">Surat Tugas Pelaksanaan Proyek</span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Waktu Verifikasi</span>
+      <span class="info-value" id="info-date">-</span>
+    </div>
+
+    <div class="info-row">
+      <span class="info-label">Otoritas Validasi</span>
+      <span class="info-value" style="font-size: 12px; color: #475569;">
+        Unit Bisnis Mandiri (UBM) Politeknik Takumi
+      </span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Copyright &copy; Bisnis Digital Takumi &bull; Unit Bisnis Mandiri (UBM)</p>
+    <p>Tanda tangan digital ini dilindungi oleh Protokol Validasi Sistem UBM Politeknik Takumi.</p>
+  </div>
+
+  <div id="toast" class="toast">Tautan berhasil disalin ke clipboard!</div>
+
+  <script>
+    function escapeXml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    }
+
+    function buildSignatureBadgeSvg(name, role, docNum, dateStr, titleStr) {
+      const cleanName = escapeXml(String(name || 'Rizaldi Putra, M.Kom').replace(/\.+$/, ''));
+      const cleanRole = escapeXml(String(role || 'Ketua Unit Bisnis Mandiri (UBM)'));
+      const cleanDoc = escapeXml(String(docNum || 'UBM-DOC-2026'));
+      const cleanTitle = escapeXml(String(titleStr || 'Surat Tugas Pelaksanaan Proyek'));
+      const cleanDate = escapeXml(String(dateStr || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })));
+
+      const displayName = cleanName.length > 36 ? cleanName.slice(0, 33) + '...' : cleanName;
+      const displayRole = cleanRole.length > 46 ? cleanRole.slice(0, 43) + '...' : cleanRole;
+      const displayDoc = cleanDoc.length > 32 ? cleanDoc.slice(0, 29) + '...' : cleanDoc;
+      const displayTitle = cleanTitle.length > 44 ? cleanTitle.slice(0, 41) + '...' : cleanTitle;
+
+      return `<svg id="signature-badge-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 360" width="540" height="360" style="background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Card -->
+  <rect x="18" y="16" width="504" height="328" rx="16" fill="url(#cardGrad)" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  
+  <!-- Header Bar -->
+  <path d="M 18 32 A 16 16 0 0 1 34 16 L 506 16 A 16 16 0 0 1 522 32 L 522 56 L 18 56 Z" fill="#0f172a"/>
+  <rect x="18" y="56" width="504" height="3" fill="#10b981"/>
+  
+  <!-- Header Text -->
+  <text x="270" y="38" fill="#ffffff" font-size="11.5" font-weight="700" letter-spacing="1.2" text-anchor="middle">
+    UNIT BISNIS MANDIRI (UBM) &bull; POLITEKNIK TAKUMI
+  </text>
+
+  <!-- Centered Checklist Icon -->
+  <circle cx="270" cy="108" r="34" fill="url(#checkGrad)"/>
+  <circle cx="270" cy="108" r="39" fill="none" stroke="#a7f3d0" stroke-width="2.5" stroke-dasharray="4 2"/>
+  <path d="M 255 108 L 266 119 L 288 97" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Checklist Badge -->
+  <rect x="175" y="152" width="190" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="270" y="167" fill="#047857" font-size="10" font-weight="800" letter-spacing="1" text-anchor="middle">
+    &#10003; TERVERIFIKASI DIGITAL
+  </text>
+
+  <!-- Approved By Text (USER REQUIREMENT) -->
+  <text x="270" y="202" fill="#0f172a" font-size="20" font-weight="800" text-anchor="middle">
+    Approved by ${displayName}
+  </text>
+
+  <!-- Role Title -->
+  <text x="270" y="225" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">
+    ${displayRole}
+  </text>
+
+  <!-- Detail Box -->
+  <rect x="36" y="244" width="468" height="84" rx="10" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="50" y="266" fill="#475569" font-size="11" font-weight="600">
+    Dokumen: <tspan fill="#0f172a" font-weight="700">${displayTitle}</tspan> (${displayDoc})
+  </text>
+  <text x="50" y="288" fill="#475569" font-size="11">
+    Status Keabsahan: <tspan fill="#059669" font-weight="700">&#10003; Resmi Disetujui &amp; Sah pada Database UBM</tspan>
+  </text>
+  <text x="50" y="309" fill="#64748b" font-size="10.5">
+    Tanggal Validasi: <tspan fill="#0f172a">${cleanDate}</tspan> &bull; Sistem Verifikasi Otomatis UBM
+  </text>
+</svg>`;
+    }
+
+    // Extract query parameters
+    const params = new URLSearchParams(window.location.search);
+    const rawName = params.get('name') || 'Rizaldi Putra, M.Kom';
+    const cleanName = rawName.replace(/\.+$/, '');
+    const role = params.get('role') || (cleanName.includes('Agung') ? 'Wakil Direktur I Politeknik Takumi' : (cleanName.includes('Wahyudi') ? 'Direktur Politeknik Takumi' : 'Ketua Unit Bisnis Mandiri (UBM)'));
+    const doc = params.get('doc') || 'ST/UBM-ENG/2026/001';
+    const title = params.get('title') || 'Surat Tugas Pelaksanaan Proyek';
+    const nowStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) + ' WIB';
+
+    // Update DOM
+    document.getElementById('info-approved-by').textContent = `Approved by ${cleanName}`;
+    document.getElementById('info-name').textContent = rawName;
+    document.getElementById('info-role').textContent = role;
+    document.getElementById('info-doc').textContent = doc;
+    document.getElementById('info-title').textContent = title;
+    document.getElementById('info-date').textContent = nowStr;
+
+    // Inject SVG Badge Image
+    const svgContent = buildSignatureBadgeSvg(cleanName, role, doc, nowStr, title);
+    const container = document.getElementById('badge-container');
+    container.innerHTML = svgContent;
+
+    // Setup PDF download button
+    const pdfUrl = `/api/download-signature-pdf?name=${encodeURIComponent(cleanName)}&role=${encodeURIComponent(role)}&doc=${encodeURIComponent(doc)}&title=${encodeURIComponent(title)}&date=${encodeURIComponent(nowStr)}`;
+    const dlPdfBtn = document.getElementById('btn-download-pdf');
+    if (dlPdfBtn) {
+      dlPdfBtn.href = pdfUrl;
+      dlPdfBtn.download = `Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    }
+
+    // Setup SVG download button
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const dlSvgBtn = document.getElementById('btn-download-svg');
+    if (dlSvgBtn) {
+      dlSvgBtn.href = blobUrl;
+      dlSvgBtn.download = `Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.svg`;
+    }
+
+    // Setup PNG download button
+    const dlPngBtn = document.getElementById('btn-download-png');
+    if (dlPngBtn) {
+      dlPngBtn.addEventListener('click', () => {
+        const svgEl = document.getElementById('signature-badge-svg');
+        if (!svgEl) return;
+        const svgXml = new XMLSerializer().serializeToString(svgEl);
+        const imgBlob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+        const URLObj = window.URL || window.webkitURL || window;
+        const url = URLObj.createObjectURL(imgBlob);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1080;
+          canvas.height = 720;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, 1080, 720);
+          const pngUrl = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = pngUrl;
+          a.download = `Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URLObj.revokeObjectURL(url);
+          showToast('Gambar kartu berhasil diunduh (.png)!');
+        };
+        img.src = url;
+      });
+    }
+
+    // Copy link helper
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      if (toast) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      }
+    }
+
+    const copyBtn = document.getElementById('btn-copy-link');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(window.location.href)
+          .then(() => showToast('Tautan verifikasi berhasil disalin!'))
+          .catch(() => showToast('Gagal menyalin tautan'));
+      });
+    }
+  </script>
+</body>
+</html>

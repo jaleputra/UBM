@@ -60,6 +60,21 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
+// Dedicated Verification Page Route (supports HTML visual display, direct image, and PDF download)
+app.get(['/verifikasi', '/verify-approval'], (req, res, next) => {
+  if (req.query.format === 'pdf' || req.query.download === '1') {
+    return next(); // Delegasikan ke router di src/routes/api.js untuk download PDF
+  }
+  if (req.query.format === 'image' || req.query.format === 'svg') {
+    return next(); // Delegasikan ke router di src/routes/api.js untuk render SVG
+  }
+  res.sendFile(path.join(__dirname, 'public', 'verifikasi.html'));
+});
+
+app.get(['/verifikasi.html', '/verify-approval.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'verifikasi.html'));
+});
+
 // Fallback to index.html for client SPA router
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

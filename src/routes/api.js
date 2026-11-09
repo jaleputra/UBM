@@ -14,8 +14,13 @@ const {
   fetchAuthoritativeList,
   saveAuthoritativeList,
   missingSupabaseTables,
-  CLOUD_SYNC_PREFIX
+  CLOUD_SYNC_PREFIX,
+  ensureOrderApprovalData,
+  embedApprovalInNotes,
+  ensureQuotationApprovalData,
+  embedQuotationApprovalInNotes
 } = require('../utils/dbHelper');
+const { generateSignatureVerificationPdf } = require('../utils/pdfCertHelper');
 
 const UPLOADS_PO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'po');
 const UPLOADS_QUO_DIR = path.join(__dirname, '..', '..', 'public', 'uploads', 'quotations');
@@ -114,6 +119,7 @@ const DEFAULT_ROLES = [
     canRegisterMembers: true,
     canManageTimeline: true,
     canManageBOM: true,
+    canApproveBOM: true,
     canSubmitPR: true,
     canApprovePurchasing: true,
     canManageInvoices: true,
@@ -127,9 +133,9 @@ const DEFAULT_ROLES = [
     roleName: 'Ketua UBM',
     label: 'Ketua UBM',
     badgeColor: '#1e40af',
-    description: 'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, dan monitoring seluruh operasional',
+    description: 'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, persetujuan BOM, dan monitoring seluruh operasional',
     allowedViews: [
-      'dashboard', 'logs', 'quotations', 'orders', 'bom', 'bom-form',
+      'dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form',
       'purchasing', 'project-reports', 'timeline', 'invoices', 'bast',
       'finance', 'service', 'maintenance', 'settings'
     ],
@@ -138,6 +144,7 @@ const DEFAULT_ROLES = [
     canRegisterMembers: true,
     canManageTimeline: true,
     canManageBOM: true,
+    canApproveBOM: true,
     canSubmitPR: true,
     canApprovePurchasing: true,
     canManageInvoices: true,
@@ -147,19 +154,45 @@ const DEFAULT_ROLES = [
     canManageSettings: false
   },
   {
+    id: 'ROLE-WADIR1',
+    roleName: 'Wakil Direktur I',
+    label: 'Wakil Direktur I',
+    badgeColor: '#0284c7',
+    description: 'Pimpinan & Pengarah Akademik / Kerjasama: Akses semua halaman, persetujuan dan perubahan status pada Order Penjualan',
+    allowedViews: [
+      'dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form',
+      'purchasing', 'project-reports', 'timeline', 'invoices', 'bast',
+      'finance', 'service', 'maintenance', 'settings'
+    ],
+    canApproveOrder: true,
+    canAssignLead: true,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canApproveBOM: true,
+    canSubmitPR: true,
+    canApprovePurchasing: true,
+    canManageInvoices: true,
+    canManageFinance: true,
+    canManageBAST: true,
+    canManageAfterSales: true,
+    canManageSettings: true
+  },
+  {
     id: 'ROLE-KEUANGAN',
     roleName: 'Keuangan',
     label: 'Keuangan',
     badgeColor: '#166534',
-    description: 'Persetujuan pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales',
+    description: 'Persetujuan status formula BOM, pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales',
     allowedViews: [
-      'dashboard', 'purchasing', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'logs'
+      'dashboard', 'orders', 'bom', 'purchasing', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'settings', 'logs'
     ],
     canApproveOrder: false,
     canAssignLead: false,
     canRegisterMembers: false,
     canManageTimeline: false,
     canManageBOM: false,
+    canApproveBOM: true,
     canSubmitPR: false,
     canApprovePurchasing: true,
     canManageInvoices: true,
@@ -173,15 +206,16 @@ const DEFAULT_ROLES = [
     roleName: 'Member',
     label: 'Member',
     badgeColor: '#475569',
-    description: 'Anggota Tim / Pelaksana Project: Akses timeline, progres task, dan apabila ditunjuk sebagai Lead Project berwenang menyusun BOM, mengajukan PR, serta mengisi laporan & anggota tim',
+    description: 'Anggota Tim / Pelaksana Project: Akses project dan order penjualan yang ditugaskan, progres task, dan penyusunan BOM/PR',
     allowedViews: [
-      'dashboard', 'orders', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'logs'
+      'dashboard', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'settings', 'logs'
     ],
     canApproveOrder: false,
     canAssignLead: false,
     canRegisterMembers: true,
     canManageTimeline: true,
-    canManageBOM: true,
+    canManageBOM: false,
+    canApproveBOM: false,
     canSubmitPR: true,
     canApprovePurchasing: false,
     canManageInvoices: false,
@@ -195,9 +229,10 @@ const DEFAULT_ROLES = [
 function getRoleConfig(roleStr) {
   const rLower = (roleStr || '').toLowerCase();
   if (rLower.includes('admin') || rLower.includes('super')) return DEFAULT_ROLES[0];
-  if (rLower.includes('ketua') || rLower.includes('wadir') || rLower.includes('direktur') || rLower.includes('pimpinan')) return DEFAULT_ROLES[1];
-  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES[2];
-  return DEFAULT_ROLES[3];
+  if (rLower.includes('wadir') || rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-WADIR1') || DEFAULT_ROLES[1];
+  if (rLower.includes('ketua') || rLower.includes('pimpinan')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KETUA') || DEFAULT_ROLES[1];
+  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KEUANGAN') || DEFAULT_ROLES[3];
+  return DEFAULT_ROLES.find(r => r.id === 'ROLE-MEMBER') || DEFAULT_ROLES[4];
 }
 
 module.exports = function(broadcastReload) {
@@ -359,17 +394,33 @@ module.exports = function(broadcastReload) {
       }
     }
 
-    // 3. Relasi Order <-> Project (Sinkronkan nama pelanggan & nama project jika Project sudah ada)
+    // 3. Relasi Order <-> Project (Sinkronkan semua data order ke Project jika Project sudah ada)
     try {
       const projects = await fetchAuthoritativeList('projects');
-      const pIdx = projects.findIndex(p => p.orderId === orderItem.id);
+      const pIdx = projects.findIndex(p => p.orderId === orderItem.id || p.id === orderItem.id);
       if (pIdx !== -1) {
         const currentProj = projects[pIdx];
+        const cleanOrderNotes = (typeof cleanDisplayNotes === 'function')
+          ? cleanDisplayNotes(orderItem.notes)
+          : (orderItem.notes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+
         const updatedProj = {
           ...currentProj,
           customerName: orderItem.customerName || currentProj.customerName,
           projectName: orderItem.projectName || currentProj.projectName,
+          customerPhone: orderItem.customerPhone !== undefined ? orderItem.customerPhone : currentProj.customerPhone,
+          customerAddress: orderItem.customerAddress !== undefined ? orderItem.customerAddress : currentProj.customerAddress,
+          orderDate: orderItem.orderDate || currentProj.orderDate || currentProj.startDate,
+          startDate: currentProj.startDate || orderItem.orderDate,
           dueDate: orderItem.dueDate || currentProj.dueDate,
+          endDate: currentProj.endDate || orderItem.dueDate,
+          orderType: orderItem.orderType || currentProj.orderType,
+          items: orderItem.items || currentProj.items,
+          additionalServices: orderItem.additionalServices || currentProj.additionalServices,
+          notes: orderItem.notes !== undefined ? cleanOrderNotes : currentProj.notes,
+          poDocument: orderItem.poDocument || currentProj.poDocument,
+          poFileName: orderItem.poFileName || currentProj.poFileName,
+          poFileUrl: orderItem.poFileUrl || currentProj.poFileUrl,
           updatedAt: new Date().toISOString()
         };
         const upProj = await upsertNativeSupabaseRow('projects', updatedProj);
@@ -437,11 +488,15 @@ module.exports = function(broadcastReload) {
   }
 
   async function syncBomRelationsOnSave(bomItem) {
-    if (!bomItem || !bomItem.orderId) return;
+    if (!bomItem) return;
     try {
       // Update linked Project modalCost if BOM is saved
       const projects = await fetchAuthoritativeList('projects');
-      const pIdx = projects.findIndex(p => p.orderId === bomItem.orderId || p.id === bomItem.projectId);
+      const pIdx = projects.findIndex(p => 
+        (bomItem.orderId && (p.orderId === bomItem.orderId || p.id === bomItem.orderId)) || 
+        (bomItem.projectId && p.id === bomItem.projectId) || 
+        (bomItem.projectName && p.projectName && bomItem.projectName.toLowerCase().trim() === p.projectName.toLowerCase().trim())
+      );
       if (pIdx !== -1) {
         const comps = Array.isArray(bomItem.components) ? bomItem.components : [];
         const matCost = bomItem.materialCost !== undefined
@@ -469,6 +524,15 @@ module.exports = function(broadcastReload) {
         await saveAuthoritativeList('projects', projects);
         broadcastReload({ type: 'reload', resource: 'projects' });
       }
+
+      // Automatically sync project finances HPP
+      const prjList = await fetchAuthoritativeList('projects');
+      const ordList = await fetchAuthoritativeList('orders');
+      const bomList = await fetchAuthoritativeList('bom');
+      const quoList = await fetchAuthoritativeList('quotations');
+      const invList = await fetchAuthoritativeList('invoices');
+      await autoSyncProjectFinances(prjList, ordList, bomList, quoList, invList);
+      broadcastReload({ type: 'reload', resource: 'project_finances' });
     } catch (e) {
       console.warn('[Relational Sync] BOM -> Project error:', e.message);
     }
@@ -839,7 +903,7 @@ module.exports = function(broadcastReload) {
         avatar: 'AD'
       };
       const roleCfg = getRoleConfig(u.role);
-      console.log(`🔐 [Auth] Login berhasil untuk akun: ${u.email} (Role: ${roleCfg.roleName})`);
+      console.log(`🔐 [Auth] Login berhasil untuk akun: ${u.email} (Role: ${roleCfg.roleName}, MustChangePass: ${Boolean(u.mustChangePassword)})`);
       return res.json({
         success: true,
         message: 'Login berhasil',
@@ -850,7 +914,9 @@ module.exports = function(broadcastReload) {
           role: roleCfg.roleName,
           roleId: roleCfg.id,
           department: u.department,
+          phone: u.phone || '',
           avatar: u.avatar || u.name?.slice(0, 2).toUpperCase() || 'AD',
+          mustChangePassword: Boolean(u.mustChangePassword),
           permissions: u.permissions || roleCfg
         },
         token: `ubm_token_${Date.now()}`
@@ -862,6 +928,80 @@ module.exports = function(broadcastReload) {
       success: false,
       error: 'Email atau password salah. Silakan coba lagi.'
     });
+  });
+
+  router.post('/auth/change-password', async (req, res) => {
+    try {
+      const { userId, email, currentPassword, newPassword } = req.body || {};
+      const cleanNewPassword = (newPassword || '').trim();
+
+      if (!cleanNewPassword || cleanNewPassword.length < 6) {
+        return res.status(400).json({ error: 'Password baru minimal harus 6 karakter.' });
+      }
+
+      let users = [];
+      try {
+        users = await fetchAuthoritativeList('users');
+      } catch (e) {
+        const db = readDB();
+        users = db.users || [];
+      }
+
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const userIdx = users.findIndex(u =>
+        (userId && u.id === userId) ||
+        (cleanEmail && (u.email || '').trim().toLowerCase() === cleanEmail)
+      );
+
+      if (userIdx === -1) {
+        return res.status(404).json({ error: 'Akun pengguna tidak ditemukan.' });
+      }
+
+      const targetUser = users[userIdx];
+
+      // Jika user sedang tidak dalam status mustChangePassword, pastikan currentPassword cocok jika disediakan
+      if (currentPassword && targetUser.password && targetUser.password !== currentPassword && !targetUser.mustChangePassword) {
+        return res.status(400).json({ error: 'Password saat ini yang Anda masukkan salah.' });
+      }
+
+      targetUser.password = cleanNewPassword;
+      targetUser.mustChangePassword = false;
+      targetUser.updatedAt = new Date().toISOString();
+
+      users[userIdx] = targetUser;
+
+      try {
+        await upsertNativeSupabaseRow('users', targetUser);
+      } catch (upErr) {
+        console.warn('⚠️ [Auth change-password] Supabase upsert error:', upErr.message);
+      }
+
+      await saveAuthoritativeList('users', users);
+      const db = readDB();
+      db.users = users;
+      writeDB(db);
+
+      broadcastReload({ type: 'reload', resource: 'users' });
+      console.log(`🔐 [Auth change-password] Password berhasil diperbarui untuk ${targetUser.email}. mustChangePassword diset false.`);
+
+      res.json({
+        success: true,
+        message: 'Password akun Anda berhasil diperbarui!',
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          name: targetUser.name,
+          role: targetUser.role,
+          department: targetUser.department,
+          phone: targetUser.phone || '',
+          avatar: targetUser.avatar || (targetUser.name ? targetUser.name.slice(0, 2).toUpperCase() : 'US'),
+          mustChangePassword: false
+        }
+      });
+    } catch (err) {
+      console.error('❌ [Auth change-password] Exception:', err);
+      res.status(500).json({ error: 'Gagal memperbarui password akun di server.' });
+    }
   });
 
   router.get('/auth/session', (req, res) => {
@@ -1738,7 +1878,11 @@ end run
     // POST (CREATE)
     router.post(`/${resourceName}`, async (req, res) => {
       try {
-        const items = await fetchAuthoritativeList(resourceName);
+        const db = readDB();
+        let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+        if (items.length === 0) {
+          items = await fetchAuthoritativeList(resourceName);
+        }
         const newId = req.body.id || `${idPrefix}-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
 
         let newItem = {
@@ -1749,7 +1893,10 @@ end run
         };
 
         if (resourceName === 'orders') {
+          ensureOrderApprovalData(newItem);
           newItem = processPOFileStorage(newItem, newId);
+        } else if (resourceName === 'quotations') {
+          ensureQuotationApprovalData(newItem);
         } else if (resourceName === 'bom') {
           const comps = Array.isArray(newItem.components) ? newItem.components : [];
           const matCost = newItem.materialCost !== undefined
@@ -1761,16 +1908,22 @@ end run
           newItem.totalEstimatedCost = newItem.totalEstimatedCost !== undefined
             ? Number(newItem.totalEstimatedCost)
             : (matCost + labCost + ovhCost);
+        } else if (resourceName === 'projects') {
+          if (!updatedItem.poFileUrl && existingItem.poFileUrl) {
+            updatedItem.poFileUrl = existingItem.poFileUrl;
+          }
+          if (!updatedItem.poFileName && existingItem.poFileName) {
+            updatedItem.poFileName = existingItem.poFileName;
+          }
+          if (!updatedItem.poDocument && existingItem.poDocument) {
+            updatedItem.poDocument = existingItem.poDocument;
+          }
         } else if (resourceName === 'po') {
           if (newItem.expectedDelivery && !newItem.expectedDate) newItem.expectedDate = newItem.expectedDelivery;
           if (newItem.expectedDate && !newItem.expectedDelivery) newItem.expectedDelivery = newItem.expectedDate;
           if (newItem.totalAmount !== undefined && newItem.grandTotal === undefined) newItem.grandTotal = Number(newItem.totalAmount);
           if (newItem.grandTotal !== undefined && newItem.totalAmount === undefined) newItem.totalAmount = Number(newItem.grandTotal);
         }
-
-        // Upsert to native Supabase table if available
-        const upRes = await upsertNativeSupabaseRow(resourceName, newItem);
-        newItem._syncedNative = upRes.synced;
 
         const existingIdx = items.findIndex(i => i.id === newItem.id);
         if (existingIdx !== -1) {
@@ -1779,32 +1932,44 @@ end run
           items.unshift(newItem);
         }
 
-        await saveAuthoritativeList(resourceName, items);
+        // Parallelize Supabase native row upsert and authoritative list sync
+        const [upRes] = await Promise.all([
+          upsertNativeSupabaseRow(resourceName, newItem),
+          saveAuthoritativeList(resourceName, items)
+        ]);
+        newItem._syncedNative = upRes.synced;
 
-        // Trigger relational updates in Supabase
-        if (resourceName === 'orders') {
-          await syncOrderRelationsOnSave(newItem);
-        } else if (resourceName === 'bom') {
-          await syncBomRelationsOnSave(newItem);
-          await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'project_reports') {
-          await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'projects') {
-          if (newItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'delivery') {
-          await syncDeliveryRelationsOnSave(newItem);
-        } else if (resourceName === 'purchasing') {
-          if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
-            await syncPurchasingProcessAndMasterItems(items);
-          }
-        } else if (resourceName === 'purchasing_process') {
-          await syncProcessItemBackToPurchasing(newItem);
-        } else if (resourceName === 'invoices') {
-          await syncInvoiceRelationsOnSave(newItem);
-        }
-
+        // Broadcast and respond immediately for ultra fast UX
         broadcastReload({ type: 'reload', resource: resourceName });
         res.status(201).json(newItem);
+
+        // Run relational updates in background (non-blocking)
+        setImmediate(async () => {
+          try {
+            if (resourceName === 'orders') {
+              await syncOrderRelationsOnSave(newItem);
+            } else if (resourceName === 'bom') {
+              await syncBomRelationsOnSave(newItem);
+              await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'project_reports') {
+              await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'projects') {
+              if (newItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'delivery') {
+              await syncDeliveryRelationsOnSave(newItem);
+            } else if (resourceName === 'purchasing') {
+              if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
+                await syncPurchasingProcessAndMasterItems(items);
+              }
+            } else if (resourceName === 'purchasing_process') {
+              await syncProcessItemBackToPurchasing(newItem);
+            } else if (resourceName === 'invoices') {
+              await syncInvoiceRelationsOnSave(newItem);
+            }
+          } catch (bgRelErr) {
+            console.warn(`[Background Relational Sync POST /${resourceName}] Error:`, bgRelErr.message);
+          }
+        });
       } catch (err) {
         console.error(`[POST /api/${resourceName}] Error:`, err);
         res.status(500).json({ error: err.message || `Gagal menyimpan ${resourceName}` });
@@ -1818,13 +1983,18 @@ end run
       }
 
       try {
-        const items = await fetchAuthoritativeList(resourceName);
-        const idx = items.findIndex(i => i.id === req.params.id);
+        const db = readDB();
+        let items = Array.isArray(db[resourceName]) ? db[resourceName] : [];
+        let idx = items.findIndex(i => i.id === req.params.id);
+        if (idx === -1) {
+          items = await fetchAuthoritativeList(resourceName);
+          idx = items.findIndex(i => i.id === req.params.id);
+        }
         const existingItem = idx !== -1 ? items[idx] : {};
 
         // Reject direct content edits on quotations that are already converted to sales orders
         if (resourceName === 'quotations') {
-          const orders = await fetchAuthoritativeList('orders');
+          const orders = (Array.isArray(db.orders) && db.orders.length > 0) ? db.orders : await fetchAuthoritativeList('orders');
           const linkedOrder = orders.find(o => o.quotationId === req.params.id || (o.notes && o.notes.includes(req.params.id)));
           if (linkedOrder) {
             const contentKeys = ['items', 'customerName', 'projectName', 'customerPhone', 'customerEmail', 'customerAddress', 'subtotal', 'grandTotal', 'discount', 'warranty', 'leadTime'];
@@ -1858,7 +2028,31 @@ end run
           if (!updatedItem.poDocument && existingItem.poDocument) {
             updatedItem.poDocument = existingItem.poDocument;
           }
+          // Preserve existing approval if edit form did not explicitly send them
+          if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
+            updatedItem.approvalKetuaUbm = existingItem.approvalKetuaUbm;
+            updatedItem.approvalKetuaUbmBy = existingItem.approvalKetuaUbmBy;
+            updatedItem.approvalKetuaUbmDate = existingItem.approvalKetuaUbmDate;
+          }
+          if (updatedItem.approvalWadir1 === undefined && existingItem.approvalWadir1 !== undefined) {
+            updatedItem.approvalWadir1 = existingItem.approvalWadir1;
+            updatedItem.approvalWadir1By = existingItem.approvalWadir1By;
+            updatedItem.approvalWadir1Date = existingItem.approvalWadir1Date;
+          }
+          ensureOrderApprovalData(updatedItem);
           updatedItem = processPOFileStorage(updatedItem, req.params.id);
+        } else if (resourceName === 'quotations') {
+          if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
+            updatedItem.approvalKetuaUbm = existingItem.approvalKetuaUbm;
+            updatedItem.approvalKetuaUbmBy = existingItem.approvalKetuaUbmBy;
+            updatedItem.approvalKetuaUbmDate = existingItem.approvalKetuaUbmDate;
+          }
+          if (updatedItem.approvalDirektur === undefined && existingItem.approvalDirektur !== undefined) {
+            updatedItem.approvalDirektur = existingItem.approvalDirektur;
+            updatedItem.approvalDirekturBy = existingItem.approvalDirekturBy;
+            updatedItem.approvalDirekturDate = existingItem.approvalDirekturDate;
+          }
+          ensureQuotationApprovalData(updatedItem);
         } else if (resourceName === 'bom') {
           const comps = Array.isArray(updatedItem.components) ? updatedItem.components : [];
           const matCost = req.body.materialCost !== undefined
@@ -1870,6 +2064,16 @@ end run
           updatedItem.totalEstimatedCost = req.body.totalEstimatedCost !== undefined
             ? Number(req.body.totalEstimatedCost)
             : (matCost + labCost + ovhCost);
+        } else if (resourceName === 'projects') {
+          if (!updatedItem.poFileUrl && existingItem.poFileUrl) {
+            updatedItem.poFileUrl = existingItem.poFileUrl;
+          }
+          if (!updatedItem.poFileName && existingItem.poFileName) {
+            updatedItem.poFileName = existingItem.poFileName;
+          }
+          if (!updatedItem.poDocument && existingItem.poDocument) {
+            updatedItem.poDocument = existingItem.poDocument;
+          }
         } else if (resourceName === 'po') {
           if (updatedItem.expectedDelivery && !updatedItem.expectedDate) updatedItem.expectedDate = updatedItem.expectedDelivery;
           if (updatedItem.expectedDate && !updatedItem.expectedDelivery) updatedItem.expectedDelivery = updatedItem.expectedDate;
@@ -1877,43 +2081,51 @@ end run
           if (updatedItem.grandTotal !== undefined && updatedItem.totalAmount === undefined) updatedItem.totalAmount = Number(updatedItem.grandTotal);
         }
 
-        // Upsert to native Supabase table if available
-        const upRes = await upsertNativeSupabaseRow(resourceName, updatedItem);
-        updatedItem._syncedNative = upRes.synced;
-
         if (idx === -1) {
           items.unshift(updatedItem);
         } else {
           items[idx] = updatedItem;
         }
 
-        await saveAuthoritativeList(resourceName, items);
+        // Parallelize native Supabase row upsert and authoritative list sync
+        const [upRes] = await Promise.all([
+          upsertNativeSupabaseRow(resourceName, updatedItem),
+          saveAuthoritativeList(resourceName, items)
+        ]);
+        updatedItem._syncedNative = upRes.synced;
 
-        // Trigger relational updates in Supabase
-        if (resourceName === 'orders') {
-          await syncOrderRelationsOnSave(updatedItem);
-        } else if (resourceName === 'bom') {
-          await syncBomRelationsOnSave(updatedItem);
-          await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'project_reports') {
-          await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'projects') {
-          if (updatedItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
-        } else if (resourceName === 'delivery') {
-          await syncDeliveryRelationsOnSave(updatedItem);
-        } else if (resourceName === 'purchasing') {
-          const checkStatus = updatedItem.status || existingItem.status;
-          if (checkStatus === 'Disetujui' || checkStatus === 'Stock' || checkStatus === 'Approved') {
-            await syncPurchasingProcessAndMasterItems(items);
-          }
-        } else if (resourceName === 'purchasing_process') {
-          await syncProcessItemBackToPurchasing(updatedItem);
-        } else if (resourceName === 'invoices') {
-          await syncInvoiceRelationsOnSave(updatedItem);
-        }
-
+        // Respond immediately to client so UI is ultra fast!
         broadcastReload({ type: 'reload', resource: resourceName });
         res.json(updatedItem);
+
+        // Run relational updates asynchronously in background (non-blocking)
+        setImmediate(async () => {
+          try {
+            if (resourceName === 'orders') {
+              await syncOrderRelationsOnSave(updatedItem);
+            } else if (resourceName === 'bom') {
+              await syncBomRelationsOnSave(updatedItem);
+              await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'project_reports') {
+              await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'projects') {
+              if (updatedItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
+            } else if (resourceName === 'delivery') {
+              await syncDeliveryRelationsOnSave(updatedItem);
+            } else if (resourceName === 'purchasing') {
+              const checkStatus = updatedItem.status || existingItem.status;
+              if (checkStatus === 'Disetujui' || checkStatus === 'Stock' || checkStatus === 'Approved') {
+                await syncPurchasingProcessAndMasterItems(items);
+              }
+            } else if (resourceName === 'purchasing_process') {
+              await syncProcessItemBackToPurchasing(updatedItem);
+            } else if (resourceName === 'invoices') {
+              await syncInvoiceRelationsOnSave(updatedItem);
+            }
+          } catch (bgRelErr) {
+            console.warn(`[Background Relational Sync PUT /${resourceName}/${req.params.id}] Error:`, bgRelErr.message);
+          }
+        });
       } catch (err) {
         console.error(`[PUT /api/${resourceName}/${req.params.id}] Error:`, err);
         res.status(500).json({ error: err.message || `Gagal memperbarui ${resourceName}` });
@@ -2055,6 +2267,8 @@ end run
         name: (name || '').trim(),
         email: cleanEmail,
         password: (password || '').trim(),
+        mustChangePassword: req.body.mustChangePassword !== undefined ? Boolean(req.body.mustChangePassword) : true,
+        phone: req.body.phone || '',
         role: roleCfg.roleName,
         roleId: roleCfg.id,
         department: department || 'Operations & Management',
@@ -2140,6 +2354,8 @@ end run
             name,
             email: cleanEmail,
             password,
+            mustChangePassword: true,
+            phone: acc.phone || '',
             role: roleCfg.roleName,
             roleId: roleCfg.id,
             department,
@@ -2209,6 +2425,64 @@ end run
     }
   });
 
+  router.post('/users/:id/reset-password', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const { requestedByRole, customDefaultPassword } = req.body || {};
+
+      // Verifikasi wewenang: hanya Administrator dan Ketua UBM (serta Wakil Direktur I)
+      const roleNorm = (requestedByRole || '').toLowerCase();
+      const isAllowed = !requestedByRole || roleNorm.includes('admin') || roleNorm.includes('ketua') || roleNorm.includes('wadir') || roleNorm.includes('wakil');
+      if (requestedByRole && !isAllowed) {
+        return res.status(403).json({ error: 'Hanya Administrator dan Ketua UBM yang berwenang mereset password akun pengguna.' });
+      }
+
+      const users = await fetchSupabaseUsers();
+      const idx = users.findIndex(u => u.id === userId);
+      if (idx === -1) {
+        return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+      }
+
+      const user = users[idx];
+      // Generate password default baru yang mudah dibagikan
+      const randomDigits = Math.floor(1000 + Math.random() * 9000);
+      const newDefault = customDefaultPassword ? String(customDefaultPassword).trim() : `Takumi${randomDigits}!`;
+
+      user.password = newDefault;
+      user.mustChangePassword = true;
+      user.updatedAt = new Date().toISOString();
+
+      try {
+        await upsertNativeSupabaseRow('users', user);
+      } catch (e) {}
+
+      users[idx] = user;
+      await saveAuthoritativeList('users', users);
+      const db = readDB();
+      db.users = users;
+      writeDB(db);
+
+      broadcastReload({ type: 'reload', resource: 'users' });
+      console.log(`🔑 [Users Reset Password] Password akun ${user.email} berhasil direset menjadi default (${newDefault}) oleh ${requestedByRole || 'Admin'}`);
+
+      res.json({
+        success: true,
+        message: 'Password berhasil direset ke password default baru',
+        newDefaultPassword: newDefault,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          mustChangePassword: true
+        }
+      });
+    } catch (err) {
+      console.error('❌ [Users Reset Password] Gagal reset password:', err);
+      res.status(500).json({ error: 'Gagal mereset password di server' });
+    }
+  });
+
   router.delete('/users/:id', async (req, res) => {
     try {
       const userId = req.params.id;
@@ -2250,6 +2524,178 @@ end run
     broadcastReload({ type: 'reload', resource: 'project_reports' });
     res.json({ success: true, message: 'Semua data keuangan project dan project berhasil dihapus' });
   });
+
+  // =========================================================
+  // DIGITAL SIGNATURE VERIFICATION & QR CODE BADGE ENDPOINTS
+  // =========================================================
+  function escapeXml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  function buildSignatureBadgeSvg(name, role, docNum, dateStr, titleStr) {
+    const cleanName = escapeXml(String(name || 'Rizaldi Putra, M.Kom').replace(/\.+$/, ''));
+    const cleanRole = escapeXml(String(role || 'Ketua Unit Bisnis Mandiri (UBM)'));
+    const cleanDoc = escapeXml(String(docNum || 'UBM-DOC-2026'));
+    const cleanTitle = escapeXml(String(titleStr || 'Surat Tugas Pelaksanaan Proyek'));
+    const cleanDate = escapeXml(String(dateStr || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })));
+
+    const displayName = cleanName.length > 36 ? cleanName.slice(0, 33) + '...' : cleanName;
+    const displayRole = cleanRole.length > 46 ? cleanRole.slice(0, 43) + '...' : cleanRole;
+    const displayDoc = cleanDoc.length > 32 ? cleanDoc.slice(0, 29) + '...' : cleanDoc;
+    const displayTitle = cleanTitle.length > 44 ? cleanTitle.slice(0, 41) + '...' : cleanTitle;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 360" width="540" height="360" style="background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Card -->
+  <rect x="18" y="16" width="504" height="328" rx="16" fill="url(#cardGrad)" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  
+  <!-- Header Bar -->
+  <path d="M 18 32 A 16 16 0 0 1 34 16 L 506 16 A 16 16 0 0 1 522 32 L 522 56 L 18 56 Z" fill="#0f172a"/>
+  <rect x="18" y="56" width="504" height="3" fill="#10b981"/>
+  
+  <!-- Header Text -->
+  <text x="270" y="38" fill="#ffffff" font-size="11.5" font-weight="700" letter-spacing="1.2" text-anchor="middle">
+    UNIT BISNIS MANDIRI (UBM) &bull; POLITEKNIK TAKUMI
+  </text>
+
+  <!-- Centered Checklist Icon -->
+  <circle cx="270" cy="108" r="34" fill="url(#checkGrad)"/>
+  <circle cx="270" cy="108" r="39" fill="none" stroke="#a7f3d0" stroke-width="2.5" stroke-dasharray="4 2"/>
+  <path d="M 255 108 L 266 119 L 288 97" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Checklist Badge -->
+  <rect x="175" y="152" width="190" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="270" y="167" fill="#047857" font-size="10" font-weight="800" letter-spacing="1" text-anchor="middle">
+    &#10003; TERVERIFIKASI DIGITAL
+  </text>
+
+  <!-- Approved By Text (USER REQUIREMENT) -->
+  <text x="270" y="202" fill="#0f172a" font-size="20" font-weight="800" text-anchor="middle">
+    Approved by ${displayName}
+  </text>
+
+  <!-- Role Title -->
+  <text x="270" y="225" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">
+    ${displayRole}
+  </text>
+
+  <!-- Detail Box -->
+  <rect x="36" y="244" width="468" height="84" rx="10" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="50" y="266" fill="#475569" font-size="11" font-weight="600">
+    Dokumen: <tspan fill="#0f172a" font-weight="700">${displayTitle}</tspan> (${displayDoc})
+  </text>
+  <text x="50" y="288" fill="#475569" font-size="11">
+    Status Keabsahan: <tspan fill="#059669" font-weight="700">&#10003; Resmi Disetujui &amp; Sah pada Database UBM</tspan>
+  </text>
+  <text x="50" y="309" fill="#64748b" font-size="10.5">
+    Tanggal Validasi: <tspan fill="#0f172a">${cleanDate}</tspan> &bull; Sistem Verifikasi Otomatis UBM
+  </text>
+</svg>`;
+  }
+
+  // Verification Badge Image Endpoint (.svg)
+  router.get('/signature-badge.svg', (req, res) => {
+    const name = req.query.name || 'Rizaldi Putra, M.Kom';
+    const role = req.query.role || 'Ketua Unit Bisnis Mandiri (UBM)';
+    const doc = req.query.doc || 'ST/UBM-ENG/2026/001';
+    const date = req.query.date || '';
+    const title = req.query.title || 'Surat Tugas Pelaksanaan Proyek';
+    const svg = buildSignatureBadgeSvg(name, role, doc, date, title);
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(svg);
+  });
+
+  // Server Info / Local LAN IP Endpoint
+  router.get('/server-info', (req, res) => {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    let lanIp = '';
+    for (const k in interfaces) {
+      for (const addr of interfaces[k]) {
+        if (addr.family === 'IPv4' && !addr.internal) {
+          lanIp = addr.address;
+          break;
+        }
+      }
+      if (lanIp) break;
+    }
+    res.json({
+      lanIp: lanIp || 'localhost',
+      port: process.env.PORT || 3000,
+      host: req.get('host') || 'localhost:3000'
+    });
+  });
+
+  // Dedicated Endpoint: Download Signature Verification PDF
+  const handleDownloadSignaturePdf = (req, res) => {
+    try {
+      const { name, role, doc, title, date } = req.query;
+      const rawName = name || 'Pejabat Berwenang';
+      const cleanName = rawName.replace(/\.+$/, '');
+      const cleanRole = role || 'Pimpinan Unit Bisnis Mandiri (UBM)';
+      const cleanDoc = doc || 'UBM-DOC-2026';
+      const cleanTitle = title || 'Dokumen Resmi UBM';
+      const cleanDate = date || '';
+
+      const pdfBuffer = generateSignatureVerificationPdf({
+        name: rawName,
+        role: cleanRole,
+        doc: cleanDoc,
+        title: cleanTitle,
+        date: cleanDate
+      });
+
+      const filenameSafe = `Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filenameSafe}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error('Error generating signature verification PDF:', err);
+      res.status(500).json({ error: 'Gagal membuat berkas PDF verifikasi tanda tangan' });
+    }
+  };
+
+  router.get('/download-signature-pdf', handleDownloadSignaturePdf);
+  router.get('/api/download-signature-pdf', handleDownloadSignaturePdf);
+
+  // Dedicated Verification Page Route (Supports direct PDF download or HTML display)
+  const handleVerifikasiPage = (req, res) => {
+    if (req.query.format === 'pdf' || req.query.download === '1') {
+      return handleDownloadSignaturePdf(req, res);
+    }
+    if (req.query.format === 'image' || req.query.format === 'svg') {
+      const name = req.query.name || 'Rizaldi Putra, M.Kom';
+      const role = req.query.role || 'Ketua Unit Bisnis Mandiri (UBM)';
+      const doc = req.query.doc || 'ST/UBM-ENG/2026/001';
+      const date = req.query.date || '';
+      const title = req.query.title || 'Surat Tugas Pelaksanaan Proyek';
+      const svg = buildSignatureBadgeSvg(name, role, doc, date, title);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(svg);
+    }
+    res.sendFile(path.join(__dirname, '..', '..', 'public', 'verifikasi.html'));
+  };
+
+  router.get('/verifikasi', handleVerifikasiPage);
+  router.get('/verify-approval', handleVerifikasiPage);
 
   return router;
 };

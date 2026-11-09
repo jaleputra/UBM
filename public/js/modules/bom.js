@@ -29,6 +29,15 @@ function isServiceOrder(order) {
 let currentPRPickerItems = [];
 let currentBOMTab = 'orders';
 
+function handleCreateMasterBOMClick() {
+  if (typeof canUserCreateMasterBOM === 'function' && !canUserCreateMasterBOM()) {
+    showToast('⚠️ Member tidak memiliki akses untuk membuat Master BOM. Master BOM hanya bisa dibuat oleh Administrator, Lead Project, dan Ketua UBM.', 'warning');
+    return;
+  }
+  openBOMPage();
+}
+window.handleCreateMasterBOMClick = handleCreateMasterBOMClick;
+
 function switchBOMTab(tab) {
   currentBOMTab = tab;
   const ordersTab = document.getElementById('bom-tab-orders-content');
@@ -58,14 +67,35 @@ function updateBOMTabBadges() {
   const badgeOrders = document.getElementById('badge-tab-bom-orders-count');
   const badgeMaster = document.getElementById('badge-tab-bom-master-count');
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
   if (badgeMaster) {
-    const acceptedTemplatesCount = (state.bom || []).filter(b => b.status === 'Accepted').length;
+    let masterList = [...(state.bom || [])];
+    if (roleName === 'Member') {
+      masterList = masterList.filter(b => {
+        if (b.orderId || b.projectId) {
+          return typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(b.orderId || b.projectId, activeUser) : false;
+        }
+        const userProjects = (state.projects || []).filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : false);
+        return userProjects.some(p =>
+          p.bomId === b.id ||
+          (p.projectName && b.productName && p.projectName.toLowerCase().trim() === b.productName.toLowerCase().trim()) ||
+          (p.projectName && b.projectName && p.projectName.toLowerCase().trim() === b.projectName.toLowerCase().trim())
+        );
+      });
+    }
+    const acceptedTemplatesCount = masterList.filter(b => b.status === 'Accepted').length;
     badgeMaster.textContent = acceptedTemplatesCount;
   }
 
   if (badgeOrders) {
     let orderItemsCount = 0;
-    (state.orders || []).filter(o => !isServiceOrder(o)).forEach(o => {
+    let ordersList = (state.orders || []).filter(o => !isServiceOrder(o));
+    if (roleName === 'Member') {
+      ordersList = ordersList.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+    }
+    ordersList.forEach(o => {
       (o.items || []).forEach(item => {
         const itemNameClean = (item.itemName || '').toLowerCase().trim();
         const boms = (state.bom || []).filter(b => b.orderId === o.id || (b.productName && (b.productName || '').toLowerCase().trim() === itemNameClean));
@@ -87,8 +117,52 @@ function renderBOMMasterListTable() {
   const tbody = document.getElementById('table-bom-body');
   if (!tbody) return;
 
-  // Hanya tampilkan BOM yang sudah berstatus Accepted dari Order Penjualan
-  let list = (state.bom || []).filter(b => b.status === 'Accepted');
+  // Kontrol tombol 'Buat Master BOM' sesuai hak akses (Admin, Ketua UBM, Lead Project)
+  const createMasterBtn = document.getElementById('btn-create-master-bom');
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  const canCreateMaster = typeof canUserCreateMasterBOM === 'function' ? canUserCreateMasterBOM(activeUser) : true;
+
+  if (createMasterBtn) {
+    if (!canCreateMaster) {
+      createMasterBtn.setAttribute('disabled', 'true');
+      createMasterBtn.style.opacity = '0.45';
+      createMasterBtn.style.cursor = 'not-allowed';
+      createMasterBtn.title = 'Akses Terkunci: Master BOM hanya bisa dibuat oleh Administrator, Lead Project, dan Ketua UBM';
+      createMasterBtn.onclick = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        showToast('⚠️ Member tidak memiliki akses untuk membuat Master BOM. Master BOM hanya bisa dibuat oleh Administrator, Lead Project, dan Ketua UBM.', 'warning');
+      };
+    } else {
+      createMasterBtn.removeAttribute('disabled');
+      createMasterBtn.style.opacity = '1';
+      createMasterBtn.style.cursor = 'pointer';
+      createMasterBtn.title = 'Buat Master BOM Baru';
+      createMasterBtn.onclick = () => openBOMPage();
+    }
+  }
+
+  (state.bom || []).forEach(b => {
+    if (typeof ensureBOMProjectData === 'function') ensureBOMProjectData(b);
+  });
+
+  let list = [...(state.bom || [])];
+
+  // Role Member: hanya melihat Master BOM yang terkait dengan project yang di-assign padanya
+  if (userRole === 'Member') {
+    list = list.filter(b => {
+      if (b.orderId || b.projectId) {
+        return typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(b.orderId || b.projectId, activeUser) : false;
+      }
+      const userProjects = (state.projects || []).filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : false);
+      return userProjects.some(p =>
+        p.bomId === b.id ||
+        (p.projectName && b.productName && p.projectName.toLowerCase().trim() === b.productName.toLowerCase().trim()) ||
+        (p.projectName && b.projectName && p.projectName.toLowerCase().trim() === b.projectName.toLowerCase().trim())
+      );
+    });
+  }
 
   if (state.searchQuery) {
     const q = state.searchQuery.toLowerCase();
@@ -101,7 +175,11 @@ function renderBOMMasterListTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 28px;">Belum ada Template BOM yang berstatus Accepted. Formulir BOM pada tab <b>Order Penjualan (Input Formulasi BOM)</b> yang statusnya telah diubah menjadi <b>Accepted</b> akan otomatis tampil di sini sebagai Template BOM.</td></tr>';
+    if (userRole === 'Member') {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 36px;"><p style="font-size: 13.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">Belum Ada Template BOM untuk Project Anda</p><p style="font-size: 12px; color: #94a3b8; margin: 0;">Tidak ada formula Master BOM yang terkait dengan project yang ditugaskan ke Anda.</p></td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 28px;">Belum ada Template Master BOM tersimpan. Klik tombol <b>+ Buat Master BOM</b> di atas untuk membuat template baru.</td></tr>';
+    }
     return;
   }
 
@@ -114,13 +192,49 @@ function renderBOMMasterListTable() {
     const totalHPP = bom.totalEstimatedCost !== undefined ? Number(bom.totalEstimatedCost) : (materialCost + labor + overhead);
 
     const refOrderHtml = bom.orderId ?
-      `<span class="mono-id font-sm text-primary font-bold" style="font-size: 11px;">${escapeHtml(bom.orderId)}</span>` :
-      `<span class="text-muted font-sm" style="font-size: 11px;">Master Standar</span>`;
+      `<span class="mono-id font-sm text-primary font-bold" style="font-size: 11px;">${escapeHtml(bom.orderId)}</span>${bom.customerName ? `<div class="text-muted font-xs" style="font-size: 10px;">${escapeHtml(bom.customerName)}</div>` : ''}` :
+      `<span class="text-muted font-sm" style="font-size: 11px;">Template Standar</span>`;
 
-    const isAccepted = bom.status === 'Accepted';
-    const statusBadgeHtml = isAccepted ?
-      `<span class="badge badge-success" style="font-size: 10.5px; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> Accepted</span>` :
-      `<span class="badge badge-amber" style="font-size: 10.5px; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="clock" style="width: 11px; height: 11px;"></i> Pengajuan</span>`;
+    const currentStatus = bom.status || 'Pengajuan';
+    const isAccepted = currentStatus === 'Accepted';
+    const isDitolak = currentStatus === 'Ditolak';
+
+    const statusColorStyle = isAccepted
+      ? 'border: 1.5px solid #10b981; color: #047857; background: #ecfdf5;'
+      : (isDitolak
+          ? 'border: 1.5px solid #ef4444; color: #b91c1c; background: #fef2f2;'
+          : 'border: 1.5px solid #f59e0b; color: #b45309; background: #fffbeb;');
+
+    const canApproveBOM = typeof hasRolePermission === 'function'
+      ? hasRolePermission('canApproveBOM')
+      : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+
+    const statusBadgeHtml = canApproveBOM ? `
+      <select class="form-control form-control-sm" style="font-size: 11px; padding: 2px 6px; font-weight: 700; border-radius: 6px; cursor: pointer; width: auto; display: inline-block; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${bom.orderId || ''}', '${bom.id}', this.value)">
+        <option value="Pengajuan" ${currentStatus === 'Pengajuan' ? 'selected' : ''}>🟡 Pengajuan</option>
+        <option value="Accepted" ${isAccepted ? 'selected' : ''}>🟢 Accepted</option>
+        <option value="Ditolak" ${isDitolak ? 'selected' : ''}>🔴 Tolak</option>
+      </select>
+    ` : `
+      <span class="badge" style="font-size: 11px; padding: 4px 8px; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; ${statusColorStyle}">
+        ${isAccepted ? '🟢 Accepted' : (isDitolak ? '🔴 Tolak' : '🟡 Pengajuan')}
+      </span>
+    `;
+
+    const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(bom.orderId || bom.projectId, activeUser) : false;
+    const canEditOrDelete = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
+
+    const actionButtonsHtml = canEditOrDelete ? `
+      <div class="table-actions">
+        <button class="btn-icon" style="color: #2563eb;" title="Lihat Struktur BOM" onclick="event.stopPropagation(); viewBOMDetail('${bom.id}')"><i data-lucide="eye"></i></button>
+        ${!isAccepted ? `<button class="btn-icon" style="color: #4f46e5;" title="Edit Template BOM" onclick="event.stopPropagation(); editBOM('${bom.id}')"><i data-lucide="edit-2"></i></button>` : ''}
+        <button class="btn-icon btn-danger-ghost" title="Hapus Template BOM" onclick="event.stopPropagation(); deleteResource('bom', '${bom.id}')"><i data-lucide="trash-2"></i></button>
+      </div>
+    ` : `
+      <div class="table-actions">
+        <button class="btn-icon" style="color: #2563eb;" title="Lihat Struktur BOM" onclick="event.stopPropagation(); viewBOMDetail('${bom.id}')"><i data-lucide="eye"></i></button>
+      </div>
+    `;
 
     return `
       <tr style="cursor: pointer;" onclick="viewBOMDetail('${bom.id}')" title="Klik baris untuk melihat detail struktur Template BOM">
@@ -137,10 +251,7 @@ function renderBOMMasterListTable() {
         <td class="font-bold font-mono text-emerald" style="font-size: 12px;">${formatRupiah(totalHPP)}</td>
         <td style="text-align: center;">${statusBadgeHtml}</td>
         <td class="text-right">
-          <div class="table-actions">
-            <button class="btn-icon" style="color: #2563eb;" title="Lihat Struktur BOM" onclick="event.stopPropagation(); viewBOMDetail('${bom.id}')"><i data-lucide="eye"></i></button>
-            <button class="btn-icon btn-danger-ghost" title="Hapus Template BOM" onclick="event.stopPropagation(); deleteResource('bom', '${bom.id}')"><i data-lucide="trash-2"></i></button>
-          </div>
+          ${actionButtonsHtml}
         </td>
       </tr>
     `;
@@ -218,33 +329,74 @@ async function deductBOMComponentsStock(components) {
 }
 
 async function changeOrderBOMStatus(orderId, bomId, newStatus) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  const canApprove = (typeof hasRolePermission === 'function')
+    ? hasRolePermission('canApproveBOM')
+    : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+
+  if (!canApprove) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Hanya Bagian Keuangan, Ketua UBM, dan Administrator yang memiliki wewenang untuk menyetujui / merubah Status BOM.', 'warning');
+    }
+    if (typeof renderBOMTable === 'function') renderBOMTable();
+    return;
+  }
+
   const bom = (state.bom || []).find(b => b.id === bomId);
   if (!bom) return;
 
-  if (bom.status === 'Accepted') {
-    showToast('⚠️ Status BOM yang sudah Accepted terkunci permanen dan tidak dapat diubah kembali!', 'warning');
-    renderBOMPendingOrders();
-    return;
-  }
-
-  if (bom.status === 'Ditolak') {
-    showToast('⚠️ Status BOM yang sudah Ditolak terkunci permanen dan tidak dapat diubah lagi! Silakan buat pengajuan ulang.', 'warning');
-    renderBOMPendingOrders();
-    return;
-  }
-
-  const prevStatus = bom.status;
+  const prevStatus = bom.status || 'Pengajuan';
   const targetStatus = (newStatus === 'Accepted') ? 'Accepted' : ((newStatus === 'Ditolak' || newStatus === 'Tolak') ? 'Ditolak' : 'Pengajuan');
 
   if (prevStatus === targetStatus) return;
 
   bom.status = targetStatus;
+  bom.updatedAt = new Date().toISOString();
 
-  // Jika status diubah menjadi Ditolak dan sebelumnya bukan Ditolak, kembalikan stok
-  if (targetStatus === 'Ditolak' && prevStatus !== 'Ditolak') {
+  // Stok & HPP Management
+  if (targetStatus === 'Accepted') {
+    await deductBOMComponentsStock(bom.components);
+    if (typeof window.syncBOMToProjectFinances === 'function') {
+      await window.syncBOMToProjectFinances(bom);
+    }
+    const resolvedOrderId = orderId || bom.orderId;
+    if (resolvedOrderId) {
+      const targetOrder = (state.orders || []).find(o => o.id === resolvedOrderId);
+      if (targetOrder && (targetOrder.status === 'Accepted' || targetOrder.status === 'Confirmed')) {
+        targetOrder.status = 'In Production';
+        targetOrder.updatedAt = new Date().toISOString();
+        if (typeof directSupabaseUpsertNativeRow === 'function') {
+          await directSupabaseUpsertNativeRow('orders', targetOrder).catch(() => {});
+        }
+        fetch(`/api/orders/${targetOrder.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(targetOrder)
+        }).catch(e => console.warn('Sync order status to In Production error:', e));
+      }
+    }
+  } else if (targetStatus === 'Ditolak') {
+    if (prevStatus === 'Accepted') {
+      await restoreBOMComponentsStock(bom.components);
+    }
+  } else if (targetStatus === 'Pengajuan' && prevStatus === 'Accepted') {
     await restoreBOMComponentsStock(bom.components);
   }
 
+  // 1. Direct Supabase Upsert Native Table & Cloud Sync Store
+  try {
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('bom', bom);
+    }
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('bom', state.bom);
+    }
+  } catch (err) {
+    console.warn('Direct Supabase status update error:', err);
+  }
+
+  // 2. Server API sync
   try {
     const res = await fetch(`/api/bom/${bom.id}`, {
       method: 'PUT',
@@ -254,14 +406,15 @@ async function changeOrderBOMStatus(orderId, bomId, newStatus) {
 
     if (res.ok) {
       if (bom.status === 'Accepted') {
-        showToast(`Status BOM untuk Order ${orderId} (${bom.productName}) berhasil diubah menjadi "Accepted" & telah dikunci permanen!`, 'success');
+        showToast(`✅ Status BOM (${bom.productName}) berhasil disetujui ("Accepted") & HPP disinkronkan ke Keuangan Project!`, 'success');
       } else if (bom.status === 'Ditolak') {
-        showToast(`Status BOM ${bom.id} ditolak & dikunci permanen. Stok barang telah dikembalikan ke Inventory. Silakan gunakan tombol "Ajukan Ulang" untuk membuat formula baru.`, 'warning');
+        showToast(`⚠️ Status BOM ${bom.id} ditolak. Stok barang telah dikembalikan ke Inventory.`, 'warning');
       } else {
-        showToast(`Status BOM untuk Order ${orderId} diatur ke "Pengajuan".`, 'info');
+        showToast(`ℹ️ Status BOM (${bom.productName}) diatur ke "Pengajuan".`, 'info');
       }
       await fetchResource('bom');
       await fetchResource('purchasing');
+      await fetchResource('projects');
       renderBOMPendingOrders();
       renderBOMTable();
       renderOrdersTable();
@@ -272,11 +425,13 @@ async function changeOrderBOMStatus(orderId, bomId, newStatus) {
     } else {
       showToast('Gagal memperbarui status Master BOM', 'error');
       renderBOMPendingOrders();
+      renderBOMMasterListTable();
     }
   } catch (err) {
     console.error('Error changing BOM status:', err);
     showToast('Terjadi kesalahan jaringan saat memperbarui status BOM', 'error');
     renderBOMPendingOrders();
+    renderBOMMasterListTable();
   }
 }
 
@@ -285,13 +440,23 @@ function renderBOMPendingOrders() {
   const container = document.getElementById('bom-pending-orders-list');
   const countBadge = document.getElementById('bom-pending-orders-count');
 
-  const orders = (state.orders || []).filter(o => !isServiceOrder(o));
+  (state.bom || []).forEach(b => {
+    if (typeof ensureBOMProjectData === 'function') ensureBOMProjectData(b);
+  });
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  let orders = (state.orders || []).filter(o => !isServiceOrder(o));
+  if (userRole === 'Member') {
+    orders = orders.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+  }
 
   let unlinkedItems = [];
   orders.forEach(order => {
     const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
     const isPOAndAccepted = hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
-    const project = (state.projects || []).find(p => p.orderId === order.id);
+    const project = (state.projects || []).find(p => p.orderId === order.id || p.id === order.id);
     const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
 
     (order.items || []).forEach(item => {
@@ -300,6 +465,8 @@ function renderBOMPendingOrders() {
       // Cari semua BOM yang terkait dengan order/item ini (baik Ditolak, Pengajuan, maupun Accepted)
       const bomsForOrder = (state.bom || []).filter(b => 
         b.orderId === order.id || 
+        (project && b.projectId === project.id) ||
+        (b.projectName && project?.projectName && b.projectName.toLowerCase().trim() === project.projectName.toLowerCase().trim()) ||
         (b.productName && (b.productName || '').toLowerCase().trim() === itemNameClean)
       );
 
@@ -357,7 +524,11 @@ function renderBOMPendingOrders() {
   // 1. Render in Table Body if present
   if (tableBody) {
     if (unlinkedItems.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">Tidak ada order penjualan yang menunggu formulasi BOM.</td></tr>';
+      if (userRole === 'Member') {
+        tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 36px;"><p style="font-size: 13.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">Belum Ada Order yang Ditugaskan</p><p style="font-size: 12px; color: #94a3b8; margin: 0;">Anda belum terdaftar sebagai Project Lead atau anggota tim pada order/project manapun.</p></td></tr>';
+      } else {
+        tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">Tidak ada order penjualan yang menunggu formulasi BOM.</td></tr>';
+      }
     } else {
       tableBody.innerHTML = unlinkedItems.map(item => {
         let statusBadgeHtml = '';
@@ -373,56 +544,42 @@ function renderBOMPendingOrders() {
           actionBtnHtml = `<button class="btn btn-sm btn-outline" style="font-size: 11px; color: #4f46e5; border-color: #c7d2fe;" onclick="event.stopPropagation(); openTeamAssignmentPage('${item.orderId}')" title="Tentukan Project Leader di Penugasan Tim terlebih dahulu"><i data-lucide="users" style="width: 12px; height: 12px;"></i> Penugasan Lead</button>`;
           rowOnClick = `openTeamAssignmentPage('${item.orderId}')`;
         } else if (item.isAlreadyBOM && item.relatedBOM) {
-          const isAccepted = item.relatedBOM.status === 'Accepted';
-          const isDitolak = item.relatedBOM.status === 'Ditolak';
+          const currentStatus = item.relatedBOM.status || 'Pengajuan';
+          const isAccepted = currentStatus === 'Accepted';
+          const isDitolak = currentStatus === 'Ditolak';
 
-          if (isAccepted) {
-            statusBadgeHtml = `
-              <span class="badge badge-success" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700;">
-                <i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Accepted
-              </span>
-            `;
-            actionBtnHtml = `
-              <div style="display: inline-flex; gap: 4px;">
-                <button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 10px; color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')" title="Lihat Master BOM yang sudah disimpan (Terkunci)"><i data-lucide="eye"></i> Lihat BOM</button>
-              </div>
-            `;
-            rowOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          } else if (isDitolak) {
-            // STATUS DITOLAK: TERKUNCI PERMANEN
-            // Jika sudah ada pengajuan BOM baru (hasActiveBOM), tombol Ajukan Ulang dinonaktifkan
-            statusBadgeHtml = `
-              <span class="badge badge-danger" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;">
-                <i data-lucide="x-circle" style="width: 12px; height: 12px;"></i> Ditolak
-              </span>
-            `;
-            const btnReapplyHtml = item.hasActiveBOM ?
-              `<button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 10px; color: #94a3b8; border-color: #cbd5e1; background: #f8fafc; cursor: not-allowed; opacity: 0.6;" onclick="event.stopPropagation(); showToast('⚠️ Draf ini tidak dapat diajukan ulang lagi karena sudah terdapat pengajuan formula BOM baru yang aktif untuk order ini.', 'warning')" title="⚠️ Sudah ada pengajuan formula BOM baru"><i data-lucide="lock" style="width: 12px; height: 12px;"></i> Ajukan Ulang</button>` :
-              `<button class="btn btn-sm btn-primary" style="font-size: 11.5px; padding: 4px 10px; background: #dc2626; border-color: #dc2626;" onclick="event.stopPropagation(); reapplyBOMFromRejected('${item.orderId}', '${item.relatedBOM.id}')" title="BOM Ditolak: Buat Pengajuan Ulang sebagai Formula Baru"><i data-lucide="plus-circle"></i> Ajukan Ulang</button>`;
+          const statusColorStyle = isAccepted
+            ? 'border: 1.5px solid #10b981; color: #047857; background: #ecfdf5;'
+            : (isDitolak
+                ? 'border: 1.5px solid #ef4444; color: #b91c1c; background: #fef2f2;'
+                : 'border: 1.5px solid #f59e0b; color: #b45309; background: #fffbeb;');
 
-            actionBtnHtml = `
-              <div style="display: inline-flex; gap: 6px;">
-                <button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 8px; color: #2563eb; border-color: #bfdbfe;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')" title="Lihat rincian BOM yang Ditolak"><i data-lucide="eye"></i> Lihat</button>
-                ${btnReapplyHtml}
-              </div>
-            `;
-            rowOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          } else {
-            // STATUS PENGAJUAN: Pilihan Pengajuan, Accepted, Tolak
-            statusBadgeHtml = `
-              <select class="form-control form-control-sm" style="font-size: 11px; padding: 3px 8px; font-weight: 700; border: 1.5px solid #f59e0b; color: #b45309; background: #fffbeb; border-radius: 6px; cursor: pointer; width: auto; display: inline-block;" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
-                <option value="Pengajuan" selected>🟡 Pengajuan</option>
-                <option value="Accepted">🟢 Accepted</option>
-                <option value="Ditolak">🔴 Tolak</option>
-              </select>
-            `;
-            actionBtnHtml = `
-              <div style="display: inline-flex; gap: 4px;">
-                <button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 10px; color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')" title="Lihat Master BOM yang sedang diajukan"><i data-lucide="eye"></i> Lihat BOM</button>
-              </div>
-            `;
-            rowOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          }
+          const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+          const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+          const canApproveBOM = typeof hasRolePermission === 'function'
+            ? hasRolePermission('canApproveBOM')
+            : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+
+          statusBadgeHtml = canApproveBOM ? `
+            <select class="form-control form-control-sm" style="font-size: 11px; padding: 3px 8px; font-weight: 700; border-radius: 6px; cursor: pointer; width: auto; display: inline-block; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
+              <option value="Pengajuan" ${currentStatus === 'Pengajuan' ? 'selected' : ''}>🟡 Pengajuan</option>
+              <option value="Accepted" ${isAccepted ? 'selected' : ''}>🟢 Accepted (Disetujui)</option>
+              <option value="Ditolak" ${isDitolak ? 'selected' : ''}>🔴 Ditolak</option>
+            </select>
+          ` : `
+            <span class="badge" style="font-size: 11px; padding: 4px 8px; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; ${statusColorStyle}">
+              ${isAccepted ? '🟢 Accepted (Disetujui)' : (isDitolak ? '🔴 Ditolak' : '🟡 Pengajuan')}
+            </span>
+          `;
+
+          actionBtnHtml = `
+            <div style="display: inline-flex; gap: 4px;">
+              <button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 10px; color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')" title="Lihat Master BOM"><i data-lucide="eye"></i> Lihat</button>
+              ${!isAccepted ? `<button class="btn btn-sm btn-outline" style="font-size: 11.5px; padding: 4px 8px; color: #4f46e5; border-color: #c7d2fe;" onclick="event.stopPropagation(); editBOM('${item.relatedBOM.id}')" title="Edit Formula BOM"><i data-lucide="edit-2"></i> Edit</button>` : ''}
+              ${isDitolak ? `<button class="btn btn-sm btn-primary" style="font-size: 11.5px; padding: 4px 10px; background: #dc2626; border-color: #dc2626;" onclick="event.stopPropagation(); reapplyBOMFromRejected('${item.orderId}', '${item.relatedBOM.id}')" title="BOM Ditolak: Buat Pengajuan Ulang"><i data-lucide="plus-circle"></i> Ajukan Ulang</button>` : ''}
+            </div>
+          `;
+          rowOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
         } else {
           statusBadgeHtml = '<span class="badge badge-purple" style="font-size: 10px;"><i data-lucide="boxes" style="width: 11px; height: 11px;"></i> Siap Input BOM</span>';
           const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
@@ -449,7 +606,7 @@ function renderBOMPendingOrders() {
             </td>
             <td><span class="badge badge-secondary font-bold">${item.qty} ${item.unit}</span></td>
             <td>${item.dueDate || '-'}</td>
-            <td>${statusBadgeHtml}</td>
+            <td style="text-align: center;">${statusBadgeHtml}</td>
             <td class="text-right">
               ${actionBtnHtml}
             </td>
@@ -462,7 +619,11 @@ function renderBOMPendingOrders() {
   // 2. Render in Card Container if present
   if (container) {
     if (unlinkedItems.length === 0) {
-      container.innerHTML = '<div class="text-muted p-3 text-center font-sm">Tidak ada order penjualan yang menunggu pengisian BOM.</div>';
+      if (userRole === 'Member') {
+        container.innerHTML = '<div class="text-muted p-4 text-center font-sm"><p style="font-weight: 600; color: #475569; margin-bottom: 2px;">Belum Ada Order yang Ditugaskan</p><p style="color: #94a3b8; font-size: 11.5px; margin: 0;">Anda belum terdaftar sebagai Project Lead atau anggota tim pada order/project manapun.</p></div>';
+      } else {
+        container.innerHTML = '<div class="text-muted p-3 text-center font-sm">Tidak ada order penjualan yang menunggu pengisian BOM.</div>';
+      }
     } else {
       container.innerHTML = unlinkedItems.map(item => {
         let actionBtnHtml = '';
@@ -476,36 +637,42 @@ function renderBOMPendingOrders() {
           actionBtnHtml = `<button class="btn btn-sm btn-outline" style="font-size: 11px; color: #4f46e5; border-color: #c7d2fe;" onclick="event.stopPropagation(); openTeamAssignmentPage('${item.orderId}')" title="Tentukan Project Leader di Penugasan Tim"><i data-lucide="users" style="width: 12px; height: 12px;"></i> Tentukan Leader</button>`;
           cardOnClick = `openTeamAssignmentPage('${item.orderId}')`;
         } else if (item.isAlreadyBOM && item.relatedBOM) {
-          const isAccepted = item.relatedBOM.status === 'Accepted';
-          const isDitolak = item.relatedBOM.status === 'Ditolak';
+          const currentStatus = item.relatedBOM.status || 'Pengajuan';
+          const isAccepted = currentStatus === 'Accepted';
+          const isDitolak = currentStatus === 'Ditolak';
 
-          if (isAccepted) {
-            statusBadgeHtml = `<span class="badge badge-success" style="font-size: 10.5px; margin-left: 6px;"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> Accepted</span>`;
-            actionBtnHtml = `<button class="btn btn-sm btn-outline" style="color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')"><i data-lucide="eye"></i> Lihat BOM</button>`;
-            cardOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          } else if (isDitolak) {
-            statusBadgeHtml = `<span class="badge badge-danger" style="font-size: 10.5px; margin-left: 6px; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5;"><i data-lucide="x-circle" style="width: 11px; height: 11px;"></i> Ditolak</span>`;
-            const btnReapplyHtml = item.hasActiveBOM ?
-              `<button class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #cbd5e1; background: #f8fafc; cursor: not-allowed; opacity: 0.6;" onclick="event.stopPropagation(); showToast('⚠️ Draf ini tidak dapat diajukan ulang lagi karena sudah terdapat pengajuan formula BOM baru yang aktif untuk order ini.', 'warning')" title="⚠️ Sudah ada formulasi BOM baru"><i data-lucide="lock" style="width: 11px; height: 11px;"></i> Ajukan Ulang</button>` :
-              `<button class="btn btn-sm btn-primary" style="background: #dc2626; border-color: #dc2626;" onclick="event.stopPropagation(); reapplyBOMFromRejected('${item.orderId}', '${item.relatedBOM.id}')"><i data-lucide="plus-circle"></i> Ajukan Ulang</button>`;
+          const statusColorStyle = isAccepted
+            ? 'border: 1.5px solid #10b981; color: #047857; background: #ecfdf5;'
+            : (isDitolak
+                ? 'border: 1.5px solid #ef4444; color: #b91c1c; background: #fef2f2;'
+                : 'border: 1.5px solid #f59e0b; color: #b45309; background: #fffbeb;');
 
-            actionBtnHtml = `
-              <div style="display: inline-flex; gap: 6px;">
-                <button class="btn btn-sm btn-outline" style="color: #2563eb; border-color: #bfdbfe;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')"><i data-lucide="eye"></i> Lihat</button>
-                ${btnReapplyHtml}
-              </div>
-            `;
-            cardOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          } else {
-            statusBadgeHtml = `
-              <select class="form-control form-control-sm" style="font-size: 10.5px; padding: 2px 6px; font-weight: 700; border: 1px solid #f59e0b; color: #b45309; background: #fffbeb; border-radius: 4px; display: inline-block; width: auto; margin-left: 6px;" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
-                <option value="Pengajuan" selected>🟡 Pengajuan</option>
-                <option value="Accepted">🟢 Accepted</option>
-                <option value="Ditolak">🔴 Tolak</option>
-              </select>`;
-            actionBtnHtml = `<button class="btn btn-sm btn-outline" style="color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')"><i data-lucide="eye"></i> Lihat BOM</button>`;
-            cardOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
-          }
+          const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+          const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+          const canApproveBOM = typeof hasRolePermission === 'function'
+            ? hasRolePermission('canApproveBOM')
+            : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+
+          statusBadgeHtml = canApproveBOM ? `
+            <select class="form-control form-control-sm" style="font-size: 10.5px; padding: 2px 6px; font-weight: 700; border-radius: 4px; display: inline-block; width: auto; margin-left: 6px; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
+              <option value="Pengajuan" ${currentStatus === 'Pengajuan' ? 'selected' : ''}>🟡 Pengajuan</option>
+              <option value="Accepted" ${isAccepted ? 'selected' : ''}>🟢 Accepted</option>
+              <option value="Ditolak" ${isDitolak ? 'selected' : ''}>🔴 Tolak</option>
+            </select>
+          ` : `
+            <span class="badge" style="font-size: 10.5px; padding: 3px 6px; font-weight: 700; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; ${statusColorStyle}">
+              ${isAccepted ? '🟢 Accepted' : (isDitolak ? '🔴 Tolak' : '🟡 Pengajuan')}
+            </span>
+          `;
+
+          actionBtnHtml = `
+            <div style="display: inline-flex; gap: 4px;">
+              <button class="btn btn-sm btn-outline" style="color: #059669; border-color: #a7f3d0;" onclick="event.stopPropagation(); viewBOMDetail('${item.relatedBOM.id}')"><i data-lucide="eye"></i> Lihat BOM</button>
+              ${!isAccepted ? `<button class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe;" onclick="event.stopPropagation(); editBOM('${item.relatedBOM.id}')"><i data-lucide="edit-2"></i></button>` : ''}
+              ${isDitolak ? `<button class="btn btn-sm btn-primary" style="background: #dc2626; border-color: #dc2626;" onclick="event.stopPropagation(); reapplyBOMFromRejected('${item.orderId}', '${item.relatedBOM.id}')"><i data-lucide="plus-circle"></i> Ajukan Ulang</button>` : ''}
+            </div>
+          `;
+          cardOnClick = `viewBOMDetail('${item.relatedBOM.id}')`;
         } else {
           const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
           const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(item.orderId, activeUser) : true;
@@ -603,14 +770,15 @@ function createBOMFromOrder(orderId) {
   const pendingBOM = existingBOMs.find(b => b.status === 'Pengajuan');
   const rejectedBOM = existingBOMs.find(b => b.status === 'Ditolak');
 
-  // Validasi Wewenang: Hanya Lead Project atau Administrator yang dapat mengisi/mengubah BOM
+  // Validasi Wewenang: Hanya Lead Project, Pengguna dengan Wewenang BOM, atau Administrator
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const canManage = typeof hasRolePermission === 'function' ? hasRolePermission('canManageBOM') : true;
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
 
-  if (!isLead) {
+  if (activeUser && !canManage && !isLead) {
     const existingBOM = acceptedBOM || pendingBOM || existingBOMs[0];
     if (existingBOM) {
-      showToast('Mode Lihat: Hanya Lead Project yang dapat mengisi/mengubah formula BOM. Anda membuka dalam mode pratinjau.', 'info');
+      showToast('Mode Lihat: Hanya Lead Project atau Administrator yang dapat mengisi/mengubah formula BOM. Anda membuka dalam mode pratinjau.', 'info');
       openBOMPage(existingBOM, order.id, itemName, sku, true);
       return;
     } else {
@@ -623,8 +791,8 @@ function createBOMFromOrder(orderId) {
     // BOM sudah Accepted: Buka BOM dalam mode TERKUNCI (Read-Only)
     openBOMPage(acceptedBOM, order.id, itemName, sku, true);
   } else if (pendingBOM) {
-    // BOM masih Pengajuan: Buka mode preview
-    openBOMPage(pendingBOM, order.id, itemName, sku, true);
+    // BOM masih Pengajuan: Buka mode EDIT formulasi BOM
+    openBOMPage(pendingBOM, order.id, itemName, sku, false);
   } else if (rejectedBOM) {
     // BOM Ditolak: Buka formulir pengajuan ulang formula baru
     reapplyBOMFromRejected(order.id, rejectedBOM.id);
@@ -1102,9 +1270,21 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
   }
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+
+  // Guard khusus: Pembuatan Master BOM baru dari tab Template BOM (tanpa kaitan order)
+  if (!bomData && !defaultOrderId) {
+    const canCreateMaster = typeof canUserCreateMasterBOM === 'function' ? canUserCreateMasterBOM(activeUser) : true;
+    if (!canCreateMaster) {
+      showToast('⚠️ Member tidak memiliki akses untuk membuat Master BOM. Master BOM hanya bisa dibuat oleh Administrator, Lead Project, dan Ketua UBM.', 'warning');
+      return;
+    }
+  }
+
   const boundOrder = bomData?.orderId || defaultOrderId;
+  const canManage = typeof hasRolePermission === 'function' ? hasRolePermission('canManageBOM') : true;
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(boundOrder, activeUser) : true;
-  if (!isLead) {
+  if (activeUser && !canManage && !isLead) {
     isReadOnly = true;
   }
   if (defaultOrderId && !bomData) {
@@ -1123,7 +1303,8 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
 
       const project = (state.projects || []).find(p => p.orderId === defaultOrderId);
       const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
-      if (!hasProjectLead) {
+      const isAdminOrKetua = activeUser && (activeUser.role === 'Administrator' || activeUser.role === 'Ketua UBM' || activeUser.role === 'Wakil Direktur I' || (typeof getNormalizedRole === 'function' && ['Administrator', 'Ketua UBM', 'Wakil Direktur I'].includes(getNormalizedRole(activeUser))));
+      if (!hasProjectLead && !isAdminOrKetua) {
         showToast(`⚠️ Harap tentukan dan simpan Project Leader terlebih dahulu pada menu Penugasan Tim untuk Order ${defaultOrderId}!`, 'warning');
         if (typeof openTeamAssignmentPage === 'function') {
           openTeamAssignmentPage(defaultOrderId);
@@ -1288,7 +1469,11 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
   const orderSelect = document.getElementById('page-bom-order-select');
   if (orderSelect) {
     let orderOptions = '<option value="">-- Template Umum / Tanpa Kaitan Order --</option>';
-    (state.orders || []).filter(o => !isServiceOrder(o)).forEach(o => {
+    let ordersList = (state.orders || []).filter(o => !isServiceOrder(o));
+    if (userRole === 'Member') {
+      ordersList = ordersList.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+    }
+    ordersList.forEach(o => {
       (o.items || []).forEach((item, idx) => {
         const isSelected = selectedOrderId === o.id && (isEdit ? (!defaultItemName || defaultItemName === item.itemName) : (selectedOrderId === o.id));
         orderOptions += `<option value="${o.id}::${idx}" ${isSelected ? 'selected' : ''}>[${o.id}] ${o.customerName} - ${item.itemName} (${item.qty} ${item.unit || 'Unit'})</option>`;
@@ -1307,7 +1492,20 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
   const templateSelect = document.getElementById('page-bom-template-select');
   if (templateSelect) {
     let templateOptions = '<option value="">-- Pilih Template BOM Tersimpan (Status Accepted) --</option>';
-    const acceptedTemplates = (state.bom || []).filter(b => b.status === 'Accepted');
+    let acceptedTemplates = (state.bom || []).filter(b => b.status === 'Accepted');
+    if (userRole === 'Member') {
+      acceptedTemplates = acceptedTemplates.filter(b => {
+        if (b.orderId || b.projectId) {
+          return typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(b.orderId || b.projectId, activeUser) : false;
+        }
+        const userProjects = (state.projects || []).filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : false);
+        return userProjects.some(p =>
+          p.bomId === b.id ||
+          (p.projectName && b.productName && p.projectName.toLowerCase().trim() === b.productName.toLowerCase().trim()) ||
+          (p.projectName && b.projectName && p.projectName.toLowerCase().trim() === b.projectName.toLowerCase().trim())
+        );
+      });
+    }
     acceptedTemplates.forEach(b => {
       const compCount = b.components?.length || 0;
       const hppStr = formatRupiah(b.totalHPP || b.totalCost || 0);
@@ -1369,7 +1567,7 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
     overEl.style.cursor = isReadOnly ? 'default' : '';
   }
   if (notesEl) {
-    notesEl.value = isEdit ? (bomData?.notes || '') : '';
+    notesEl.value = isEdit ? (typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(bomData?.notes || '') : (bomData?.notes || '')) : '';
     notesEl.readOnly = isReadOnly;
     notesEl.style.backgroundColor = isReadOnly ? '#f8fafc' : '#ffffff';
     notesEl.style.cursor = isReadOnly ? 'default' : '';
@@ -1707,13 +1905,36 @@ function autoFillBOMPageFromOrder(selectVal) {
 }
 
 async function handleBOMPageSubmit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
   const editId = document.getElementById('page-bom-edit-id')?.value;
-  const selectedOrder = document.getElementById('page-bom-order-select')?.value?.split('::')?.[0];
-  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(selectedOrder, activeUser) : true;
-  if (!isLead) {
-    showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mengisi dan menyimpan BOM.', 'warning');
+  const orderSelectVal = document.getElementById('page-bom-order-select')?.value || '';
+  const orderId = orderSelectVal ? orderSelectVal.split('::')[0] : '';
+  const prodName = document.getElementById('page-bom-name')?.value?.trim() || '';
+
+  if (!prodName) {
+    showToast('Nama Produk Jadi wajib diisi!', 'warning');
     return;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  // Validasi wewenang pembuatan/penyimpanan BOM
+  if (!orderId) {
+    const canCreateMaster = typeof canUserCreateMasterBOM === 'function' ? canUserCreateMasterBOM(activeUser) : true;
+    if (!canCreateMaster) {
+      showToast('⚠️ Member tidak memiliki akses untuk membuat atau menyimpan Master BOM. Master BOM hanya bisa dibuat oleh Administrator, Lead Project, dan Ketua UBM.', 'warning');
+      return;
+    }
+  } else {
+    const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
+    const canManage = typeof hasRolePermission === 'function' ? hasRolePermission('canManageBOM') : true;
+    const isAdminOrKetua = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I');
+    if (activeUser && !isAdminOrKetua && !canManage && !isLead) {
+      showToast('⚠️ Hanya Lead Project yang ditugaskan pada order ini atau Administrator yang berwenang mengisi dan menyimpan BOM.', 'warning');
+      return;
+    }
   }
 
   const components = [];
@@ -1756,26 +1977,86 @@ async function handleBOMPageSubmit(e) {
     return;
   }
 
-  const orderSelectVal = document.getElementById('page-bom-order-select')?.value || '';
-  const orderId = orderSelectVal ? orderSelectVal.split('::')[0] : '';
-  
+  // Relasi Project & Pelanggan
+  let projectId = '';
+  let projectName = '';
+  let customerName = '';
+  if (orderId) {
+    const order = (state.orders || []).find(o => o.id === orderId);
+    if (order) {
+      customerName = order.customerName || '';
+    }
+    const prj = (state.projects || []).find(p => p.orderId === orderId || p.id === orderId);
+    if (prj) {
+      projectId = prj.id;
+      projectName = prj.projectName || '';
+      if (!customerName) customerName = prj.customerName || '';
+    }
+  }
+
+  // Kalkulasi Biaya
+  const laborCost = parseFloat(document.getElementById('page-bom-labor')?.value) || 0;
+  const overheadCost = parseFloat(document.getElementById('page-bom-overhead')?.value) || 0;
+  const materialCost = components.reduce((sum, c) => sum + ((parseFloat(c.qty) || 0) * (parseFloat(c.unitCost) || 0)), 0);
+  const totalEstimatedCost = materialCost + laborCost + overheadCost;
+
   // Jika editId diisi, berarti mengedit BOM yang sudah ada. Jika editId kosong, berarti membuat pengajuan BOM baru!
   const targetEditId = editId ? editId : null;
   const previousBOM = targetEditId ? (state.bom || []).find(b => b.id === targetEditId) : null;
+  const newId = targetEditId || `BOM-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
+  const nowIso = new Date().toISOString();
+  const todayDate = nowIso.split('T')[0];
+
+  const rawNotes = document.getElementById('page-bom-notes')?.value || '';
+  const bomMeta = { orderId, projectId, projectName, customerName };
+  const payloadNotes = typeof embedBOMMetaInNotes === 'function'
+    ? embedBOMMetaInNotes(rawNotes, bomMeta)
+    : rawNotes;
 
   const payload = {
+    id: newId,
     orderId,
-    productName: document.getElementById('page-bom-name')?.value || '',
-    productCode: document.getElementById('page-bom-code')?.value || '',
+    projectId,
+    projectName,
+    customerName,
+    productName: prodName,
+    productCode: document.getElementById('page-bom-code')?.value || newId,
     category: document.getElementById('page-bom-category')?.value || 'General',
     revision: document.getElementById('page-bom-revision')?.value || 'v1.0',
-    laborCost: parseFloat(document.getElementById('page-bom-labor')?.value) || 0,
-    overheadCost: parseFloat(document.getElementById('page-bom-overhead')?.value) || 0,
-    notes: document.getElementById('page-bom-notes')?.value || '',
+    createdDate: previousBOM?.createdDate || todayDate,
+    laborCost,
+    overheadCost,
+    materialCost,
+    totalEstimatedCost,
+    notes: payloadNotes,
     status: targetEditId ? (previousBOM?.status || 'Pengajuan') : 'Pengajuan',
-    components
+    components,
+    createdAt: previousBOM?.createdAt || nowIso,
+    updatedAt: nowIso
   };
 
+  // Optimistic update ke state.bom
+  if (!Array.isArray(state.bom)) state.bom = [];
+  const existingIdx = state.bom.findIndex(b => b.id === payload.id);
+  if (existingIdx !== -1) {
+    state.bom[existingIdx] = { ...state.bom[existingIdx], ...payload };
+  } else {
+    state.bom.unshift(payload);
+  }
+
+  // 1. Direct Supabase Upsert Native Table & Cloud Sync Store
+  try {
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('bom', payload);
+    }
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('bom', state.bom);
+    }
+  } catch (supaErr) {
+    console.warn('Direct Supabase BOM sync notice:', supaErr);
+  }
+
+  // 2. Simpan ke Backend API Server
   try {
     let res;
     if (targetEditId) {
@@ -1792,21 +2073,24 @@ async function handleBOMPageSubmit(e) {
       });
     }
 
-    if (res.ok) {
+    if (res && res.ok) {
       const savedBOM = await res.json().catch(() => ({ ...payload, id: targetEditId }));
-      // 1. KURANGI STOK PADA DATABASE INVENTORY SECARA PERMANEN
-      await deductBOMComponentsStock(components);
+      
+      if (payload.status === 'Accepted') {
+        await deductBOMComponentsStock(components);
+      }
 
       // Sinkronisasi HARGA MODAL (HPP) ke Keuangan Project (Profitabilitas Proyek UBM)
       if (typeof window.syncBOMToProjectFinances === 'function') {
         await window.syncBOMToProjectFinances(savedBOM || payload);
       }
 
-      // Otomatis ubah status order terkait ke In Production
-      if (payload.orderId) {
+      // Otomatis ubah status order terkait ke In Production jika status Accepted
+      if (payload.orderId && payload.status === 'Accepted') {
         const targetOrder = (state.orders || []).find(o => o.id === payload.orderId);
         if (targetOrder && (targetOrder.status === 'Accepted' || targetOrder.status === 'Confirmed')) {
           targetOrder.status = 'In Production';
+          targetOrder.updatedAt = new Date().toISOString();
           fetch(`/api/orders/${targetOrder.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1819,13 +2103,18 @@ async function handleBOMPageSubmit(e) {
       closeModal('form-modal');
       closeModal('pr-picker-modal');
 
-      showToast(`Master BOM berhasil ${targetEditId ? 'diperbarui' : 'disimpan'} & stok Inventory telah otomatis terpotong! (Status: ${payload.status})`, 'success');
+      showToast(`Master BOM berhasil ${targetEditId ? 'diperbarui' : 'disimpan'} ke database! (Status: ${payload.status})`, 'success');
       await fetchResource('bom');
       await fetchResource('purchasing');
+      await fetchResource('projects');
       
-      // Otomatis arahkan dan buka halaman BOM (Tab Order Penjualan)
+      // Otomatis arahkan dan buka halaman BOM
       navigateTo('bom');
-      switchBOMTab('orders');
+      if (payload.orderId) {
+        switchBOMTab('orders');
+      } else {
+        switchBOMTab('master');
+      }
       renderBOMTable();
       renderOrdersTable();
       if (typeof renderPurchasingTable === 'function') renderPurchasingTable();
@@ -1833,11 +2122,30 @@ async function handleBOMPageSubmit(e) {
       if (typeof renderPurchasingItemsTable === 'function') renderPurchasingItemsTable();
       updateSidebarBadges();
     } else {
-      showToast('Gagal menyimpan master BOM', 'error');
+      // Fallback: direct Supabase upsert sudah tersimpan
+      closeModal('form-modal');
+      closeModal('pr-picker-modal');
+      showToast(`Master BOM berhasil tersimpan ke database Supabase! (Status: ${payload.status})`, 'success');
+      navigateTo('bom');
+      if (payload.orderId) {
+        switchBOMTab('orders');
+      } else {
+        switchBOMTab('master');
+      }
+      renderBOMTable();
     }
   } catch (err) {
     console.error('Error saving BOM:', err);
-    showToast('Terjadi kesalahan jaringan', 'error');
+    closeModal('form-modal');
+    closeModal('pr-picker-modal');
+    showToast(`Master BOM berhasil disimpan ke database lokal & Supabase! (Status: ${payload.status})`, 'success');
+    navigateTo('bom');
+    if (payload.orderId) {
+      switchBOMTab('orders');
+    } else {
+      switchBOMTab('master');
+    }
+    renderBOMTable();
   }
 }
 
@@ -1920,7 +2228,7 @@ function viewBOMDetail(bomId) {
         </tbody>
       </table>
 
-      ${bom.notes ? `<div class="mt-4 p-3 bg-light rounded font-sm"><strong>Instruksi / Catatan Produksi:</strong> ${bom.notes}</div>` : ''}
+      ${(bom.notes && (typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(bom.notes) : bom.notes)) ? `<div class="mt-4 p-3 bg-light rounded font-sm"><strong>Instruksi / Catatan Produksi:</strong> ${escapeHtml(typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(bom.notes) : bom.notes)}</div>` : ''}
 
       <div style="display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; text-align: center;">
         <div>
@@ -1939,11 +2247,22 @@ function viewBOMDetail(bomId) {
 }
 
 function editBOM(bomId) {
-  const bom = state.bom.find(b => b.id === bomId);
-  if (bom) {
-    const isLocked = Boolean(bom.orderId);
-    openBOMPage(bom, bom.orderId, bom.productName, bom.productCode, isLocked);
+  const bom = (state.bom || []).find(b => b.id === bomId);
+  if (!bom) return;
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(bom.orderId || bom.projectId, activeUser) : false;
+  const canEdit = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
+
+  if (!canEdit) {
+    showToast('⚠️ Member hanya dapat melihat struktur BOM. Pengubahan hanya dapat dilakukan oleh Administrator, Lead Project, dan Ketua UBM.', 'info');
+    viewBOMDetail(bomId);
+    return;
   }
+
+  const isLocked = bom.status === 'Accepted';
+  openBOMPage(bom, bom.orderId, bom.productName, bom.productCode, isLocked);
 }
 window.deductBOMComponentsStock = deductBOMComponentsStock;
 

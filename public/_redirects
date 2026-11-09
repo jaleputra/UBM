@@ -1,2 +1,6 @@
-/api/*  /.netlify/functions/api/:splat  200!
-/*      /index.html                     200
+/verifikasi           /verifikasi.html        200
+/verifikasi.html      /verifikasi.html        200
+/verify-approval      /verifikasi.html        200
+/verify-approval.html /verifikasi.html        200
+/api/*                /.netlify/functions/api/:splat  200!
+/*                    /index.html             200

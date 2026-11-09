@@ -40,6 +40,27 @@
   status = 200
   force = true
 
+# Public Digital Signature Verification Page (No login required)
+[[redirects]]
+  from = "/verifikasi"
+  to = "/verifikasi.html"
+  status = 200
+
+[[redirects]]
+  from = "/verifikasi.html"
+  to = "/verifikasi.html"
+  status = 200
+
+[[redirects]]
+  from = "/verify-approval"
+  to = "/verifikasi.html"
+  status = 200
+
+[[redirects]]
+  from = "/verify-approval.html"
+  to = "/verifikasi.html"
+  status = 200
+
 # SPA fallback: redirect all other requests to index.html with HTTP 200
 [[redirects]]
   from = "/*"

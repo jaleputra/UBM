@@ -72,14 +72,9 @@ function renderProjectsTableView() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
 
-  // Role Member: hanya melihat project yang ditugaskan (assigned) padanya oleh Lead Project
-  if (roleName === 'Member' && activeUser?.name) {
-    const uName = activeUser.name.toLowerCase().trim();
-    list = list.filter(p => {
-      const inTeam = Array.isArray(p.team) && p.team.some(m => (m.name || '').toLowerCase().includes(uName));
-      const isLead = (p.projectLead || '').toLowerCase().includes(uName);
-      return inTeam || isLead;
-    });
+  // Role Member: hanya melihat project yang ditugaskan (assigned) padanya sebagai Leader atau anggota Tim
+  if (roleName === 'Member') {
+    list = list.filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : true);
   }
 
   if (statusFilter !== 'ALL') {
@@ -421,6 +416,13 @@ function onDirectProjectOrderChange(orderId) {
   if (dueInput && order.dueDate) {
     dueInput.value = order.dueDate;
   }
+
+  const notesInput = document.getElementById('direct-pm-notes');
+  if (notesInput && order.notes) {
+    notesInput.value = typeof cleanDisplayNotes === 'function'
+      ? cleanDisplayNotes(order.notes)
+      : (order.notes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+  }
 }
 window.onDirectProjectOrderChange = onDirectProjectOrderChange;
 
@@ -674,6 +676,29 @@ function renderTeamAssignmentWorkspace(orderId) {
     }
   }
 
+  const elInfoCustomer = document.getElementById('pm-info-customer');
+  if (elInfoCustomer) {
+    const cust = order?.customerName || activeProj.customerName || '-';
+    const phone = order?.customerPhone || activeProj.customerPhone || '';
+    elInfoCustomer.textContent = phone ? `${cust} (${phone})` : cust;
+  }
+
+  const elInfoNotes = document.getElementById('pm-info-notes');
+  const notesContainer = document.getElementById('pm-notes-preview-container');
+  const rawNotes = (order && order.notes !== undefined) ? order.notes : (activeProj.notes || '');
+  const cleanNotes = (typeof cleanDisplayNotes === 'function')
+    ? cleanDisplayNotes(rawNotes)
+    : (rawNotes || '').replace(/<!--UBM_[\s\S]*?-->/g, '').trim();
+
+  if (notesContainer && elInfoNotes) {
+    if (cleanNotes) {
+      notesContainer.style.display = 'block';
+      elInfoNotes.textContent = cleanNotes;
+    } else {
+      notesContainer.style.display = 'none';
+    }
+  }
+
   const leadInput = document.getElementById('pm-lead-name');
   const lockBadge = document.getElementById('pm-lead-lock-badge');
   const hintText = document.getElementById('pm-lead-hint');
@@ -916,6 +941,16 @@ async function saveTeamAssignmentData() {
     quotationType: order ? (isServiceOrder(order) ? 'jasa' : 'produk') : (existingProject?.quotationType || 'produk'),
     projectName: existingProject?.projectName || order?.projectName || (order ? `${order?.items?.[0]?.itemName || 'Project'} (${order?.customerName || 'Customer'})` : 'Project Mandiri'),
     customerName: existingProject?.customerName || order?.customerName || 'Internal UBM',
+    customerPhone: order?.customerPhone || existingProject?.customerPhone || '',
+    customerAddress: order?.customerAddress || existingProject?.customerAddress || '',
+    orderDate: order?.orderDate || existingProject?.orderDate || existingProject?.startDate || '',
+    startDate: existingProject?.startDate || order?.orderDate || new Date().toISOString().split('T')[0],
+    dueDate: order?.dueDate || existingProject?.dueDate || '',
+    notes: (order && order.notes !== undefined) ? order.notes : (existingProject?.notes || ''),
+    items: (Array.isArray(order?.items) && order.items.length > 0) ? order.items : (existingProject?.items || []),
+    additionalServices: (Array.isArray(order?.additionalServices) && order.additionalServices.length > 0) ? order.additionalServices : (existingProject?.additionalServices || []),
+    poFileName: order?.poFileName || existingProject?.poFileName || '',
+    poDocument: order?.poDocument || existingProject?.poDocument || null,
     projectLead: leadName,
     leadEmail: leadEmail,
     department: department,
@@ -967,10 +1002,34 @@ function navigateBackFromTimeline() {
 }
 
 function openProjectTimelinePage(orderId = null) {
-  const productProjects = (state.projects || []).filter(p => !isProjectService(p));
-  const productOrders = (state.orders || []).filter(o => !isServiceOrder(o));
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  let productProjects = (state.projects || []).filter(p => !isProjectService(p));
+  let productOrders = (state.orders || []).filter(o => !isServiceOrder(o));
+
+  // Role Member: hanya bisa mengakses timeline project yang di-assign padanya
+  if (roleName === 'Member') {
+    productProjects = productProjects.filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : true);
+    productOrders = productOrders.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+  }
+
   const defaultTarget = orderId || (productProjects.length > 0 ? (productProjects[0].id || productProjects[0].orderId) : (productOrders.length > 0 ? productOrders[0].id : null));
   const targetOrderId = orderId || defaultTarget;
+
+  if (roleName === 'Member' && targetOrderId) {
+    const isAssigned = typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(targetOrderId, activeUser) : false;
+    if (!isAssigned) {
+      showToast('⚠️ Anda tidak terdaftar sebagai Project Lead atau anggota tim pada project ini.', 'warning');
+      return;
+    }
+  }
+
+  if (roleName === 'Member' && !targetOrderId) {
+    showToast('⚠️ Belum ada project atau order yang ditugaskan ke Anda.', 'info');
+    navigateTo('projects');
+    return;
+  }
 
   // Tentukan view asal pemanggil Timeline
   if (state.currentView === 'projects') {
@@ -1044,7 +1103,14 @@ function openProjectTimelinePage(orderId = null) {
   const orderSelect = document.getElementById('timeline-order-select');
   if (orderSelect) {
     let opts = '';
-    const directProjs = (state.projects || []).filter(p => !p.orderId && !isProjectService(p));
+    let directProjs = (state.projects || []).filter(p => !p.orderId && !isProjectService(p));
+    let validProductOrders = (productOrders || []);
+
+    if (roleName === 'Member') {
+      directProjs = directProjs.filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : true);
+      validProductOrders = validProductOrders.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+    }
+
     if (directProjs.length > 0) {
       opts += '<optgroup label="Project Mandiri / Direct">';
       directProjs.forEach(dp => {
@@ -1054,9 +1120,9 @@ function openProjectTimelinePage(orderId = null) {
       opts += '</optgroup>';
     }
 
-    if (productOrders.length > 0) {
+    if (validProductOrders.length > 0) {
       opts += '<optgroup label="Order Penjualan Produk (Manufaktur)">';
-      productOrders.forEach(o => {
+      validProductOrders.forEach(o => {
         const isSel = (o.id === currentActiveProjectOrderId || (project && project.orderId === o.id)) ? 'selected' : '';
         opts += `<option value="${o.id}" ${isSel}>[${o.id}] ${escapeHtml(o.customerName)} - ${escapeHtml(o.projectName || o.items?.[0]?.itemName || 'Order')} (${formatRupiah(o.grandTotal)})</option>`;
       });
@@ -1064,7 +1130,7 @@ function openProjectTimelinePage(orderId = null) {
     }
 
     if (!opts) {
-      opts = '<option value="">-- Belum Ada Order / Project --</option>';
+      opts = '<option value="">-- Tidak ada project yang ditugaskan ke Anda --</option>';
     }
     orderSelect.innerHTML = opts;
   }
@@ -1144,7 +1210,14 @@ function renderTimelineWorkspace(orderId) {
   if (dueInput) dueInput.value = activeProj.dueDate || order?.dueDate || '';
 
   const notesInput = document.getElementById('timeline-notes');
-  if (notesInput) notesInput.value = activeProj.notes || '';
+  if (notesInput) {
+    const rawNotes = (activeProj && activeProj.notes !== undefined && activeProj.notes !== '')
+      ? activeProj.notes
+      : (order?.notes || '');
+    notesInput.value = typeof cleanDisplayNotes === 'function'
+      ? cleanDisplayNotes(rawNotes)
+      : (rawNotes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+  }
 
   currentActiveProjectData = activeProj;
 
@@ -1653,52 +1726,47 @@ function syncTimelineMilestonesHiddenList(project) {
   (project?.milestones || []).forEach(ms => addTimelineMilestoneRow(ms));
 }
 
-// Helper to get all team member options (Leader + Anggota) for a project
+// Helper to get all team member options (Hanya Leader dan Member pada project tersebut)
 function getProjectPICOfficialOptions(project, selectedPic = '') {
   const options = [];
   const addedNames = new Set();
 
-  // 1. Project Lead
-  if (project?.projectLead && project.projectLead !== 'Belum diassign' && project.projectLead.trim() !== '') {
-    const leadName = project.projectLead.trim();
+  let targetProj = project;
+  if (!targetProj && typeof currentActiveProjectData !== 'undefined' && currentActiveProjectData) {
+    targetProj = currentActiveProjectData;
+  }
+  if (!targetProj && typeof currentActiveProjectOrderId !== 'undefined' && currentActiveProjectOrderId && typeof state !== 'undefined') {
+    targetProj = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  }
+
+  // 1. Project Lead pada project ini
+  if (targetProj?.projectLead && targetProj.projectLead !== 'Belum diassign' && targetProj.projectLead.trim() !== '') {
+    const leadName = targetProj.projectLead.trim();
     options.push({
       name: leadName,
       role: 'Project Lead',
-      label: leadName
+      label: `${leadName} (Project Lead)`
     });
     addedNames.add(leadName.toLowerCase());
   }
 
-  // 2. Anggota Tim Pelaksana
-  if (project?.team && Array.isArray(project.team)) {
-    project.team.forEach(m => {
+  // 2. Anggota Tim Pelaksana pada project ini
+  if (targetProj?.team && Array.isArray(targetProj.team)) {
+    targetProj.team.forEach(m => {
       const memberName = typeof m === 'string' ? m.trim() : (m?.name ? m.name.trim() : '');
       const memberRole = typeof m === 'object' && m?.role ? m.role.trim() : 'Anggota Tim';
       if (memberName && !addedNames.has(memberName.toLowerCase())) {
         options.push({
           name: memberName,
           role: memberRole,
-          label: memberName
+          label: `${memberName} (${memberRole || 'Member'})`
         });
         addedNames.add(memberName.toLowerCase());
       }
     });
   }
 
-  // 3. Akun Terdaftar di Sistem (state.users)
-  const users = (typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [];
-  users.forEach(u => {
-    if (u && u.name && !addedNames.has(u.name.trim().toLowerCase())) {
-      options.push({
-        name: u.name.trim(),
-        role: u.role || 'Member',
-        label: u.name.trim()
-      });
-      addedNames.add(u.name.trim().toLowerCase());
-    }
-  });
-
-  // 4. Fallback jika ada PIC tersimpan yang belum ada di daftar
+  // 3. Fallback jika ada PIC tersimpan pada milestone yang belum ada di daftar tim project
   if (selectedPic && selectedPic.trim() !== '' && !addedNames.has(selectedPic.toLowerCase())) {
     options.push({
       name: selectedPic.trim(),
@@ -1753,8 +1821,11 @@ function openMilestoneDetailModal(msId) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectData?.id || currentActiveProjectOrderId, activeUser) : true;
 
-  const picList = getProjectPICOfficialOptions(currentActiveProjectData, ms.pic);
-  let picOptionsHtml = '<option value="">-- Pilih Penanggung Jawab (Leader / Anggota) --</option>';
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const picList = getProjectPICOfficialOptions(targetProj, ms.pic);
+  let picOptionsHtml = picList.length > 0
+    ? '<option value="">-- Pilih Penanggung Jawab (Leader / Anggota Project) --</option>'
+    : '<option value="">-- Belum ada Leader / Tim pada project ini --</option>';
   picList.forEach(opt => {
     const isSel = ms.pic && ms.pic.trim().toLowerCase() === opt.name.toLowerCase();
     picOptionsHtml += `<option value="${escapeAttr(opt.name)}" ${isSel ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`;
@@ -2248,7 +2319,7 @@ function addTimelineMilestoneRow(ms = null) {
           <select class="form-control form-control-sm tm-ms-pic" title="Penanggung Jawab (PIC Tahap)" style="font-size: 11px; font-weight: 600;">
             <option value="">-- Pilih PIC Tahap --</option>
             ${(() => {
-              const project = currentActiveProjectData || (state.projects || []).find(p => p.orderId === currentActiveProjectOrderId);
+              const project = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
               const picList = getProjectPICOfficialOptions(project, ms?.pic);
               return picList.map(opt => {
                 const isSel = ms?.pic && ms.pic.trim().toLowerCase() === opt.name.toLowerCase();
@@ -2826,8 +2897,20 @@ async function saveProjectTimelineData(redirect = true) {
   const status = document.getElementById('timeline-status-select')?.value || 'Planning';
   const startDate = document.getElementById('timeline-start-date')?.value || '';
   const dueDate = document.getElementById('timeline-due-date')?.value || '';
-  const notes = document.getElementById('timeline-notes')?.value || '';
+  const rawNotesInput = document.getElementById('timeline-notes')?.value || '';
+  const cleanInputNotes = (typeof cleanDisplayNotes === 'function')
+    ? cleanDisplayNotes(rawNotesInput)
+    : (rawNotesInput || '').replace(/<!--[\s\S]*?-->/g, '').trim();
   const progressPercent = calculateTimelineProgress();
+
+  const existingPoDoc = existingProject?.poDocument || order?.poDocument || (typeof extractPOFromNotes === 'function' ? (extractPOFromNotes(existingProject?.notes) || extractPOFromNotes(existingProject?._rawNotes) || extractPOFromNotes(order?.notes) || extractPOFromNotes(order?._rawNotes)) : null);
+  const poFileUrl = existingProject?.poFileUrl || order?.poFileUrl || (existingPoDoc?.url || '');
+  const poFileName = existingProject?.poFileName || order?.poFileName || (existingPoDoc?.name || '');
+
+  let finalNotes = cleanInputNotes;
+  if (existingPoDoc && typeof embedPOInNotes === 'function') {
+    finalNotes = embedPOInNotes(cleanInputNotes, existingPoDoc);
+  }
 
   const payload = {
     ...(existingProject || {}),
@@ -2837,7 +2920,10 @@ async function saveProjectTimelineData(redirect = true) {
     status: status,
     startDate: startDate,
     dueDate: dueDate,
-    notes: notes,
+    notes: finalNotes,
+    poDocument: existingPoDoc || undefined,
+    poFileName: poFileName || undefined,
+    poFileUrl: poFileUrl || undefined,
     progressPercent: progressPercent,
     milestones: milestones
   };
@@ -2860,6 +2946,8 @@ async function saveProjectTimelineData(redirect = true) {
 
     if (res.ok) {
       showToast('Seluruh data Timeline, Sub-Task, Laporan & Diskusi berhasil disimpan!', 'success');
+      const notesEl = document.getElementById('timeline-notes');
+      if (notesEl) notesEl.value = cleanInputNotes;
       await fetchResource('projects');
       renderOrdersTable();
       renderProjectsTableView();
@@ -2926,9 +3014,17 @@ function getAdminAccountEmail() {
 }
 
 function getTeamAssignmentLetterData(orderId = null) {
-  const targetOrderId = orderId || currentActiveProjectOrderId || (state.orders.length > 0 ? state.orders[0].id : null);
+  const targetOrderId = orderId || currentActiveProjectOrderId || (state.orders && state.orders.length > 0 ? state.orders[0].id : null);
   const project = (state.projects || []).find(p => p.id === targetOrderId || p.orderId === targetOrderId);
-  const order = (state.orders || []).find(o => o.id === (project?.orderId || targetOrderId));
+  const order = (state.orders || []).find(o => o.id === (project?.orderId || targetOrderId) || o.id === targetOrderId);
+
+  if (order && typeof ensureOrderApprovalData === 'function') {
+    ensureOrderApprovalData(order);
+  }
+
+  const isKetuaApproved = Boolean(order?.approvalKetuaUbm);
+  const isWadirApproved = Boolean(order?.approvalWadir1);
+  const isDualApproved = Boolean(isKetuaApproved && isWadirApproved);
 
   const isModalOpen = document.getElementById('team-assignment-modal')?.classList.contains('active') &&
     (!orderId || orderId === currentActiveProjectOrderId);
@@ -2966,7 +3062,7 @@ function getTeamAssignmentLetterData(orderId = null) {
     });
   }
 
-  const firstItem = order?.items?.[0]?.itemName || '';
+  const firstItem = order?.items?.[0]?.itemName || project?.items?.[0]?.itemName || '';
   const rawProjectName = order?.projectName || project?.projectName || firstItem || 'Project Engineering';
   // Bersihkan nama project jika terdapat embel-embel "(Customer)" agar nama project tetap rapi
   const cleanProjectName = rawProjectName;
@@ -2996,6 +3092,41 @@ function getTeamAssignmentLetterData(orderId = null) {
   const safeFileSlug = cleanProjectName.replace(/[^a-zA-Z0-9-_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Project';
   const pdfFilename = `Surat_Tugas_Project_${safeFileSlug}.pdf`;
 
+  // Ekstraksi lengkap semua input dari form Order Penjualan / Edit Order Penjualan
+  const customerName = order?.customerName || project?.customerName || 'Internal UBM';
+  const customerPhone = order?.customerPhone || project?.customerPhone || '';
+  const customerAddress = order?.customerAddress || project?.customerAddress || '';
+  const orderDate = order?.orderDate || project?.orderDate || project?.startDate || '';
+  const dueDate = order?.dueDate || project?.dueDate || project?.endDate || 'Sesuai Timeline Milestone';
+  const orderType = order?.orderType || project?.orderType || (isServiceOrder(order) ? 'jasa' : 'produk');
+  const quotationId = order?.quotationId || project?.quotationId || '';
+  const poFileName = order?.poFileName || order?.poDocument?.name || project?.poFileName || project?.poDocument?.name || '';
+  const poDocument = order?.poDocument || project?.poDocument || null;
+
+  const items = (Array.isArray(order?.items) && order.items.length > 0)
+    ? order.items
+    : (Array.isArray(project?.items) && project.items.length > 0 ? project.items : []);
+
+  const additionalServices = (Array.isArray(order?.additionalServices) && order.additionalServices.length > 0)
+    ? order.additionalServices
+    : (Array.isArray(project?.additionalServices) && project.additionalServices.length > 0 ? project.additionalServices : []);
+
+  const rawNotes = (order && order.notes !== undefined) ? order.notes : (project?.notes || '');
+  const cleanNotes = (typeof cleanDisplayNotes === 'function')
+    ? cleanDisplayNotes(rawNotes)
+    : (rawNotes || '').replace(/<!--UBM_[\s\S]*?-->/g, '').trim();
+
+  function formatLetterDate(dateStr) {
+    if (!dateStr || dateStr === '-') return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
   return {
     targetOrderId: refCode,
     projectId: project?.id || null,
@@ -3003,8 +3134,21 @@ function getTeamAssignmentLetterData(orderId = null) {
     order,
     project,
     projectName: cleanProjectName,
-    customerName: order?.customerName || project?.customerName || 'Internal UBM',
-    dueDate: order?.dueDate || project?.dueDate || 'Sesuai Timeline Milestone',
+    customerName,
+    customerPhone,
+    customerAddress,
+    orderDate,
+    orderDateFormatted: formatLetterDate(orderDate),
+    dueDate,
+    dueDateFormatted: formatLetterDate(dueDate),
+    orderType,
+    quotationId,
+    poFileName,
+    poDocument,
+    items,
+    additionalServices,
+    notes: rawNotes,
+    cleanNotes,
     leadName,
     leadEmail,
     department,
@@ -3013,6 +3157,9 @@ function getTeamAssignmentLetterData(orderId = null) {
     todayFormatted,
     adminEmail,
     adminName,
+    isKetuaApproved,
+    isWadirApproved,
+    isDualApproved,
     recipientList,
     recipientEmails: recipientList.map(r => r.email),
     emailSubject,
@@ -3081,14 +3228,99 @@ function buildTeamAssignmentLetterHtml(data) {
     email: 'ubm@takumi.ac.id',
     phone: '(021) 8990-1234',
     city: 'Cikarang',
-    leaderName: 'Ir. Hendra Wijaya, M.T.',
-    leaderNip: '19850412 201012 1 002',
+    leaderName: 'Rizaldi Putra, M.Kom.',
+    leaderNip: '2049770671130373',
     leaderRole: 'Ketua Unit Bisnis Mandiri (UBM)',
-    wadir1Name: 'Dr. Eng. Tri Wahyudi, M.Eng.',
-    wadir1Nip: '19820315 200804 1 003',
+    wadir1Name: 'Agung Kaswadi, M.T.',
+    wadir1Nip: '9857752653130142',
     wadir1Role: 'Wakil Direktur I Politeknik Takumi',
     copyrightText: 'Copyright © Bisnis Digital Takumi'
   };
+
+  const leaderDisplayName = compSettings.leaderName || 'Rizaldi Putra, M.Kom.';
+  const wadir1DisplayName = compSettings.wadir1Name || 'Agung Kaswadi, M.T.';
+  const leaderCleanName = leaderDisplayName.replace(/\.+$/, '');
+  const wadir1CleanName = wadir1DisplayName.replace(/\.+$/, '');
+
+  // Base URL cerdas (bebas dari ketergantungan IP LAN statis)
+  const baseUrl = (typeof getVerificationBaseUrl === 'function')
+    ? getVerificationBaseUrl()
+    : (window.location.origin || 'http://localhost:3000');
+
+  // URL verifikasi resmi yang saat di-scan oleh smartphone menampilkan gambar resmi
+  // "Approved by [Nama Pejabat]" beserta icon checklist terverifikasi digital resmi dan bisa diakses semua orang
+  const leaderVerifyUrl = (typeof getSignatureVerificationUrl === 'function')
+    ? getSignatureVerificationUrl(leaderCleanName, compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)', data.letterNumber || '', data.projectName || 'Surat Tugas Pelaksanaan Proyek')
+    : `${baseUrl}/verify-approval?name=${encodeURIComponent(leaderCleanName)}&role=${encodeURIComponent(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}&doc=${encodeURIComponent(data.letterNumber || '')}&title=${encodeURIComponent(data.projectName || 'Surat Tugas Pelaksanaan Proyek')}`;
+
+  const wadir1VerifyUrl = (typeof getSignatureVerificationUrl === 'function')
+    ? getSignatureVerificationUrl(wadir1CleanName, compSettings.wadir1Role || 'Wakil Direktur I Politeknik Takumi', data.letterNumber || '', data.projectName || 'Surat Tugas Pelaksanaan Proyek')
+    : `${baseUrl}/verify-approval?name=${encodeURIComponent(wadir1CleanName)}&role=${encodeURIComponent(compSettings.wadir1Role || 'Wakil Direktur I Politeknik Takumi')}&doc=${encodeURIComponent(data.letterNumber || '')}&title=${encodeURIComponent(data.projectName || 'Surat Tugas Pelaksanaan Proyek')}`;
+
+  const order = data.order || (state.orders || []).find(o => o.id === data.targetOrderId || o.id === data.orderId || o.id === data.project?.orderId);
+  if (order && typeof ensureOrderApprovalData === 'function') {
+    ensureOrderApprovalData(order);
+  }
+
+  const isKetuaApproved = Boolean(order?.approvalKetuaUbm || data.isKetuaApproved);
+  const isWadirApproved = Boolean(order?.approvalWadir1 || data.isWadirApproved);
+  const isDualApproved = Boolean((isKetuaApproved && isWadirApproved) || data.isDualApproved);
+
+  let ketuaSigHtml = '';
+  if (isDualApproved || isKetuaApproved) {
+    const qrSvg = (typeof generateQRCodeSvg === 'function')
+      ? generateQRCodeSvg(leaderVerifyUrl, 2.3, 1)
+      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+
+    ketuaSigHtml = `
+      <div style="min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px auto; text-align: center;">
+        <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
+          <div style="width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+            ${qrSvg}
+          </div>
+          <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+            ✓ TERVERIFIKASI DIGITAL
+          </div>
+        </a>
+      </div>
+    `;
+  } else {
+    ketuaSigHtml = `
+      <div style="height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 12px auto; text-align: center;">
+        <div style="border-bottom: 1px dashed #cbd5e1; width: 140px; margin-bottom: 6px;"></div>
+        <span>(Tanda Tangan & Cap UBM)</span>
+        <span style="font-size: 9px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Ketua UBM)</span>
+      </div>
+    `;
+  }
+
+  let wadirSigHtml = '';
+  if (isDualApproved || isWadirApproved) {
+    const qrSvg = (typeof generateQRCodeSvg === 'function')
+      ? generateQRCodeSvg(wadir1VerifyUrl, 2.3, 1)
+      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(wadir1VerifyUrl)}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+
+    wadirSigHtml = `
+      <div style="min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px auto; text-align: center;">
+        <a href="${wadir1VerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(wadir1CleanName)}">
+          <div style="width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+            ${qrSvg}
+          </div>
+          <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+            ✓ TERVERIFIKASI DIGITAL
+          </div>
+        </a>
+      </div>
+    `;
+  } else {
+    wadirSigHtml = `
+      <div style="height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 12px auto; text-align: center;">
+        <div style="border-bottom: 1px dashed #cbd5e1; width: 140px; margin-bottom: 6px;"></div>
+        <span>(Tanda Tangan & Cap)</span>
+        <span style="font-size: 9px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Wadir I)</span>
+      </div>
+    `;
+  }
 
   const teamRowsHtml = data.team.length > 0
     ? data.team.map((m, idx) => `
@@ -3106,63 +3338,171 @@ function buildTeamAssignmentLetterHtml(data) {
         </tr>
       `;
 
+  // Item pesanan / ruang lingkup pekerjaan
+  const itemRowsHtml = (data.items && data.items.length > 0)
+    ? data.items.map((it, idx) => `
+        <tr>
+          <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${escapeHtml(it.itemName || '-')}</td>
+          <td style="border: 1px solid #000; padding: 6px; text-align: center;">${escapeHtml(it.sku || '-')}</td>
+          <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: 600;">${it.qty || 1} ${escapeHtml(it.unit || (data.orderType === 'jasa' ? 'Lot' : 'Unit'))}</td>
+        </tr>
+      `).join('')
+    : `
+        <tr>
+          <td colspan="4" style="border: 1px solid #000; padding: 8px; text-align: center; color: #64748b;">${escapeHtml(data.projectName)}</td>
+        </tr>
+      `;
+
+  const servicesHtml = (data.additionalServices && data.additionalServices.length > 0)
+    ? `
+      <div style="font-size: 11.5px; font-weight: bold; margin: 8px 0 4px 0; color: #1e3a8a;">
+        Layanan / Jasa & Instalasi Pendukung:
+      </div>
+      <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11.5px; font-family: 'Times New Roman', Times, serif;">
+        <thead>
+          <tr style="background: #f8fafc;">
+            <th style="border: 1px solid #000; padding: 5px; text-align: center; width: 36px;">No.</th>
+            <th style="border: 1px solid #000; padding: 5px; text-align: left;">Deskripsi Jasa / Layanan Instalasi</th>
+            <th style="border: 1px solid #000; padding: 5px; text-align: center; width: 120px;">Volume / Satuan</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.additionalServices.map((svc, idx) => `
+            <tr>
+              <td style="border: 1px solid #000; padding: 5px; text-align: center;">${idx + 1}</td>
+              <td style="border: 1px solid #000; padding: 5px;">${escapeHtml(svc.serviceName || '-')}</td>
+              <td style="border: 1px solid #000; padding: 5px; text-align: center;">${svc.qty || 1} ${escapeHtml(svc.unit || 'Lot')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+    : '';
+
+  // Ketentuan Penugasan diambil dari input Catatan Khusus & Syarat Pengerjaan pada order penjualan
+  const customNotesLines = (data.cleanNotes || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  let ketentuanItemsHtml = '';
+  if (customNotesLines.length > 0) {
+    const parsedNotesItems = customNotesLines.map(line => {
+      // Hilangkan penomoran manual jika user mengetik "1. ", "- ", atau "* " agar penomoran <ol> tetap rapi
+      const cleanLine = line.replace(/^([0-9]+[\.\)]|[a-zA-Z][\.\)]|[-*•])\s*/, '').trim();
+      return `<li style="margin-bottom: 5px;">${escapeHtml(cleanLine || line)}</li>`;
+    }).join('');
+
+    ketentuanItemsHtml = `
+      <ol style="margin: 6px 0 0 18px; padding: 0; line-height: 1.6;">
+        ${parsedNotesItems}
+      </ol>
+    `;
+  } else {
+    ketentuanItemsHtml = `
+      <div style="font-size: 12px; color: #000000; padding-left: 2px; margin-top: 4px;">-</div>
+    `;
+  }
+
   return `
     <div class="doc-preview" style="font-family: 'Times New Roman', Times, serif; color: #000000; line-height: 1.5; padding: 10px 15px; background: #ffffff;">
       
-      <!-- KOP SURAT RESMI POLITEKNIK TAKUMI & UBM -->
-      <div style="text-align: center; border-bottom: 3px double #000000; padding-bottom: 12px; margin-bottom: 20px;">
-        <div style="font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.institutionName)}</div>
-        <div style="font-size: 19px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">${escapeHtml(compSettings.parentInstitution)}</div>
-        <div style="font-size: 15px; font-weight: bold; color: #1e3a8a; text-transform: uppercase;">${escapeHtml(compSettings.companyName)}</div>
+      <!-- KOP SURAT RESMI UBM -->
+      <div style="text-align: center; border-bottom: 3px double #000000; padding-bottom: 12px; margin-bottom: 18px;">
+        <div style="font-size: 17px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #1e3a8a;">${escapeHtml(compSettings.companyName)}</div>
+        ${compSettings.tagline ? `<div style="font-size: 11.5px; font-style: italic; color: #334155; margin-top: 2px;">${escapeHtml(compSettings.tagline)}</div>` : ''}
         <div style="font-size: 11px; margin-top: 4px;">${escapeHtml(compSettings.address)}</div>
         <div style="font-size: 11px;">Website: ${escapeHtml(compSettings.website)} | Email: ${escapeHtml(compSettings.email)} | Telp: ${escapeHtml(compSettings.phone)}</div>
       </div>
 
       <!-- JUDUL SURAT TUGAS -->
-      <div style="text-align: center; margin-bottom: 22px;">
+      <div style="text-align: center; margin-bottom: 20px;">
         <div style="font-size: 16px; font-weight: bold; text-decoration: underline; text-transform: uppercase;">SURAT TUGAS PELAKSANAAN PROYEK</div>
         <div style="font-size: 12px; margin-top: 2px;">Nomor: <strong>${escapeHtml(data.letterNumber)}</strong></div>
       </div>
 
       <!-- PREAMBULE -->
       <div style="font-size: 12.5px; text-align: justify; margin-bottom: 14px;">
-        Yang bertanda tangan di bawah ini, Pimpinan <strong>${escapeHtml(compSettings.companyName)}</strong> bersama dengan <strong>${escapeHtml(compSettings.wadir1Role)}</strong>, dengan ini memberikan penugasan resmi kepada nama-nama personil berikut untuk memimpin dan melaksanakan seluruh tahapan pengerjaan proyek:
+        Yang bertanda tangan di bawah ini, Pimpinan <strong>${escapeHtml(compSettings.companyName)}</strong> bersama dengan <strong>${escapeHtml(compSettings.wadir1Role)}</strong>, dengan ini memberikan penugasan resmi kepada personil yang tercantum dalam surat ini untuk memimpin dan melaksanakan seluruh tahapan pengerjaan proyek sesuai dengan rincian dan ketentuan berikut:
       </div>
 
-      <!-- DETAIL REFERENSI PROYEK -->
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12.5px;">
+      <!-- DETAIL REFERENSI PROYEK & PEMESAN -->
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px;">
         <tr>
-          <td style="width: 220px; padding: 4px 0; font-weight: bold;">Nama Proyek / Produk</td>
-          <td style="width: 15px; padding: 4px 0;">:</td>
-          <td style="padding: 4px 0; font-weight: bold; color: #0f172a;">${escapeHtml(data.projectName)}</td>
+          <td style="width: 220px; padding: 3px 0; font-weight: bold;">Nama Proyek / Pekerjaan</td>
+          <td style="width: 15px; padding: 3px 0;">:</td>
+          <td style="padding: 3px 0; font-weight: bold; color: #0f172a;">${escapeHtml(data.projectName)}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; font-weight: bold;">No. Referensi Order / Project</td>
-          <td style="padding: 4px 0;">:</td>
-          <td style="padding: 4px 0;"><strong>${escapeHtml(data.targetOrderId)}</strong></td>
+          <td style="padding: 3px 0; font-weight: bold;">No. Referensi Order / Project</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;"><strong>${escapeHtml(data.targetOrderId)}</strong> ${data.quotationId ? `<span style="font-size: 11px; color: #475569;">(Ref. Quotation #${escapeHtml(data.quotationId)})</span>` : ''}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; font-weight: bold;">Pelanggan / Klien</td>
-          <td style="padding: 4px 0;">:</td>
-          <td style="padding: 4px 0;">${escapeHtml(data.customerName)}</td>
+          <td style="padding: 3px 0; font-weight: bold;">Pelanggan / Perusahaan</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${escapeHtml(data.customerName)}</td>
+        </tr>
+        ${data.customerPhone ? `
+        <tr>
+          <td style="padding: 3px 0; font-weight: bold;">No. Telepon / WhatsApp Klien</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${escapeHtml(data.customerPhone)}</td>
+        </tr>` : ''}
+        ${data.customerAddress ? `
+        <tr>
+          <td style="padding: 3px 0; font-weight: bold;">Alamat Pengiriman / Lokasi</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${escapeHtml(data.customerAddress)}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding: 3px 0; font-weight: bold;">Jenis Pengerjaan</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${data.orderType === 'jasa' ? '🛠️ Jasa & Layanan Teknis (Non-BOM)' : '📦 Produk Manufaktur & Fabrikasi (BOM)'}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; font-weight: bold;">Divisi / Departemen Pelaksana</td>
-          <td style="padding: 4px 0;">:</td>
-          <td style="padding: 4px 0;">${escapeHtml(data.department)}</td>
+          <td style="padding: 3px 0; font-weight: bold;">Divisi / Departemen Pelaksana</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${escapeHtml(data.department)}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; font-weight: bold;">Target Waktu Penyelesaian</td>
-          <td style="padding: 4px 0;">:</td>
-          <td style="padding: 4px 0;">${escapeHtml(data.dueDate)}</td>
+          <td style="padding: 3px 0; font-weight: bold;">Tanggal Order / Target Selesai</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">${escapeHtml(data.orderDateFormatted)} s/d <strong>${escapeHtml(data.dueDateFormatted)}</strong></td>
         </tr>
+        ${data.poFileName ? `
+        <tr>
+          <td style="padding: 3px 0; font-weight: bold;">Dokumen PO Referensi</td>
+          <td style="padding: 3px 0;">:</td>
+          <td style="padding: 3px 0;">📄 ${escapeHtml(data.poFileName)}</td>
+        </tr>` : ''}
       </table>
 
-      <!-- SUSUNAN TIM PELAKSANA -->
+      <!-- I. RUANG LINGKUP PEKERJAAN & DAFTAR ITEM PESANAN -->
       <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
-        I. PENANGGUNG JAWAB UTAMA (PROJECT LEAD)
+        I. RUANG LINGKUP PEKERJAAN & DAFTAR ITEM
       </div>
-      <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 14px; margin-bottom: 16px; font-size: 12.5px;">
+      <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px; font-family: 'Times New Roman', Times, serif;">
+        <thead>
+          <tr style="background: #f1f5f9;">
+            <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 36px;">No.</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: left;">Nama Item / Spesifikasi Pekerjaan</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 130px;">Kode / SKU</th>
+            <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 110px;">Volume / Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemRowsHtml}
+        </tbody>
+      </table>
+      ${servicesHtml}
+
+      <!-- II. PENANGGUNG JAWAB UTAMA (PROJECT LEAD) -->
+      <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
+        II. PENANGGUNG JAWAB UTAMA (PROJECT LEAD)
+      </div>
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 14px; margin-bottom: 14px; font-size: 12.5px;">
         <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div>
             <strong>Nama Project Lead:</strong> <span style="font-size: 13.5px; font-weight: bold; color: #1e3a8a;">${escapeHtml(data.leadName)}</span>
@@ -3174,10 +3514,11 @@ function buildTeamAssignmentLetterHtml(data) {
         </div>
       </div>
 
+      <!-- III. DAFTAR ANGGOTA TIM PELAKSANA PROYEK -->
       <div style="font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px;">
-        II. DAFTAR ANGGOTA TIM PELAKSANA PROYEK
+        III. DAFTAR ANGGOTA TIM PELAKSANA PROYEK
       </div>
-      <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 12px; font-family: 'Times New Roman', Times, serif;">
+      <table class="doc-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; font-family: 'Times New Roman', Times, serif;">
         <thead>
           <tr style="background: #f1f5f9;">
             <th style="border: 1px solid #000; padding: 6px; text-align: center; width: 36px;">No.</th>
@@ -3192,51 +3533,43 @@ function buildTeamAssignmentLetterHtml(data) {
         </tbody>
       </table>
 
-      <!-- KETENTUAN DAN TANGGUNG JAWAB -->
+      <!-- IV. KETENTUAN PENUGASAN (DARI CATATAN KHUSUS & SYARAT PENGERJAAN) -->
       <div style="font-size: 12px; text-align: justify; margin-bottom: 24px;">
-        <strong>Ketentuan Penugasan:</strong>
-        <ol style="margin: 4px 0 0 18px; padding: 0;">
-          <li>Melaksanakan pekerjaan proyek sesuai spesifikasi teknis, standar keselamatan kerja (K3), dan standar mutu ${escapeHtml(compSettings.parentInstitution)}.</li>
-          <li>Melakukan koordinasi aktif bersama Project Lead dan Ketua UBM terkait perkembangan milestone dan kebutuhan logistik material.</li>
-          <li>Surat Tugas ini berlaku terhitung sejak tanggal diterbitkan sampai dengan selesainya serah terima pekerjaan (Berita Acara Serah Terima) kepada pihak pelanggan.</li>
-        </ol>
+        <div style="font-size: 13px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 4px; margin-bottom: 8px;">
+          IV. KETENTUAN PENUGASAN & SYARAT PENGERJAAN
+        </div>
+        ${ketentuanItemsHtml}
       </div>
 
       <!-- TANDA TANGAN RESMI (KETUA UBM & WAKIL DIREKTUR I) -->
-      <div style="margin-top: 30px; page-break-inside: avoid; font-size: 12px;">
+      <div style="margin-top: 26px; page-break-inside: avoid; font-size: 12px;">
         <div style="text-align: right; margin-bottom: 16px; font-weight: 500;">${escapeHtml(compSettings.city || 'Bekasi')}, ${escapeHtml(data.todayFormatted)}</div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center;">
           
-          <!-- 1. KETUA UBM -->
-          <div>
-            <div style="font-weight: bold;">Yang Menugaskan,</div>
-            <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.leaderRole)}</div>
-            <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
-            <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
-              (Tanda Tangan & Cap UBM)
-            </div>
-            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.leaderName)}</div>
-            <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.leaderNip || '-')}</div>
+          <!-- 1. KETUA UBM (SEBELAH KIRI) -->
+          <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px;">Yang Menugaskan,</div>
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.leaderRole)}</div>
+            ${ketuaSigHtml}
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 6px;">${escapeHtml(leaderDisplayName)}</div>
+            <div style="font-size: 11px; margin-top: 2px;">NIP/NIK. ${escapeHtml(compSettings.leaderNip || '-')}</div>
           </div>
 
-          <!-- 2. WAKIL DIREKTUR I -->
-          <div>
-            <div style="font-weight: bold;">Mengetahui & Mengesahkan,</div>
-            <div style="font-weight: bold; font-size: 12px;">${escapeHtml(compSettings.wadir1Role)}</div>
-            <div style="font-size: 11px; color: #475569;">${escapeHtml(compSettings.parentInstitution)}</div>
-            <div style="height: 70px; display: flex; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px;">
-              (Tanda Tangan & Cap)
-            </div>
-            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px;">${escapeHtml(compSettings.wadir1Name)}</div>
-            <div style="font-size: 11px;">NIP/NIK. ${escapeHtml(compSettings.wadir1Nip || '-')}</div>
+          <!-- 2. WAKIL DIREKTUR I (SEBELAH KANAN) -->
+          <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px;">Mengetahui & Mengesahkan,</div>
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.wadir1Role)}</div>
+            ${wadirSigHtml}
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 6px;">${escapeHtml(wadir1DisplayName)}</div>
+            <div style="font-size: 11px; margin-top: 2px;">NIP/NIK. ${escapeHtml(compSettings.wadir1Nip || '-')}</div>
           </div>
 
         </div>
       </div>
 
       <!-- FOOTER DOKUMEN -->
-      <div style="margin-top: 30px; padding-top: 10px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;">
+      <div style="margin-top: 24px; padding-top: 10px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;">
         <span>${escapeHtml(compSettings.copyrightText)}</span>
         <span>Dokumen Resmi Sistem Manajemen ${escapeHtml(compSettings.companyShortName || 'UBM')}</span>
       </div>

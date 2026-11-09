@@ -29,11 +29,31 @@ function isServiceOrder(order) {
   return false;
 }
 
+// Helper: Memeriksa apakah Order telah mendapatkan 2 persetujuan resmi (Ketua UBM & Wakil Direktur I)
+function isOrderDualApproved(order) {
+  if (!order) return false;
+  if (typeof ensureOrderApprovalData === 'function') {
+    ensureOrderApprovalData(order);
+  }
+  return Boolean(order.approvalKetuaUbm && order.approvalWadir1);
+}
+
+function promptDualApprovalRequired(orderId) {
+  const order = (state.orders || []).find(o => o.id === orderId);
+  const ketuaOk = Boolean(order?.approvalKetuaUbm);
+  const wadirOk = Boolean(order?.approvalWadir1);
+  let msg = '⚠️ Seluruh tombol aksi pengerjaan terkunci. Menunggu persetujuan lengkap:';
+  if (!ketuaOk) msg += '\n• Akun / Role Ketua UBM (Belum Disetujui)';
+  if (!wadirOk) msg += '\n• Akun / Role Wakil Direktur I (Belum Disetujui)';
+  showToast(msg, 'warning');
+}
+
 // Menghitung status order secara otomatis sesuai posisi tahapan pengerjaan
 function calculateAutoOrderStatus(order) {
   if (!order) return 'Pengajuan';
-  // 1. Jika masih tahap Pengajuan (menunggu disetujui via tabel), tetap Pengajuan
-  if (order.status === 'Pengajuan' || !order.status) {
+
+  // 1. Jika belum disetujui keduanya (Ketua UBM & Wakil Direktur I), status tetap Pengajuan
+  if (!isOrderDualApproved(order)) {
     return 'Pengajuan';
   }
 
@@ -71,7 +91,7 @@ function calculateAutoOrderStatus(order) {
     return 'Confirmed';
   }
 
-  // 6. Posisi Awal setelah disetujui dari Pengajuan: Accepted (Menunggu upload PO Pelanggan)
+  // 6. Posisi Awal setelah disetujui keduanya dari Pengajuan: Accepted (Menunggu upload PO Pelanggan)
   return 'Accepted';
 }
 
@@ -81,6 +101,14 @@ function renderOrdersTable() {
 
   const statusFilter = document.getElementById('filter-order-status')?.value || document.getElementById('order-status-filter')?.value || 'ALL';
   let list = (state.orders || []).map(o => (typeof ensureOrderPOData === 'function' ? ensureOrderPOData(o) : o));
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  // Role Member: hanya melihat order penjualan yang project-nya di-assign padanya (sebagai Project Lead atau anggota tim)
+  if (roleName === 'Member') {
+    list = list.filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+  }
 
   if (statusFilter !== 'ALL') {
     list = list.filter(o => o.status === statusFilter);
@@ -96,13 +124,18 @@ function renderOrdersTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 28px;">Tidak ada data order penjualan ditemukan.</td></tr>';
+    if (roleName === 'Member') {
+      tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 36px;"><p style="font-size: 13.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">Belum Ada Order Penjualan yang Ditugaskan</p><p style="font-size: 12px; color: #94a3b8; margin: 0;">Anda belum terdaftar sebagai Project Lead atau anggota tim pada order/project aktif manapun.</p></td></tr>';
+    } else {
+      tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 28px;">Tidak ada data order penjualan ditemukan.</td></tr>';
+    }
     return;
   }
 
   tbody.innerHTML = list.map(order => {
-    const isPengajuan = order.status === 'Pengajuan';
-    const isAccepted = order.status === 'Accepted';
+    const isDualApproved = isOrderDualApproved(order);
+    const isPengajuan = !isDualApproved || order.status === 'Pengajuan';
+    const isAccepted = isDualApproved && (order.status === 'Accepted' || !order.status || order.status === 'Pengajuan');
     const isService = isServiceOrder(order);
 
     const itemCount = order.items ? order.items.length : 0;
@@ -116,16 +149,20 @@ function renderOrdersTable() {
 
     const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
 
-    // Dokumen PO Column: View PO (Hijau) jika sudah upload, Upload PO (Merah) jika belum
-    const poColumnHtml = hasPO ?
-      `<button type="button" class="btn btn-xs btn-outline" style="color: #059669; border-color: #a7f3d0; background: #ecfdf5; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; padding: 2.5px 6px; white-space: nowrap;" onclick="event.stopPropagation(); viewOrderPODocument('${order.id}')" title="Klik untuk menampilkan dokumen PO Pelanggan (PDF)">
-         <i data-lucide="eye" style="width: 11px; height: 11px;"></i> View PO
+    // Dokumen PO Column: Hanya bisa diakses setelah disetujui lengkap oleh Ketua UBM dan Wakil Direktur I
+    const poColumnHtml = !isDualApproved ?
+      `<button type="button" class="btn btn-xs btn-outline" style="color: #94a3b8; border-color: #cbd5e1; background: #f8fafc; font-size: 9.5px; font-weight: 600; padding: 2.5px 6px; display: inline-flex; align-items: center; gap: 3px; cursor: not-allowed; opacity: 0.65; white-space: nowrap;" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')" title="Upload PO baru dapat dilakukan setelah Order disetujui lengkap oleh Ketua UBM dan Wakil Direktur I">
+         <i data-lucide="lock" style="width: 10px; height: 10px;"></i> Upload PO
        </button>` :
-      `<button type="button" class="btn btn-xs btn-primary" style="background: #e11d48; border-color: #e11d48; font-size: 10px; font-weight: 700; padding: 2.5px 6px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;" onclick="event.stopPropagation(); openUploadPOModal('${order.id}')" title="Wajib upload PO Pelanggan (PDF)">
-         <i data-lucide="upload-cloud" style="width: 11px; height: 11px;"></i> Upload PO
-       </button>`;
+      (hasPO ?
+        `<button type="button" class="btn btn-xs btn-outline" style="color: #059669; border-color: #a7f3d0; background: #ecfdf5; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; padding: 2.5px 6px; white-space: nowrap;" onclick="event.stopPropagation(); viewOrderPODocument('${order.id}')" title="Klik untuk menampilkan dokumen PO Pelanggan (PDF)">
+           <i data-lucide="eye" style="width: 11px; height: 11px;"></i> View PO
+         </button>` :
+        `<button type="button" class="btn btn-xs btn-primary" style="background: #e11d48; border-color: #e11d48; font-size: 10px; font-weight: 700; padding: 2.5px 6px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;" onclick="event.stopPropagation(); openUploadPOModal('${order.id}')" title="Wajib upload PO Pelanggan (PDF)">
+           <i data-lucide="upload-cloud" style="width: 11px; height: 11px;"></i> Upload PO
+         </button>`);
 
-    // Syarat akses berjenjang (Sequential Workflow Pipeline):
+    // Syarat akses berjenjang (Sequential Workflow Pipeline setelah Dual Approved):
     // 1. PO sudah diupload DAN status tidak Cancelled
     const isPOAndAccepted = hasPO && order.status !== 'Cancelled';
     // 2. Leader Project sudah ditentukan dan disimpan
@@ -169,7 +206,6 @@ function renderOrdersTable() {
     // Tombol 3: Project Management / Pengajuan Transportasi & Uang Makan (Untuk Jasa)
     let btnProject = '';
     if (isService) {
-      // Jika Tipe Penawaran adalah Jasa: Ubah tombol project management menjadi Pengajuan Transportasi dan Uang Makan Pelaksanaan Jasa
       btnProject = isPOAndAccepted ?
         `<button class="btn-icon" style="color: #ea580c; background: #fff7ed; border: 1.5px solid #fed7aa;" title="Pengajuan Transportasi dan Uang Makan Pelaksanaan Jasa" onclick="event.stopPropagation(); openServiceExpenseModal('${order.id}')"><i data-lucide="car"></i></button>` :
         `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan untuk Pengajuan Transportasi & Uang Makan Jasa" onclick="event.stopPropagation(); promptPOAndAcceptedRequired('${order.id}')"><i data-lucide="car"></i></button>`;
@@ -183,57 +219,117 @@ function renderOrdersTable() {
           `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
     }
 
+    // Tombol Cetak / Preview Surat Tugas Resmi (Tersedia jika Lead Project sudah ditetapkan)
+    const btnSuratTugas = hasProjectLead ?
+      `<button class="btn-icon" style="color: #4338ca;" title="Cetak / Preview Surat Tugas Resmi" onclick="event.stopPropagation(); if (typeof exportTeamAssignmentLetterPDF === 'function') exportTeamAssignmentLetterPDF('${order.id}');"><i data-lucide="printer"></i></button>` : '';
+
     // Tombol 4: Edit Order
     const btnEdit = `<button class="btn-icon" title="Edit Order Penjualan" onclick="event.stopPropagation(); editOrder('${order.id}')"><i data-lucide="edit-2"></i></button>`;
 
-    // Tombol 5: Hapus Order
+    // Tombol 5: Hapus Order (Tetap aktif untuk Administrator)
     const btnDelete = `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>`;
 
-    // Action Buttons: Penugasan -> BOM -> Project Management -> Edit -> Hapus
-    const actionsHtml = `
-      <div class="table-actions" onclick="event.stopPropagation()">
-        ${btnPenugasan}
-        ${btnBOM}
-        ${btnProject}
-        ${btnEdit}
-        ${btnDelete}
-      </div>
-    `;
+    // Action Buttons: Jika BELUM disetujui keduanya, seluruh tombol pengerjaan TERKUNCI!
+    let actionsHtml = '';
+    if (!isDualApproved) {
+      actionsHtml = `
+        <div class="table-actions" onclick="event.stopPropagation()">
+          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="users"></i></button>
+          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="printer"></i></button>
+          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="boxes"></i></button>
+          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="${isService ? 'car' : 'folder-kanban'}"></i></button>
+          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="edit-2"></i></button>
+          ${btnDelete}
+        </div>
+      `;
+    } else {
+      actionsHtml = `
+        <div class="table-actions" onclick="event.stopPropagation()">
+          ${btnPenugasan}
+          ${btnSuratTugas}
+          ${btnBOM}
+          ${btnProject}
+          ${btnEdit}
+          ${btnDelete}
+        </div>
+      `;
+    }
 
-    // Status Column: Jika status sudah Accepted (atau status pengerjaan lanjutan), kunci permanen dan tidak bisa diubah lagi
-    const isStatusLocked = order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status);
+    // Status Column (2 Kolom Terpisah: Ketua UBM & Wakil Direktur I)
+    const isAdmin = roleName === 'Administrator';
+    const isKetuaUbm = roleName === 'Ketua UBM';
+    const isWadir1 = roleName === 'Wakil Direktur I';
 
-    let statusSelectHtml = '';
-    if (isStatusLocked) {
-      statusSelectHtml = `
-        <div style="display: flex; justify-content: center; width: 100%;">
-          <span class="badge badge-success" style="font-size: 10px; font-weight: 700; padding: 3.5px 8px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; background: #dcfce7; color: #15803d; border: 1px solid #86efac; cursor: default;" title="Status Order: Accepted (Terkunci Permanen)">
-            <i data-lucide="check-circle-2" style="width: 11px; height: 11px;"></i> Accepted
+    // 1. Kolom Persetujuan Ketua UBM
+    const isKetuaApproved = Boolean(order.approvalKetuaUbm);
+    const canManageKetua = (isAdmin || isKetuaUbm);
+
+    let statusKetuaUbmHtml = '';
+    if (isKetuaApproved) {
+      statusKetuaUbmHtml = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9.5px; font-weight: 700; padding: 2.5px 7px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;" title="Disetujui oleh: ${escapeAttr(order.approvalKetuaUbmBy || 'Ketua UBM')}">
+            <i data-lucide="check-circle" style="width: 10px; height: 10px; color: #10b981;"></i> Disetujui
+          </span>
+          <span style="font-size: 8px; color: #047857; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(order.approvalKetuaUbmBy || 'Ketua UBM')}
           </span>
         </div>
       `;
     } else {
-      // Masih berstatus Pengajuan: hanya Ketua UBM dan Administrator yang dapat menyetujui order
-      const canApprove = (typeof hasRolePermission === 'function') ? hasRolePermission('canApproveOrder') : true;
-      if (!canApprove) {
-        statusSelectHtml = `
-          <div style="display: flex; justify-content: center; width: 100%;" onclick="event.stopPropagation()">
-            <span class="badge" style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; cursor: default;" title="Menunggu persetujuan Ketua UBM / Administrator">
-              🟡 Pengajuan
-            </span>
+      if (canManageKetua) {
+        statusKetuaUbmHtml = `
+          <div style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: nowrap;">
+            <button type="button" class="btn btn-xs" style="background: #16a34a; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); approveOrderByRole('${order.id}', 'Ketua UBM')" title="Setujui order ini sebagai Ketua UBM">
+              <i data-lucide="check" style="width: 9px; height: 9px;"></i> Setuju
+            </button>
+            <button type="button" class="btn btn-xs" style="background: #ef4444; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); rejectOrderByRole('${order.id}', 'Ketua UBM')" title="Tolak order ini dan kembalikan ke Surat Penawaran (Quotation)">
+              <i data-lucide="x" style="width: 9px; height: 9px;"></i> Tidak
+            </button>
           </div>
         `;
       } else {
-        statusSelectHtml = `
-          <div style="display: flex; justify-content: center; width: 100%;" onclick="event.stopPropagation()">
-            <select class="order-status-select status-pengajuan"
-                    onclick="event.stopPropagation()"
-                    onchange="updateOrderStatusDirect('${order.id}', this.value)"
-                    title="Persetujuan Project: Klik untuk menyetujui / mengubah status menjadi Accepted">
-              <option value="Pengajuan" selected>🟡 Pengajuan</option>
-              <option value="Accepted">🟢 Setujui (Accepted)</option>
-            </select>
+        statusKetuaUbmHtml = `
+          <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 2px;" title="Menunggu persetujuan Ketua UBM">
+            <i data-lucide="clock" style="width: 8px; height: 8px;"></i> Menunggu
+          </span>
+        `;
+      }
+    }
+
+    // 2. Kolom Persetujuan Wakil Direktur I
+    const isWadirApproved = Boolean(order.approvalWadir1);
+    const canManageWadir = (isAdmin || isWadir1);
+
+    let statusWadir1Html = '';
+    if (isWadirApproved) {
+      statusWadir1Html = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9.5px; font-weight: 700; padding: 2.5px 7px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;" title="Disetujui oleh: ${escapeAttr(order.approvalWadir1By || 'Wakil Direktur I')}">
+            <i data-lucide="check-circle" style="width: 10px; height: 10px; color: #10b981;"></i> Disetujui
+          </span>
+          <span style="font-size: 8px; color: #047857; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(order.approvalWadir1By || 'Wakil Direktur I')}
+          </span>
+        </div>
+      `;
+    } else {
+      if (canManageWadir) {
+        statusWadir1Html = `
+          <div style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: nowrap;">
+            <button type="button" class="btn btn-xs" style="background: #0284c7; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); approveOrderByRole('${order.id}', 'Wakil Direktur I')" title="Setujui order ini sebagai Wakil Direktur I">
+              <i data-lucide="check" style="width: 9px; height: 9px;"></i> Setuju
+            </button>
+            <button type="button" class="btn btn-xs" style="background: #ef4444; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); rejectOrderByRole('${order.id}', 'Wakil Direktur I')" title="Tolak order ini dan kembalikan ke Surat Penawaran (Quotation)">
+              <i data-lucide="x" style="width: 9px; height: 9px;"></i> Tidak
+            </button>
           </div>
+        `;
+      } else {
+        statusWadir1Html = `
+          <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 2px;" title="Menunggu persetujuan Wakil Direktur I">
+            <i data-lucide="clock" style="width: 8px; height: 8px;"></i> Menunggu
+          </span>
         `;
       }
     }
@@ -260,7 +356,10 @@ function renderOrdersTable() {
         <td style="text-align: center; padding: 6px 3px;"><span class="badge badge-secondary font-bold" style="font-size: 9px; padding: 1.5px 4px;">${itemCount} Item</span></td>
         <td class="font-bold font-mono text-main" style="font-size: 10.5px; padding: 6px 4px; white-space: nowrap; text-align: right;">${formatRupiah(order.grandTotal)}</td>
         <td style="text-align: center; padding: 5px 3px;" onclick="event.stopPropagation()">
-          ${statusSelectHtml}
+          ${statusKetuaUbmHtml}
+        </td>
+        <td style="text-align: center; padding: 5px 3px;" onclick="event.stopPropagation()">
+          ${statusWadir1Html}
         </td>
         <td class="text-right" style="padding: 5px 4px;" onclick="event.stopPropagation()">
           ${actionsHtml}
@@ -272,12 +371,264 @@ function renderOrdersTable() {
 }
 
 // -------------------------------------------------------------
-// 1 OPSI DARI PENGAJUAN MENJADI ACCEPTED PADA TABEL (DROPDOWN)
+// DUAL APPROVAL SYSTEM: KETUA UBM & WAKIL DIREKTUR I
+// -------------------------------------------------------------
+async function approveOrderByRole(orderId, approverRole) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  const isAdmin = currentRole === 'Administrator';
+
+  // Validasi kewenangan role
+  if (approverRole === 'Ketua UBM') {
+    if (!isAdmin && currentRole !== 'Ketua UBM') {
+      showToast('⚠️ Hanya Ketua UBM atau Administrator yang dapat memberikan persetujuan ini.', 'warning');
+      return;
+    }
+  } else if (approverRole === 'Wakil Direktur I') {
+    if (!isAdmin && currentRole !== 'Wakil Direktur I') {
+      showToast('⚠️ Hanya Wakil Direktur I atau Administrator yang dapat memberikan persetujuan ini.', 'warning');
+      return;
+    }
+  } else {
+    showToast('⚠️ Role persetujuan tidak valid.', 'error');
+    return;
+  }
+
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) {
+    showToast('Data order tidak ditemukan!', 'error');
+    return;
+  }
+
+  // Guard: Jika role ini sudah menyetujui, tidak bisa diubah lagi!
+  if (approverRole === 'Ketua UBM' && order.approvalKetuaUbm) {
+    showToast('Persetujuan Ketua UBM sudah disetujui secara permanen.', 'info');
+    return;
+  }
+  if (approverRole === 'Wakil Direktur I' && order.approvalWadir1) {
+    showToast('Persetujuan Wakil Direktur I sudah disetujui secara permanen.', 'info');
+    return;
+  }
+
+  const approverName = activeUser?.name || approverRole;
+  const nowIso = new Date().toISOString();
+
+  if (approverRole === 'Ketua UBM') {
+    order.approvalKetuaUbm = true;
+    order.approvalKetuaUbmBy = approverName;
+    order.approvalKetuaUbmDate = nowIso;
+  } else if (approverRole === 'Wakil Direktur I') {
+    order.approvalWadir1 = true;
+    order.approvalWadir1By = approverName;
+    order.approvalWadir1Date = nowIso;
+  }
+
+  const isDualApproved = Boolean(order.approvalKetuaUbm && order.approvalWadir1);
+  if (isDualApproved) {
+    if (!['Confirmed', 'In Production', 'Delivered'].includes(order.status)) {
+      order.status = 'Accepted';
+    }
+  }
+
+  if (typeof embedApprovalInNotes === 'function') {
+    const targetNotes = order._rawNotes || order.notes || '';
+    const embedded = embedApprovalInNotes(targetNotes, order);
+    order._rawNotes = embedded;
+    order.notes = embedded;
+  }
+
+  // Update UI secara instan (optimistic)
+  renderOrdersTable();
+
+  try {
+    const res = await fetch(`/api/orders/${orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order)
+    });
+
+    if (!res.ok) throw new Error('Gagal menyimpan persetujuan ke server');
+
+    const savedOrder = await res.json().catch(() => null);
+    if (savedOrder && typeof savedOrder === 'object') {
+      if (order.approvalKetuaUbm) {
+        savedOrder.approvalKetuaUbm = true;
+        savedOrder.approvalKetuaUbmBy = order.approvalKetuaUbmBy;
+        savedOrder.approvalKetuaUbmDate = order.approvalKetuaUbmDate;
+      }
+      if (order.approvalWadir1) {
+        savedOrder.approvalWadir1 = true;
+        savedOrder.approvalWadir1By = order.approvalWadir1By;
+        savedOrder.approvalWadir1Date = order.approvalWadir1Date;
+      }
+      if (typeof ensureOrderApprovalData === 'function') {
+        ensureOrderApprovalData(savedOrder);
+      }
+      const orderIdx = (state.orders || []).findIndex(o => o.id === orderId);
+      if (orderIdx !== -1) {
+        state.orders[orderIdx] = savedOrder;
+      }
+    }
+
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      directSupabaseUpsertNativeRow('orders', order).catch(() => {});
+    }
+    if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state.orders)) {
+      directSupabaseSyncResource('orders', state.orders).catch(() => {});
+    }
+
+    if (isDualApproved) {
+      if (typeof syncAcceptedOrdersToInvoices === 'function') {
+        syncAcceptedOrdersToInvoices();
+      }
+
+      const quoRef = order.quotationId || (order.notes && (order.notes.match(/QUO-[\w-]+/i) || [])[0]);
+      if (quoRef) {
+        const targetQuo = (state.quotations || []).find(q => q.id === quoRef);
+        if (targetQuo && targetQuo.status !== 'Accepted') {
+          targetQuo.status = 'Accepted';
+          fetch(`/api/quotations/${quoRef}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...targetQuo, status: 'Accepted' })
+          }).catch(e => console.warn('Sync quotation error:', e));
+
+          if (typeof renderQuotationsTable === 'function') {
+            renderQuotationsTable();
+          }
+        }
+      }
+
+      showToast(`🎉 Persetujuan LENGKAP (Ketua UBM & Wadir I)! Order #${orderId} resmi disetujui (Accepted) dan seluruh tombol aksi telah terbuka.`, 'success');
+    } else {
+      showToast(`✓ Persetujuan ${approverRole} berhasil dicatat. Menunggu 1 persetujuan lagi untuk membuka aksi pengerjaan.`, 'info');
+    }
+  } catch (err) {
+    console.error('Error in approveOrderByRole:', err);
+    showToast('Gagal memproses persetujuan: ' + err.message, 'error');
+    renderOrdersTable();
+  }
+}
+
+// -------------------------------------------------------------
+// PENOLAKAN ORDER: KEMBALI KE QUOTATION (DRAFT)
+// -------------------------------------------------------------
+async function rejectOrderByRole(orderId, rejectorRole = '') {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  const isAdmin = currentRole === 'Administrator';
+
+  // Periksa kewenangan
+  if (rejectorRole === 'Ketua UBM') {
+    if (!isAdmin && currentRole !== 'Ketua UBM') {
+      showToast('⚠️ Hanya Ketua UBM atau Administrator yang dapat menolak pada kolom Ketua UBM.', 'warning');
+      return;
+    }
+  } else if (rejectorRole === 'Wakil Direktur I') {
+    if (!isAdmin && currentRole !== 'Wakil Direktur I') {
+      showToast('⚠️ Hanya Wakil Direktur I atau Administrator yang dapat menolak pada kolom Wakil Direktur I.', 'warning');
+      return;
+    }
+  } else if (!isAdmin && currentRole !== 'Ketua UBM' && currentRole !== 'Wakil Direktur I') {
+    showToast('⚠️ Hanya Ketua UBM, Wakil Direktur I, atau Administrator yang memiliki wewenang menolak order.', 'warning');
+    return;
+  }
+
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) {
+    showToast('Data order tidak ditemukan!', 'error');
+    return;
+  }
+
+  const roleLabel = rejectorRole || (currentRole === 'Administrator' ? 'Administrator' : currentRole);
+  const reason = prompt(
+    `Tolak Order Penjualan #${orderId} (${roleLabel}) dan kembalikan ke Surat Penawaran (Quotation)?\n\nMasukkan catatan penolakan/alasan revisi:`,
+    'Perlu penyesuaian harga / spesifikasi teknis penawaran'
+  );
+  if (reason === null) return; // User membatalkan
+
+  const approverName = activeUser?.name || roleLabel;
+  const dateStr = new Date().toLocaleDateString('id-ID');
+  const rejectionNote = `[Ditolak oleh ${roleLabel} (${approverName}) pada ${dateStr}]: ${reason.trim() || 'Perlu peninjauan & revisi ulang penawaran'}`;
+
+  try {
+    const quoRef = order.quotationId || (order.notes && (order.notes.match(/QUO-[\w-]+/i) || [])[0]);
+    let targetQuo = quoRef ? (state.quotations || []).find(q => q.id === quoRef) : null;
+
+    if (targetQuo) {
+      targetQuo.status = 'Draft';
+      targetQuo.orderId = null;
+      targetQuo.rejectionNotes = rejectionNote;
+      targetQuo.notes = targetQuo.notes ? `${rejectionNote}\n\n${targetQuo.notes}` : rejectionNote;
+
+      await fetch(`/api/quotations/${targetQuo.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetQuo)
+      });
+    } else {
+      // Jika order dibuat langsung tanpa quotation asal, buatkan Quotation baru berstatus Draft agar data tidak hilang
+      const newQuoId = 'QUO-' + (order.id ? order.id.replace('ORD-', '') : Date.now());
+      const newQuo = {
+        id: newQuoId,
+        customerName: order.customerName,
+        projectName: order.projectName || order.customerName,
+        customerPhone: order.customerPhone || '',
+        customerAddress: order.customerAddress || '',
+        quotationDate: order.orderDate || new Date().toISOString().split('T')[0],
+        validUntil: order.dueDate || '',
+        status: 'Draft',
+        quotationType: isServiceOrder(order) ? 'jasa' : 'produk',
+        items: order.items || [],
+        additionalServices: order.additionalServices || [],
+        warranty: 'Garansi standar pengerjaan',
+        leadTime: 'Sesuai kesepakatan',
+        grandTotal: order.grandTotal || 0,
+        subtotal: order.subtotal || order.grandTotal || 0,
+        taxRate: order.taxRate ?? 11,
+        taxAmount: order.taxAmount || 0,
+        notes: `${rejectionNote}\n\nCatatan Asal Order #${order.id}:\n${order.notes || '-'}`
+      };
+      if (!Array.isArray(state.quotations)) state.quotations = [];
+      state.quotations.unshift(newQuo);
+
+      await fetch('/api/quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQuo)
+      });
+    }
+
+    // Hapus project terkait jika ada
+    const linkedProject = (state.projects || []).find(p => p.orderId === orderId);
+    if (linkedProject) {
+      await fetch(`/api/projects/${linkedProject.id}`, { method: 'DELETE' }).catch(e => console.warn('Delete project error:', e));
+      state.projects = (state.projects || []).filter(p => p.id !== linkedProject.id);
+    }
+
+    // Hapus Order dari server & state
+    await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+    state.orders = (state.orders || []).filter(o => o.id !== orderId);
+
+    // Render ulang tabel Orders dan Quotations
+    renderOrdersTable();
+    if (typeof renderQuotationsTable === 'function') {
+      renderQuotationsTable();
+    }
+
+    showToast(`Order #${orderId} telah ditolak oleh ${roleLabel} dan berhasil dikembalikan ke Surat Penawaran (Quotation) untuk direvisi.`, 'success');
+  } catch (err) {
+    console.error('Error rejecting order:', err);
+    showToast('Gagal menolak order: ' + err.message, 'error');
+  }
+}
+
+// -------------------------------------------------------------
+// STATUS ORDER GUARD
 // -------------------------------------------------------------
 async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
-  // Permission Guard: Only Administrator and Ketua UBM can approve project orders
   if (typeof hasRolePermission === 'function' && !hasRolePermission('canApproveOrder')) {
-    showToast('⚠️ Hanya Ketua UBM dan Administrator yang memiliki wewenang memberikan persetujuan (Approval) order penjualan.', 'warning');
+    showToast('⚠️ Hanya Ketua UBM, Wakil Direktur I, dan Administrator yang memiliki wewenang pada order penjualan.', 'warning');
     renderOrdersTable();
     return;
   }
@@ -285,9 +636,8 @@ async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
   const order = (state.orders || []).find(o => o.id === orderId);
   if (!order) return;
 
-  // Jika status sudah Accepted atau status pengerjaan lanjutan, tolak perubahan (terkunci permanen)
-  if (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status)) {
-    showToast(`Status Order #${orderId} sudah "Accepted" dan tidak dapat diubah lagi.`, 'warning');
+  if (!isOrderDualApproved(order) && newStatus !== 'Pengajuan' && newStatus !== 'Cancelled') {
+    showToast('⚠️ Order membutuhkan 2 persetujuan: Ketua UBM dan Wakil Direktur I sebelum status dapat diubah.', 'warning');
     renderOrdersTable();
     return;
   }
@@ -307,7 +657,6 @@ async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
       throw new Error('Gagal memperbarui status order di server');
     }
 
-    // Jika diubah menjadi Accepted, sinkronkan juga Quotation terkait dan Faktur Tagihan (Invoice)
     if (newStatus === 'Accepted') {
       if (typeof syncAcceptedOrdersToInvoices === 'function') {
         syncAcceptedOrdersToInvoices();
@@ -331,7 +680,7 @@ async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
       }
     }
 
-    showToast(`Status Order #${orderId} berhasil diubah menjadi "${newStatus}" dan telah terkunci permanen.`, 'success');
+    showToast(`Status Order #${orderId} berhasil diubah menjadi "${newStatus}".`, 'success');
   } catch (err) {
     console.error('Error updating order status directly:', err);
     order.status = oldStatus;
@@ -563,6 +912,7 @@ function openOrderModal(orderData = null) {
   const isEdit = !!(orderData && orderData.id && orderData.id !== 'undefined');
   const quotationId = orderData?.quotationId || (orderData?.notes && (orderData.notes.match(/QUO-[\w-]+/i) || [])[0]) || '';
   const isService = isServiceOrder(orderData);
+  const canApprove = (typeof hasRolePermission === 'function') ? hasRolePermission('canApproveOrder') : true;
 
   document.getElementById('form-modal-title').textContent = isEdit
     ? `Edit Order Penjualan: ${orderData.id}`
@@ -652,25 +1002,26 @@ function openOrderModal(orderData = null) {
             <input type="text" name="customerAddress" class="form-control" placeholder="Alamat pabrik, gudang, atau kantor penerima" value="${escapeAttr(orderData?.customerAddress || '')}">
           </div>
           <div class="form-group">
-            <label class="form-label font-bold" style="font-size: 11px; color: #475569;">Status Pengerjaan (Otomatis)</label>
+            <label class="form-label font-bold" style="font-size: 11px; color: #475569;">Status Order</label>
             ${!isEdit ? `
               <input type="hidden" name="status" value="Pengajuan">
               <div class="form-control" style="background: #fef3c7; border: 1px solid #fde68a; color: #b45309; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; gap: 8px; cursor: default; height: 38px;">
                 <i data-lucide="clock" style="width: 15px; height: 15px; color: #d97706;"></i>
-                <span>🟡 Pengajuan (Otomatis dibuat saat simpan)</span>
+                <span>🟡 Pengajuan (Menunggu Persetujuan Ketua UBM & Wadir I)</span>
+              </div>
+            ` : (isOrderDualApproved(orderData) ? `
+              <input type="hidden" name="status" value="${orderData?.status || 'Accepted'}">
+              <div class="form-control" style="background: #ecfdf5; border: 1px solid #86efac; color: #15803d; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; gap: 8px; cursor: default; height: 38px;" title="Order telah disetujui lengkap oleh Ketua UBM dan Wakil Direktur I. Status terkunci permanen.">
+                <i data-lucide="check-check" style="width: 15px; height: 15px; color: #16a34a;"></i>
+                <span>🟢 ${orderData?.status || 'Accepted'} (Disetujui Ketua UBM & Wadir I - Terkunci)</span>
               </div>
             ` : `
-              <input type="hidden" name="status" value="${orderData?.status || 'Pengajuan'}">
-              <div class="form-control" style="background: #f8fafc; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; gap: 8px; cursor: default; height: 38px;">
-                <i data-lucide="${orderData?.status === 'Accepted' ? 'check-circle-2' : (orderData?.status === 'Confirmed' ? 'file-check' : (orderData?.status === 'In Production' ? 'boxes' : (orderData?.status === 'Delivered' ? 'truck' : 'clock')))}" style="width: 15px; height: 15px;"></i>
-                <span>${orderData?.status === 'Pengajuan' ? '🟡 Pengajuan (Menunggu Persetujuan)' :
-      orderData?.status === 'Accepted' ? '🟢 Accepted (Disetujui)' :
-        orderData?.status === 'Confirmed' ? '🔵 Confirmed (PO Terverifikasi)' :
-          orderData?.status === 'In Production' ? '🟣 In Production (Proses Produksi)' :
-            orderData?.status === 'Delivered' ? '🚚 Delivered (Selesai Terkirim)' :
-              orderData?.status === 'Cancelled' ? '🔴 Cancelled' : (orderData?.status || '🟡 Pengajuan')}</span>
+              <input type="hidden" name="status" value="Pengajuan">
+              <div class="form-control" style="background: #fef3c7; border: 1px solid #fde68a; color: #b45309; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; gap: 8px; cursor: default; height: 38px;" title="Order belum disetujui lengkap oleh Ketua UBM dan Wakil Direktur I.">
+                <i data-lucide="clock" style="width: 15px; height: 15px; color: #d97706;"></i>
+                <span>🟡 Pengajuan (Menunggu Persetujuan Ketua UBM & Wadir I)</span>
               </div>
-            `}
+            `)}
           </div>
         </div>
 
@@ -801,7 +1152,7 @@ function openOrderModal(orderData = null) {
       <!-- MODAL FOOTER ACTIONS -->
       <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border-color); margin-top: 6px;">
         <button type="button" class="btn btn-outline" onclick="closeModal('form-modal')">Batal</button>
-        <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600;">
+        <button type="submit" id="order-form-submit-btn" class="btn btn-primary" style="padding: 10px 24px; font-weight: 600;">
           <i data-lucide="save"></i> ${isEdit ? 'Perbarui Order Penjualan' : 'Simpan Order Penjualan'}
         </button>
       </div>
@@ -1188,6 +1539,23 @@ async function submitOrder(e, editId = '') {
   }
 
   const form = e.target;
+  const submitBtn = document.getElementById('order-form-submit-btn') || form.querySelector('button[type="submit"]');
+  const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.75';
+    submitBtn.style.cursor = 'wait';
+    submitBtn.innerHTML = `
+      <span style="display:inline-flex; align-items:center; gap:8px;">
+        <svg class="animate-spin" style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+        </svg>
+        <span>${editId ? 'Memperbarui...' : 'Menyimpan...'}</span>
+      </span>
+    `;
+  }
+
   const formData = new FormData(form);
   const quotationSelect = document.getElementById('order-quotation-select');
   const quotationId = formData.get('quotationId') || (quotationSelect ? quotationSelect.value : '') || '';
@@ -1210,6 +1578,12 @@ async function submitOrder(e, editId = '') {
   });
 
   if (items.length === 0) {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+      submitBtn.style.cursor = 'pointer';
+      submitBtn.innerHTML = originalBtnHtml;
+    }
     showToast('Harap tambahkan minimal 1 item produk/jasa pesanan utama!', 'warning');
     return;
   }
@@ -1238,6 +1612,8 @@ async function submitOrder(e, editId = '') {
     uploadedAt: existingOrder?.poDocument?.uploadedAt || new Date().toISOString()
   } : (existingOrder?.poDocument || null);
 
+  const isExistingDualApproved = Boolean(existingOrder && isOrderDualApproved(existingOrder));
+
   const payload = {
     quotationId: quotationId || existingOrder?.quotationId || '',
     orderType: orderType,
@@ -1248,7 +1624,13 @@ async function submitOrder(e, editId = '') {
     customerAddress: formData.get('customerAddress'),
     orderDate: formData.get('orderDate'),
     dueDate: formData.get('dueDate'),
-    status: !editId ? 'Pengajuan' : (formData.get('status') || existingOrder?.status || 'Pengajuan'),
+    status: !editId ? 'Pengajuan' : (isExistingDualApproved ? (existingOrder?.status || 'Accepted') : 'Pengajuan'),
+    approvalKetuaUbm: editId ? (existingOrder?.approvalKetuaUbm || false) : false,
+    approvalKetuaUbmBy: editId ? (existingOrder?.approvalKetuaUbmBy || null) : null,
+    approvalKetuaUbmDate: editId ? (existingOrder?.approvalKetuaUbmDate || null) : null,
+    approvalWadir1: editId ? (existingOrder?.approvalWadir1 || false) : false,
+    approvalWadir1By: editId ? (existingOrder?.approvalWadir1By || null) : null,
+    approvalWadir1Date: editId ? (existingOrder?.approvalWadir1Date || null) : null,
     notes: (typeof embedPOInNotes === 'function' && poDocument)
       ? embedPOInNotes(formData.get('notes'), poDocument)
       : formData.get('notes'),
@@ -1273,6 +1655,12 @@ async function submitOrder(e, editId = '') {
     if (!editId && quotationId) {
       const duplicateOrder = (state.orders || []).find(o => o.quotationId === quotationId || (o.notes && o.notes.includes(quotationId)));
       if (duplicateOrder) {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.style.opacity = '1';
+          submitBtn.style.cursor = 'pointer';
+          submitBtn.innerHTML = originalBtnHtml;
+        }
         showToast(`⚠️ Quotation ${quotationId} sudah pernah dikonversi ke Order Penjualan #${duplicateOrder.id}! Tidak bisa dikonversi ulang.`, 'warning');
         return;
       }
@@ -1294,35 +1682,98 @@ async function submitOrder(e, editId = '') {
     }
 
     if (res.ok) {
+      const savedResult = await res.json().catch(() => ({}));
+      const currentOrderId = editId || savedResult.id || payload.id;
+
+      // Tutup modal secepatnya tanpa memblokir rendering
       closeModal('form-modal');
 
-      if (typeof directSupabaseUpsertNativeRow === 'function' && editId) {
-        directSupabaseUpsertNativeRow('orders', { id: editId, ...payload }).catch(() => {});
-      }
-      if (typeof directSupabaseSyncResource === 'function') {
-        directSupabaseSyncResource('orders', state.orders).catch(() => {});
+      // Optimistic update state.orders in memory
+      if (currentOrderId) {
+        const oIdx = (state.orders || []).findIndex(o => o.id === currentOrderId);
+        if (oIdx !== -1) {
+          state.orders[oIdx] = { ...state.orders[oIdx], ...payload, id: currentOrderId };
+        } else if (!editId && savedResult.id) {
+          state.orders.unshift(savedResult);
+        }
       }
 
-      await Promise.allSettled([
-        fetchResource('orders'),
-        fetchResource('quotations'),
-        fetchResource('invoices'),
-        fetchResource('projects')
-      ]);
+      // Optimistic update linked project in state.projects agar Surat Tugas & Timeline langsung tersinkron
+      if (currentOrderId) {
+        const linkedProj = (state.projects || []).find(p => p.orderId === currentOrderId || p.id === currentOrderId);
+        if (linkedProj) {
+          Object.assign(linkedProj, {
+            projectName: payload.projectName,
+            customerName: payload.customerName,
+            customerPhone: payload.customerPhone,
+            customerAddress: payload.customerAddress,
+            orderDate: payload.orderDate,
+            dueDate: payload.dueDate,
+            notes: payload.notes,
+            items: payload.items,
+            additionalServices: payload.additionalServices,
+            orderType: payload.orderType,
+            poDocument: payload.poDocument,
+            poFileName: payload.poFileName,
+            poFileUrl: payload.poFileUrl,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
+
+      // Re-render UI seketika secara responsif dan ringan!
       if (typeof renderOrdersTable === 'function') {
         renderOrdersTable();
       }
       if (typeof renderQuotationsTable === 'function' && state.currentView === 'quotations') {
         renderQuotationsTable();
       }
+      if (typeof renderProjectsTableView === 'function' && state.currentView === 'projects') {
+        renderProjectsTableView();
+      }
       updateSidebarBadges();
 
-      showToast(editId ? 'Order penjualan berhasil diperbarui di Supabase!' : 'Order penjualan baru berhasil disimpan ke Supabase!', 'success');
+      showToast(editId ? 'Order penjualan berhasil diperbarui!' : 'Order penjualan baru berhasil disimpan!', 'success');
+
+      // Jalankan sinkronisasi background secara silent dan non-blocking (tidak membebani UI)
+      setTimeout(() => {
+        if (typeof directSupabaseUpsertNativeRow === 'function' && currentOrderId) {
+          directSupabaseUpsertNativeRow('orders', { id: currentOrderId, ...payload }).catch(() => {});
+        }
+        if (typeof directSupabaseSyncResource === 'function') {
+          directSupabaseSyncResource('orders', state.orders).catch(() => {});
+          directSupabaseSyncResource('projects', state.projects).catch(() => {});
+        }
+        Promise.allSettled([
+          fetchResource('orders'),
+          fetchResource('quotations'),
+          fetchResource('invoices'),
+          fetchResource('projects')
+        ]).then(() => {
+          if (typeof renderOrdersTable === 'function') renderOrdersTable();
+          if (typeof renderQuotationsTable === 'function' && state.currentView === 'quotations') renderQuotationsTable();
+          if (typeof renderProjectsTableView === 'function' && state.currentView === 'projects') renderProjectsTableView();
+          updateSidebarBadges();
+        }).catch(() => {});
+      }, 50);
+
     } else {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+        submitBtn.style.cursor = 'pointer';
+        submitBtn.innerHTML = originalBtnHtml;
+      }
       const errData = await res.json().catch(() => ({}));
       showToast(errData.error || errData.message || 'Gagal menyimpan order', 'error');
     }
   } catch (err) {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+      submitBtn.style.cursor = 'pointer';
+      submitBtn.innerHTML = originalBtnHtml;
+    }
     console.error('Error saving order:', err);
     showToast('Terjadi kesalahan jaringan', 'error');
   }
@@ -1374,8 +1825,9 @@ function viewOrderDetail(orderId) {
 
   const team = project?.team || [];
 
+  const isDualApproved = isOrderDualApproved(order);
   const hasPO = Boolean(order.poDocument?.url || order.poFileUrl || order.poDocument?.name || order.poFileName);
-  const isPOAndAccepted = hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
+  const isPOAndAccepted = isDualApproved && hasPO && (order.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order.status));
   const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
   const hasBOM = Boolean(bom);
   const isBOMAccepted = Boolean(acceptedBOM);
@@ -1385,7 +1837,7 @@ function viewOrderDetail(orderId) {
     `<button type="button" class="btn btn-sm btn-outline" style="color: #4f46e5; border-color: #c7d2fe; font-size: 11.5px;" onclick="closeModal('preview-modal'); openTeamAssignmentPage('${order.id}')">
        <i data-lucide="users"></i> Penugasan Tim
      </button>` :
-    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptPenugasanDisabled('${order.id}')" title="⚠️ Wajib upload PO dan status Accepted">
+    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `promptPenugasanDisabled('${order.id}')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : '⚠️ Wajib upload PO'}">
        <i data-lucide="users"></i> Penugasan Tim
      </button>`;
 
@@ -1428,7 +1880,7 @@ function viewOrderDetail(orderId) {
     }
   } else {
     bomBtnModal = `
-      <button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptBOMDisabled('${order.id}')" title="⚠️ Wajib tentukan Project Leader terlebih dahulu">
+      <button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `promptBOMDisabled('${order.id}')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : '⚠️ Wajib tentukan Project Leader terlebih dahulu'}">
         <i data-lucide="boxes"></i> + Buat BOM
       </button>
     `;
@@ -1442,7 +1894,7 @@ function viewOrderDetail(orderId) {
       `<button type="button" class="btn btn-sm btn-primary" style="background: #ea580c; border-color: #ea580c; font-size: 11.5px; font-weight: 700; color: #ffffff;" onclick="closeModal('preview-modal'); openServiceExpenseModal('${order.id}')">
          <i data-lucide="car"></i> Pengajuan Transport & Uang Makan Jasa
        </button>` :
-      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptPOAndAcceptedRequired('${order.id}')" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu">
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `promptPOAndAcceptedRequired('${order.id}')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : '⚠️ Wajib upload PO Pelanggan'}">
          <i data-lucide="car"></i> Pengajuan Transport & Uang Makan Jasa
        </button>`;
   } else {
@@ -1451,7 +1903,7 @@ function viewOrderDetail(orderId) {
       `<button type="button" class="btn btn-sm btn-primary" style="background: #4f46e5; border-color: #4f46e5; font-size: 11.5px;" onclick="closeModal('preview-modal'); openProjectTimelinePage('${order.id}')">
          <i data-lucide="folder-kanban"></i> Timeline & Milestone
        </button>` :
-      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptProjectManagementDisabled('${order.id}')" title="${isBOMDitolak ? '⚠️ Formula BOM Ditolak. Harap ajukan ulang BOM terlebih dahulu.' : '⚠️ Wajib isi BOM terlebih dahulu'}">
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `promptProjectManagementDisabled('${order.id}')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : isBOMDitolak ? '⚠️ Formula BOM Ditolak' : '⚠️ Wajib isi BOM terlebih dahulu'}">
          <i data-lucide="folder-kanban"></i> Timeline & Milestone
        </button>`;
 
@@ -1463,10 +1915,26 @@ function viewOrderDetail(orderId) {
       `<button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); openGanttDetailModal('${order.id}')">
          <i data-lucide="bar-chart-2"></i> Gantt Chart
        </button>` :
-      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="showToast('⚠️ Gantt Chart belum dapat dibuka karena belum ada milestone yang berstatus In Progress!', 'warning')" title="${!hasInProgressMsOrder ? '⚠️ Milestone belum ada yang In Progress' : '⚠️ Wajib isi data pengerjaan & Penugasan Tim terlebih dahulu'}">
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `showToast('⚠️ Gantt Chart belum dapat dibuka karena belum ada milestone yang berstatus In Progress!', 'warning')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : !hasInProgressMsOrder ? '⚠️ Milestone belum ada yang In Progress' : '⚠️ Wajib isi data pengerjaan & Penugasan Tim'}">
          <i data-lucide="bar-chart-2"></i> Gantt Chart
        </button>`;
   }
+
+  const editBtnModal = isDualApproved ?
+    `<button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); editOrder('${order.id}')">
+       <i data-lucide="edit-2"></i> Edit Order
+     </button>` :
+    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptDualApprovalRequired('${order.id}')" title="⚠️ Menunggu persetujuan Ketua UBM & Wadir I">
+       <i data-lucide="edit-2"></i> Edit Order
+     </button>`;
+
+  const suratTugasBtnModal = (isDualApproved && hasProjectLead) ?
+    `<button type="button" class="btn btn-sm btn-outline" style="color: #4338ca; border-color: #c7d2fe; font-size: 11.5px;" onclick="closeModal('preview-modal'); if (typeof exportTeamAssignmentLetterPDF === 'function') exportTeamAssignmentLetterPDF('${order.id}');" title="Cetak / Preview Surat Tugas Resmi">
+       <i data-lucide="printer"></i> Surat Tugas
+     </button>` :
+    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `showToast('⚠️ Tentukan Project Leader terlebih dahulu!', 'warning')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : '⚠️ Tentukan Project Leader terlebih dahulu'}">
+       <i data-lucide="printer"></i> Surat Tugas
+     </button>`;
 
   const content = document.getElementById('preview-modal-content') || document.getElementById('preview-modal-body');
   if (!content) return;
@@ -1479,13 +1947,33 @@ function viewOrderDetail(orderId) {
           <div class="text-muted font-sm">Engineering, Manufacturing, & Automation Solutions</div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); editOrder('${order.id}')">
-            <i data-lucide="edit-2"></i> Edit Order
-          </button>
+          ${editBtnModal}
           ${penugasanBtnModal}
+          ${suratTugasBtnModal}
           ${bomBtnModal}
           ${timelineBtnModal}
           ${ganttBtnModal}
+        </div>
+      </div>
+
+      <!-- DUAL APPROVAL STATUS BANNER -->
+      <div style="margin-bottom: 16px; padding: 10px 14px; border-radius: 6px; ${isDualApproved ? 'background: #f0fdf4; border: 1px solid #bbf7d0;' : 'background: #fffbeb; border: 1px solid #fde68a;'} display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="${isDualApproved ? 'check-check' : 'clock'}" style="width: 18px; height: 18px; color: ${isDualApproved ? '#16a34a' : '#d97706'};"></i>
+          <div>
+            <div style="font-weight: 700; font-size: 12px; color: ${isDualApproved ? '#15803d' : '#92400e'};">
+              ${isDualApproved ? 'Status Persetujuan: Disetujui Lengkap (Terkunci Permanen)' : 'Status Persetujuan: Menunggu Persetujuan Lengkap'}
+            </div>
+            <div style="font-size: 10.5px; color: ${isDualApproved ? '#166534' : '#b45309'}; margin-top: 1px;">
+              Ketua UBM: ${order.approvalKetuaUbm ? `✅ Disetujui (${order.approvalKetuaUbmBy || 'Ketua UBM'})` : '⏳ Menunggu Persetujuan'} &bull;
+              Wakil Direktur I: ${order.approvalWadir1 ? `✅ Disetujui (${order.approvalWadir1By || 'Wadir I'})` : '⏳ Menunggu Persetujuan'}
+            </div>
+          </div>
+        </div>
+        <span class="badge" style="${isDualApproved ? 'background: #dcfce7; color: #15803d; border: 1px solid #86efac;' : 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;'} font-weight: 700; font-size: 11px;">
+          ${isDualApproved ? '✓ Disetujui (2/2)' : `⏳ Menunggu (${(order.approvalKetuaUbm ? 1 : 0) + (order.approvalWadir1 ? 1 : 0)}/2)`}
+        </span>
+      </div>
         </div>
       </div>
 
@@ -1757,3 +2245,14 @@ function editOrder(orderId) {
   const order = state.orders.find(o => o.id === orderId);
   if (order) openOrderModal(order);
 }
+
+// Global Window Exports
+window.isOrderDualApproved = isOrderDualApproved;
+window.promptDualApprovalRequired = promptDualApprovalRequired;
+window.approveOrderByRole = approveOrderByRole;
+window.rejectOrderByRole = rejectOrderByRole;
+window.calculateAutoOrderStatus = calculateAutoOrderStatus;
+window.renderOrdersTable = renderOrdersTable;
+window.openOrderModal = openOrderModal;
+window.viewOrderDetail = viewOrderDetail;
+window.editOrder = editOrder;

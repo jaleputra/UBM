@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS public.quotations (
     tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
     tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    approval_ketua_ubm BOOLEAN DEFAULT FALSE,
+    approval_ketua_ubm_by TEXT,
+    approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE,
+    approval_direktur BOOLEAN DEFAULT FALSE,
+    approval_direktur_by TEXT,
+    approval_direktur_date TIMESTAMP WITH TIME ZONE,
     pdf_url TEXT,
     pdf_filename TEXT,
     notes TEXT,
@@ -79,6 +85,12 @@ CREATE TABLE IF NOT EXISTS public.orders (
     po_document JSONB,
     po_file_url TEXT,
     po_file_name TEXT,
+    approval_ketua_ubm BOOLEAN DEFAULT FALSE,
+    approval_ketua_ubm_by VARCHAR(255),
+    approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE,
+    approval_wadir1 BOOLEAN DEFAULT FALSE,
+    approval_wadir1_by VARCHAR(255),
+    approval_wadir1_date TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -96,6 +108,12 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS discount NUMERIC(15, 2) DEFAU
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_document JSONB;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_file_url TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS po_file_name TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_ketua_ubm BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_ketua_ubm_by VARCHAR(255);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_wadir1 BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_wadir1_by VARCHAR(255);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS approval_wadir1_date TIMESTAMP WITH TIME ZONE;
 
 -- ---------------------------------------------------------
 -- 3. TABLE: projects (Project Management & Timeline)
@@ -880,3 +898,13 @@ CREATE POLICY "Allow all access to users" ON public.users FOR ALL USING (true) W
 
 DROP POLICY IF EXISTS "Allow all access to settings" ON public.settings;
 CREATE POLICY "Allow all access to settings" ON public.settings FOR ALL USING (true) WITH CHECK (true);
+
+-- =========================================================
+-- MIGRATION: DUAL APPROVAL QUOTATIONS (KETUA UBM & DIREKTUR)
+-- =========================================================
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm_by TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur_by TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur_date TIMESTAMP WITH TIME ZONE;

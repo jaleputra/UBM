@@ -2,6 +2,191 @@
 // UBM - Quotations Module (Surat Penawaran Harga)
 // =========================================================
 
+// Helper: Memeriksa apakah Quotation telah disetujui lengkap oleh Ketua UBM dan Direktur
+function isQuotationDualApproved(quo) {
+  if (!quo) return false;
+  if (typeof ensureQuotationApprovalData === 'function') {
+    ensureQuotationApprovalData(quo);
+  }
+  return Boolean(quo.approvalKetuaUbm && quo.approvalDirektur);
+}
+
+function promptQuotationDualApprovalRequired(id) {
+  const quo = (state.quotations || []).find(q => q.id === id);
+  if (!quo) return;
+  if (typeof ensureQuotationApprovalData === 'function') {
+    ensureQuotationApprovalData(quo);
+  }
+  let missing = [];
+  if (!quo.approvalKetuaUbm) missing.push('Ketua UBM');
+  if (!quo.approvalDirektur) missing.push('Direktur');
+  showToast(`⚠️ Surat Penawaran #${quo.id} belum disetujui lengkap!\nMemerlukan persetujuan resmi dari: ${missing.join(' dan ')} sebelum dapat dikonversikan ke Order Penjualan.`, 'warning');
+}
+
+async function approveQuotationByRole(quotationId, approverRole) {
+  const quo = (state.quotations || []).find(q => q.id === quotationId);
+  if (!quo) {
+    showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+  const currentRole = activeUser?.role || '';
+  const isAdmin = currentRole === 'Administrator';
+  const isKetuaUbm = currentRole === 'Ketua UBM';
+  const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+
+  if (approverRole === 'Ketua UBM') {
+    if (!isAdmin && !isKetuaUbm) {
+      showToast('⚠️ Hanya Ketua UBM atau Administrator yang dapat memberikan persetujuan ini.', 'warning');
+      return;
+    }
+  } else if (approverRole === 'Direktur') {
+    if (!isAdmin && !isDirektur) {
+      showToast('⚠️ Hanya Direktur atau Administrator yang dapat memberikan persetujuan ini.', 'warning');
+      return;
+    }
+  }
+
+  if (approverRole === 'Ketua UBM' && quo.approvalKetuaUbm) {
+    showToast('Persetujuan Ketua UBM sudah disetujui secara permanen.', 'info');
+    return;
+  }
+  if (approverRole === 'Direktur' && quo.approvalDirektur) {
+    showToast('Persetujuan Direktur sudah disetujui secara permanen.', 'info');
+    return;
+  }
+
+  const approverName = activeUser?.name || approverRole;
+  const nowIso = new Date().toISOString();
+
+  if (approverRole === 'Ketua UBM') {
+    quo.approvalKetuaUbm = true;
+    quo.approvalKetuaUbmBy = approverName;
+    quo.approvalKetuaUbmDate = nowIso;
+  } else if (approverRole === 'Direktur') {
+    quo.approvalDirektur = true;
+    quo.approvalDirekturBy = approverName;
+    quo.approvalDirekturDate = nowIso;
+  }
+
+  const isDualApproved = Boolean(quo.approvalKetuaUbm && quo.approvalDirektur);
+  if (isDualApproved) {
+    quo.status = 'Accepted';
+  }
+
+  if (typeof embedQuotationApprovalInNotes === 'function') {
+    const targetNotes = quo._rawNotes || quo.notes || '';
+    const embedded = embedQuotationApprovalInNotes(targetNotes, quo);
+    quo._rawNotes = embedded;
+    quo.notes = embedded;
+  }
+
+  // Update UI optimistik
+  renderQuotationsTable();
+
+  try {
+    const res = await fetch(`/api/quotations/${quotationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quo)
+    });
+
+    if (!res.ok) throw new Error('Gagal menyimpan persetujuan ke server');
+
+    const savedQuo = await res.json().catch(() => null);
+    if (savedQuo && typeof savedQuo === 'object') {
+      if (quo.approvalKetuaUbm) {
+        savedQuo.approvalKetuaUbm = true;
+        savedQuo.approvalKetuaUbmBy = quo.approvalKetuaUbmBy;
+        savedQuo.approvalKetuaUbmDate = quo.approvalKetuaUbmDate;
+      }
+      if (quo.approvalDirektur) {
+        savedQuo.approvalDirektur = true;
+        savedQuo.approvalDirekturBy = quo.approvalDirekturBy;
+        savedQuo.approvalDirekturDate = quo.approvalDirekturDate;
+      }
+      if (isDualApproved) savedQuo.status = 'Accepted';
+      const idx = (state.quotations || []).findIndex(q => q.id === quotationId);
+      if (idx !== -1) state.quotations[idx] = savedQuo;
+    }
+
+    if (isDualApproved) {
+      showToast(`✅ Quotation #${quotationId} telah disetujui lengkap oleh Ketua UBM & Direktur! Siap dikonversikan ke Order Penjualan.`, 'success');
+    } else {
+      showToast(`✅ Persetujuan ${approverRole} untuk Quotation #${quotationId} berhasil disimpan secara permanen!`, 'success');
+    }
+  } catch (err) {
+    console.error('Error approving quotation:', err);
+    showToast(`Persetujuan tersimpan di sesi lokal (${err.message})`, 'info');
+  }
+
+  renderQuotationsTable();
+}
+
+async function rejectQuotationByRole(quotationId, rejectorRole) {
+  const quo = (state.quotations || []).find(q => q.id === quotationId);
+  if (!quo) {
+    showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+  const currentRole = activeUser?.role || '';
+  const isAdmin = currentRole === 'Administrator';
+  const isKetuaUbm = currentRole === 'Ketua UBM';
+  const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+
+  if (rejectorRole === 'Ketua UBM' && !isAdmin && !isKetuaUbm) {
+    showToast('⚠️ Hanya Ketua UBM atau Administrator yang dapat menolak pada kolom Ketua UBM.', 'warning');
+    return;
+  } else if (rejectorRole === 'Direktur' && !isAdmin && !isDirektur) {
+    showToast('⚠️ Hanya Direktur atau Administrator yang dapat menolak pada kolom Direktur.', 'warning');
+    return;
+  }
+
+  if (!confirm(`Tolak Surat Penawaran #${quotationId} sebagai ${rejectorRole}?`)) {
+    return;
+  }
+
+  const rejectorName = activeUser?.name || rejectorRole;
+  if (rejectorRole === 'Ketua UBM') {
+    quo.approvalKetuaUbm = false;
+    quo.approvalKetuaUbmBy = `Ditolak oleh ${rejectorName}`;
+    quo.approvalKetuaUbmDate = new Date().toISOString();
+  } else if (rejectorRole === 'Direktur') {
+    quo.approvalDirektur = false;
+    quo.approvalDirekturBy = `Ditolak oleh ${rejectorName}`;
+    quo.approvalDirekturDate = new Date().toISOString();
+  }
+
+  quo.status = 'Rejected';
+
+  if (typeof embedQuotationApprovalInNotes === 'function') {
+    const targetNotes = quo._rawNotes || quo.notes || '';
+    const embedded = embedQuotationApprovalInNotes(targetNotes, quo);
+    quo._rawNotes = embedded;
+    quo.notes = embedded;
+  }
+
+  renderQuotationsTable();
+
+  try {
+    const res = await fetch(`/api/quotations/${quotationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quo)
+    });
+    if (!res.ok) throw new Error('Gagal memperbarui status ke server');
+    showToast(`Surat Penawaran #${quotationId} telah ditolak oleh ${rejectorRole}.`, 'warning');
+  } catch (err) {
+    console.warn('Gagal menyimpan penolakan:', err);
+    showToast(`Status penolakan tersimpan di sesi lokal`, 'info');
+  }
+
+  renderQuotationsTable();
+}
+
 function renderQuotationsTable() {
   const tbody = document.getElementById('table-quotations-body');
   if (!tbody) return;
@@ -25,16 +210,20 @@ function renderQuotationsTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 28px;">Tidak ada data quotation penawaran harga ditemukan.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding: 28px;">Tidak ada data quotation penawaran harga ditemukan.</td></tr>';
     return;
   }
 
+  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
+  const currentRole = activeUser?.role || '';
+  const isAdmin = currentRole === 'Administrator';
+  const isKetuaUbm = currentRole === 'Ketua UBM';
+  const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+
   tbody.innerHTML = list.map(quo => {
-    const badgeClass = quo.status === 'Accepted' ? 'badge-success' :
-                        quo.status === 'Pengajuan' ? 'badge-amber' :
-                        quo.status === 'Sent' ? 'badge-info' :
-                        quo.status === 'Rejected' ? 'badge-danger' :
-                        quo.status === 'Expired' ? 'badge-secondary' : 'badge-amber';
+    if (typeof ensureQuotationApprovalData === 'function') {
+      ensureQuotationApprovalData(quo);
+    }
 
     const isJasa = quo.quotationType === 'jasa';
     const itemCount = quo.items ? quo.items.length : 0;
@@ -54,6 +243,79 @@ function renderQuotationsTable() {
     const isPengajuan = quo.status === 'Pengajuan';
     const existingOrder = (state.orders || []).find(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id)));
     const isConverted = !!existingOrder;
+
+    // Dual Approval Verification
+    const isKetuaApproved = Boolean(quo.approvalKetuaUbm);
+    const isDirekturApproved = Boolean(quo.approvalDirektur);
+    const isDualApproved = Boolean(isKetuaApproved && isDirekturApproved);
+
+    // 1. Kolom Persetujuan Ketua UBM
+    let statusKetuaHtml = '';
+    if (isKetuaApproved) {
+      statusKetuaHtml = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;" title="Disetujui oleh: ${escapeAttr(quo.approvalKetuaUbmBy || 'Ketua UBM')}">
+            <i data-lucide="check-circle" style="width: 10px; height: 10px; color: #10b981;"></i> Disetujui
+          </span>
+          <span style="font-size: 8px; color: #047857; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(quo.approvalKetuaUbmBy || 'Ketua UBM')}
+          </span>
+        </div>
+      `;
+    } else {
+      if (isAdmin || isKetuaUbm) {
+        statusKetuaHtml = `
+          <div style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: nowrap;">
+            <button type="button" class="btn btn-xs" style="background: #16a34a; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); approveQuotationByRole('${quo.id}', 'Ketua UBM')" title="Setujui penawaran ini sebagai Ketua UBM">
+              <i data-lucide="check" style="width: 9px; height: 9px;"></i> Setuju
+            </button>
+            <button type="button" class="btn btn-xs" style="background: #ef4444; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); rejectQuotationByRole('${quo.id}', 'Ketua UBM')" title="Tolak penawaran ini">
+              <i data-lucide="x" style="width: 9px; height: 9px;"></i> Tidak
+            </button>
+          </div>
+        `;
+      } else {
+        statusKetuaHtml = `
+          <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 2px;" title="Menunggu persetujuan Ketua UBM">
+            <i data-lucide="clock" style="width: 8px; height: 8px;"></i> Menunggu
+          </span>
+        `;
+      }
+    }
+
+    // 2. Kolom Persetujuan Direktur
+    let statusDirekturHtml = '';
+    if (isDirekturApproved) {
+      statusDirekturHtml = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;" title="Disetujui oleh: ${escapeAttr(quo.approvalDirekturBy || 'Direktur')}">
+            <i data-lucide="check-circle" style="width: 10px; height: 10px; color: #10b981;"></i> Disetujui
+          </span>
+          <span style="font-size: 8px; color: #047857; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(quo.approvalDirekturBy || 'Direktur')}
+          </span>
+        </div>
+      `;
+    } else {
+      if (isAdmin || isDirektur) {
+        statusDirekturHtml = `
+          <div style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: nowrap;">
+            <button type="button" class="btn btn-xs" style="background: #0284c7; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); approveQuotationByRole('${quo.id}', 'Direktur')" title="Setujui penawaran ini sebagai Direktur">
+              <i data-lucide="check" style="width: 9px; height: 9px;"></i> Setuju
+            </button>
+            <button type="button" class="btn btn-xs" style="background: #ef4444; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); rejectQuotationByRole('${quo.id}', 'Direktur')" title="Tolak penawaran ini">
+              <i data-lucide="x" style="width: 9px; height: 9px;"></i> Tidak
+            </button>
+          </div>
+        `;
+      } else {
+        statusDirekturHtml = `
+          <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 2px;" title="Menunggu persetujuan Direktur">
+            <i data-lucide="clock" style="width: 8px; height: 8px;"></i> Menunggu
+          </span>
+        `;
+      }
+    }
 
     return `
       <tr class="${isAccepted ? 'row-accepted' : (isPengajuan ? 'row-pengajuan' : '')}" style="${isAccepted ? 'background-color: #f0fdf4;' : (isPengajuan ? 'background-color: #fffbeb;' : '')}; cursor: pointer;" onclick="if (!event.target.closest('.table-actions, button, a, input, select, textarea')) viewQuotationDetail('${quo.id}')" title="Klik untuk melihat rincian surat penawaran ${quo.id}">
@@ -93,8 +355,9 @@ function renderQuotationsTable() {
           </div>
         </td>
         <td style="text-align: center;"><span class="badge badge-secondary font-bold" style="font-size: 10.5px;">${itemCount} Item</span></td>
-        <td class="font-bold font-mono text-main" style="font-size: 12px; word-break: break-word;">${formatRupiah(quo.grandTotal)}</td>
-        <td style="text-align: center;"><span class="badge ${badgeClass}" style="font-size: 10px; padding: 2px 6px;">${quo.status}</span></td>
+        <td class="font-bold font-mono text-main" style="font-size: 12px; word-break: break-word; text-align: right;">${formatRupiah(quo.grandTotal)}</td>
+        <td style="text-align: center;">${statusKetuaHtml}</td>
+        <td style="text-align: center;">${statusDirekturHtml}</td>
         <td class="text-right" style="padding-right: 12px;">
           <div class="table-actions" style="display: inline-flex; gap: 4px; justify-content: flex-end; align-items: center; width: 100%;">
             <button class="btn-icon" style="color: #0284c7; width: 28px; height: 28px; border-radius: 4px;" title="Pratinjau & Cetak Dokumen PDF" onclick="viewQuotationDetail('${quo.id}')">
@@ -110,14 +373,21 @@ function renderQuotationsTable() {
               <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Quotation Terkunci (Sudah Dikonversi ke Order Penjualan #${existingOrder.id})" onclick="showToast('Surat Penawaran #${quo.id} terkunci dan tidak dapat diedit karena sudah dikonversi ke Order Penjualan #${existingOrder.id}!', 'warning')">
                 <i data-lucide="lock" style="width: 14px; height: 14px; color: #94a3b8;"></i>
               </button>
-            ` : `
-              <button class="btn-icon" style="color: #4f46e5; width: 28px; height: 28px; border-radius: 4px;" title="Konversi ke Order Penjualan" onclick="convertQuotationToOrder('${quo.id}')">
+            ` : (isDualApproved ? `
+              <button class="btn-icon" style="color: #4f46e5; width: 28px; height: 28px; border-radius: 4px;" title="Konversi ke Order Penjualan (Telah Disetujui Lengkap)" onclick="convertQuotationToOrder('${quo.id}')">
                 <i data-lucide="arrow-right-circle" style="width: 14px; height: 14px;"></i>
               </button>
               <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Quotation" onclick="editQuotation('${quo.id}')">
                 <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
               </button>
-            `}
+            ` : `
+              <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Konversi Terkunci: Menunggu persetujuan Ketua UBM dan Direktur" onclick="promptQuotationDualApprovalRequired('${quo.id}')">
+                <i data-lucide="lock" style="width: 14px; height: 14px; color: #94a3b8;"></i>
+              </button>
+              <button class="btn-icon" style="width: 28px; height: 28px; border-radius: 4px;" title="Edit Quotation" onclick="editQuotation('${quo.id}')">
+                <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
+              </button>
+            `)}
             <button class="btn-icon btn-danger-ghost" style="width: 28px; height: 28px; border-radius: 4px;" title="${isConverted ? 'Quotation sudah dikonversi ke order' : 'Hapus Quotation'}" onclick="${isConverted ? `showToast('Surat Penawaran #${quo.id} tidak dapat dihapus karena sudah dikonversikan ke Order Penjualan #${existingOrder.id}!', 'warning')` : `deleteResource('quotations', '${quo.id}')`}">
               <i data-lucide="trash-2" style="width: 14px; height: 14px; ${isConverted ? 'opacity: 0.4;' : ''}"></i>
             </button>
@@ -1171,25 +1441,116 @@ function buildQuotationPrintableHtml(quo) {
         </ol>
       </div>
 
-      <!-- KOLOM TANDA TANGAN RESMI -->
-      <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 16px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px;">
-        <div style="width: 250px;">
-          <div class="text-muted" style="font-weight: 600;">Disetujui Oleh (Calon Pelanggan),</div>
-          <div style="margin-top: 55px; font-weight: bold;">
-            ( ..................................... )
-          </div>
-          <div class="text-muted" style="font-size: 10px; margin-top: 4px;">Tanda Tangan & Cap Perusahaan</div>
-        </div>
+      <!-- TANDA TANGAN RESMI SURAT PENAWARAN (CALON PELANGGAN, KETUA UBM & DIREKTUR) -->
+      ${(() => {
+        const leaderDisplayName = compSettings.leaderName || 'Rizaldi Putra, M.Kom.';
+        const leaderCleanName = leaderDisplayName.replace(/\.+$/, '');
+        const directorDisplayName = compSettings.directorName || 'Dr. Eng. Tri Wahyudi, M.Eng.';
+        const directorCleanName = directorDisplayName.replace(/\.+$/, '');
 
-        <div style="width: 250px;">
-          <div class="text-muted" style="font-weight: 600;">Hormat Kami,</div>
-          <div class="font-bold" style="color: #1e40af;">${escapeHtml(compSettings.companyName || 'Unit Bisnis Mandiri (UBM)')}</div>
-          <div style="margin-top: 55px; font-weight: bold;">
-            ( ${escapeHtml(compSettings.leaderName || 'Ir. Hendra Wijaya, M.T.')} )
+        const leaderVerifyUrl = (typeof getSignatureVerificationUrl === 'function')
+          ? getSignatureVerificationUrl(leaderCleanName, compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)', quo.id, quo.projectName || quo.customerName || 'Surat Penawaran Resmi')
+          : `${(typeof getVerificationBaseUrl === 'function' ? getVerificationBaseUrl() : window.location.origin)}/verify-approval?name=${encodeURIComponent(leaderCleanName)}&role=${encodeURIComponent(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}&doc=${encodeURIComponent(quo.id)}&title=${encodeURIComponent(quo.projectName || quo.customerName || 'Surat Penawaran Resmi')}`;
+
+        const directorVerifyUrl = (typeof getSignatureVerificationUrl === 'function')
+          ? getSignatureVerificationUrl(directorCleanName, compSettings.directorRole || 'Direktur Politeknik Takumi', quo.id, quo.projectName || quo.customerName || 'Surat Penawaran Resmi')
+          : `${(typeof getVerificationBaseUrl === 'function' ? getVerificationBaseUrl() : window.location.origin)}/verify-approval?name=${encodeURIComponent(directorCleanName)}&role=${encodeURIComponent(compSettings.directorRole || 'Direktur Politeknik Takumi')}&doc=${encodeURIComponent(quo.id)}&title=${encodeURIComponent(quo.projectName || quo.customerName || 'Surat Penawaran Resmi')}`;
+
+        let ketuaSigHtml = '';
+        if (quo.approvalKetuaUbm) {
+          const qrSvg = (typeof generateQRCodeSvg === 'function')
+            ? generateQRCodeSvg(leaderVerifyUrl, 2.2, 1)
+            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 66px; height: 66px; display: block; margin: 0 auto;" alt="QR Code" />`;
+
+          ketuaSigHtml = `
+            <div style="min-height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 10px auto; text-align: center;">
+              <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
+                <div style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+                  ${qrSvg}
+                </div>
+                <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+                  ✓ TERVERIFIKASI DIGITAL
+                </div>
+              </a>
+            </div>
+          `;
+        } else {
+          ketuaSigHtml = `
+            <div style="height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 10px auto; text-align: center;">
+              <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
+              <span>(Tanda Tangan & Cap UBM)</span>
+              <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Ketua UBM)</span>
+            </div>
+          `;
+        }
+
+        let directorSigHtml = '';
+        if (quo.approvalDirektur) {
+          const qrSvg = (typeof generateQRCodeSvg === 'function')
+            ? generateQRCodeSvg(directorVerifyUrl, 2.2, 1)
+            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(directorVerifyUrl)}" style="width: 66px; height: 66px; display: block; margin: 0 auto;" alt="QR Code" />`;
+
+          directorSigHtml = `
+            <div style="min-height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 10px auto; text-align: center;">
+              <a href="${directorVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(directorCleanName)}">
+                <div style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+                  ${qrSvg}
+                </div>
+                <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+                  ✓ TERVERIFIKASI DIGITAL
+                </div>
+              </a>
+            </div>
+          `;
+        } else {
+          directorSigHtml = `
+            <div style="height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 10px auto; text-align: center;">
+              <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
+              <span>(Tanda Tangan & Cap Institusi)</span>
+              <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Direktur)</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 22px; padding-top: 14px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px;">
+            <!-- 1. CALON PELANGGAN (KIRI) -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Disetujui Oleh (Calon Pelanggan),</div>
+              <div style="font-weight: 700; font-size: 11px; color: #0f172a; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(quo.customerName)}</div>
+              <div style="height: 105px; display: flex; align-items: flex-end; justify-content: center; margin: 10px auto; padding-bottom: 8px;">
+                <div style="border-bottom: 1px dashed #94a3b8; width: 130px; margin-bottom: 4px;"></div>
+              </div>
+              <div style="font-weight: bold; margin-top: 6px; font-size: 11px;">
+                ( ${escapeHtml(quo.picName || '.....................................')} )
+              </div>
+              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">Tanda Tangan & Cap Perusahaan</div>
+            </div>
+
+            <!-- 2. KETUA UNIT BISNIS MANDIRI (TENGAH) -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Hormat Kami,</div>
+              <div style="font-weight: 700; font-size: 11px; color: #1e40af; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
+              ${ketuaSigHtml}
+              <div style="font-weight: bold; margin-top: 6px; font-size: 11px; text-decoration: underline;">
+                ${escapeHtml(leaderDisplayName)}
+              </div>
+              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.leaderNip || '-')}</div>
+            </div>
+
+            <!-- 3. DIREKTUR POLITEKNIK TAKUMI (KANAN) -->
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Mengetahui & Menyetujui,</div>
+              <div style="font-weight: 700; font-size: 11px; color: #9d174d; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.directorRole || 'Direktur Politeknik Takumi')}</div>
+              ${directorSigHtml}
+              <div style="font-weight: bold; margin-top: 6px; font-size: 11px; text-decoration: underline;">
+                ${escapeHtml(directorDisplayName)}
+              </div>
+              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.directorNip || '-')}</div>
+            </div>
           </div>
-          <div class="text-muted" style="font-size: 10px; margin-top: 2px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
-        </div>
-      </div>
+        `;
+      })()}
     </div>
   `;
 }
@@ -1199,6 +1560,10 @@ function viewQuotationDetail(id) {
   if (!quo) {
     showToast('Data penawaran tidak ditemukan!', 'error');
     return;
+  }
+
+  if (typeof ensureQuotationApprovalData === 'function') {
+    ensureQuotationApprovalData(quo);
   }
 
   const content = document.getElementById('preview-modal-content');
@@ -1219,19 +1584,32 @@ function viewQuotationDetail(id) {
   const existingOrder = (state.orders || []).find(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id)));
   const isConverted = !!existingOrder;
 
+  const isKetuaApproved = Boolean(quo.approvalKetuaUbm);
+  const isDirekturApproved = Boolean(quo.approvalDirektur);
+  const isDualApproved = Boolean(isKetuaApproved && isDirekturApproved);
+
   content.innerHTML = `
     <!-- STRIP AKSI INTERAKTIF MODAL (NO-PRINT) -->
     <div class="no-print" style="background: #f1f5f9; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-      <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <span class="font-sm font-bold text-muted">Status:</span>
         <span class="badge ${quo.status === 'Accepted' ? 'badge-success' : (quo.status === 'Pengajuan' ? 'badge-amber' : 'badge-info')}" style="${quo.status === 'Pengajuan' ? 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 700;' : ''}">${quo.status}</span>
+        
+        <!-- Status Persetujuan Ketua UBM & Direktur -->
+        <span class="badge ${isKetuaApproved ? 'badge-success' : 'badge-amber'}" style="font-size: 10.5px; padding: 2px 7px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;" title="Persetujuan Ketua UBM">
+          <i data-lucide="${isKetuaApproved ? 'check-circle' : 'clock'}" style="width: 12px; height: 12px;"></i> Ketua UBM: ${isKetuaApproved ? 'Disetujui' : 'Menunggu'}
+        </span>
+        <span class="badge ${isDirekturApproved ? 'badge-success' : 'badge-amber'}" style="font-size: 10.5px; padding: 2px 7px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;" title="Persetujuan Direktur">
+          <i data-lucide="${isDirekturApproved ? 'check-circle' : 'clock'}" style="width: 12px; height: 12px;"></i> Direktur: ${isDirekturApproved ? 'Disetujui' : 'Menunggu'}
+        </span>
+
         ${isConverted ? `
           <span class="badge badge-success" style="font-size: 11px; padding: 2px 8px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
             <i data-lucide="check-check" style="width: 13px; height: 13px;"></i> Dikonversi ke Order #${existingOrder.id}
           </span>
         ` : ''}
       </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <button type="button" class="btn btn-sm btn-outline" style="color: #16a34a; border-color: #86efac; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="shareQuotationWhatsApp('${quo.id}')">
           <i data-lucide="message-circle"></i> Share WhatsApp (PDF)
         </button>
@@ -1242,14 +1620,21 @@ function viewQuotationDetail(id) {
           <button type="button" class="btn btn-sm" style="background: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; cursor: not-allowed; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" disabled title="Quotation ini sudah pernah dikonversi ke Order Penjualan #${existingOrder.id}">
             <i data-lucide="check-circle-2" style="color: #16a34a;"></i> Sudah Dikonversi
           </button>
-        ` : `
+        ` : (isDualApproved ? `
           <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('preview-modal'); editQuotation('${quo.id}')">
             <i data-lucide="edit-3"></i> Edit
           </button>
           <button type="button" class="btn btn-sm btn-primary" style="background: #4f46e5; border-color: #4f46e5; display: inline-flex; align-items: center; gap: 6px;" onclick="closeModal('preview-modal'); convertQuotationToOrder('${quo.id}')">
             <i data-lucide="shopping-cart"></i> Konversi ke Order
           </button>
-        `}
+        ` : `
+          <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('preview-modal'); editQuotation('${quo.id}')">
+            <i data-lucide="edit-3"></i> Edit
+          </button>
+          <button type="button" class="btn btn-sm" style="background: #f1f5f9; color: #94a3b8; border: 1px solid #cbd5e1; cursor: not-allowed; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" onclick="promptQuotationDualApprovalRequired('${quo.id}')" title="Quotation belum dapat dikonversi ke Order Penjualan. Menunggu persetujuan lengkap dari Ketua UBM dan Direktur">
+            <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i> Menunggu Persetujuan Lengkap
+          </button>
+        `)}
       </div>
     </div>
 
@@ -1623,6 +2008,19 @@ function convertQuotationToOrder(id) {
   const existingOrder = (state.orders || []).find(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id)));
   if (existingOrder) {
     showToast(`⚠️ Quotation ini sudah pernah dikonversi ke Order Penjualan #${existingOrder.id}! Tidak dapat dikonversi kembali.`, 'warning');
+    return;
+  }
+
+  // Validasi: Dual Approval lengkap dari Ketua UBM dan Direktur wajib terpenuhi
+  if (typeof ensureQuotationApprovalData === 'function') {
+    ensureQuotationApprovalData(quo);
+  }
+
+  if (!quo.approvalKetuaUbm || !quo.approvalDirektur) {
+    let missing = [];
+    if (!quo.approvalKetuaUbm) missing.push('Ketua UBM');
+    if (!quo.approvalDirektur) missing.push('Direktur');
+    showToast(`⚠️ Quotation #${quo.id} belum dapat dikonversikan ke Order Penjualan!\nMembutuhkan persetujuan resmi dari: ${missing.join(' dan ')}.`, 'warning');
     return;
   }
 

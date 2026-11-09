@@ -43,6 +43,12 @@ Object.assign(state, {
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
+  // 0. Cek jika permintaan adalah Verifikasi QR Code publik (tanpa login sama sekali)
+  if (typeof isVerificationRoute === 'function' && isVerificationRoute()) {
+    handlePublicVerificationView();
+    return;
+  }
+
   // 1. Strict Authentication verification before loading app
   const isAuth = typeof checkAuthAndRender === 'function' ? checkAuthAndRender() : true;
 
@@ -50,6 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
   initSearch();
   startLiveClock();
+
+  // Fetch server info for smart QR Code network URL
+  fetch('/api/server-info')
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.lanIp && data.lanIp !== 'localhost') {
+        window.__UBM_LAN_IP__ = data.lanIp;
+      }
+    })
+    .catch(() => {});
 
   if (isAuth) {
     loadAllData();
@@ -385,6 +401,12 @@ async function fetchResource(resource) {
   if (resource === 'settings') {
     state.settings = result;
   } else {
+    if (resource === 'orders' && Array.isArray(result)) {
+      result.forEach(o => {
+        if (typeof ensureOrderPOData === 'function') ensureOrderPOData(o);
+        if (typeof ensureOrderApprovalData === 'function') ensureOrderApprovalData(o);
+      });
+    }
     state[resource] = Array.isArray(result) ? result : [];
     if (resource === 'users' && Array.isArray(result) && result.length > 0) {
       try { localStorage.setItem('ubm_cached_users', JSON.stringify(result)); } catch (e) {}
@@ -423,8 +445,18 @@ function updateSidebarBadges() {
   const badgeQuotation = document.getElementById('badge-quotation-count');
   if (badgeQuotation) badgeQuotation.textContent = state.quotations?.length || 0;
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
   const badgeOrder = document.getElementById('badge-order-count');
-  if (badgeOrder) badgeOrder.textContent = state.orders?.length || 0;
+  if (badgeOrder) {
+    if (roleName === 'Member') {
+      const assignedOrders = (state.orders || []).filter(o => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(o.id, activeUser) : true);
+      badgeOrder.textContent = assignedOrders.length;
+    } else {
+      badgeOrder.textContent = state.orders?.length || 0;
+    }
+  }
 
   const badgeDelivery = document.getElementById('badge-delivery-count');
   if (badgeDelivery) badgeDelivery.textContent = state.delivery?.length || 0;
@@ -446,16 +478,36 @@ function updateSidebarBadges() {
   if (badgePO) badgePO.textContent = state.po?.length || 0;
 
   const badgeBOM = document.getElementById('badge-bom-count');
-  if (badgeBOM) badgeBOM.textContent = state.bom?.length || 0;
+  if (badgeBOM) {
+    if (roleName === 'Member') {
+      const memberBOMs = (state.bom || []).filter(b => {
+        if (b.orderId || b.projectId) {
+          return typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(b.orderId || b.projectId, activeUser) : false;
+        }
+        const userProjects = (state.projects || []).filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : false);
+        return userProjects.some(p =>
+          p.bomId === b.id ||
+          (p.projectName && b.productName && p.projectName.toLowerCase().trim() === b.productName.toLowerCase().trim()) ||
+          (p.projectName && b.projectName && p.projectName.toLowerCase().trim() === b.projectName.toLowerCase().trim())
+        );
+      });
+      badgeBOM.textContent = memberBOMs.length;
+    } else {
+      badgeBOM.textContent = state.bom?.length || 0;
+    }
+  }
 
   const badgeProjects = document.getElementById('badge-projects-count');
   if (badgeProjects) {
-    const productProjects = (state.projects || []).filter(p => {
+    let productProjects = (state.projects || []).filter(p => {
       if (typeof isProjectService === 'function') return !isProjectService(p);
       const ord = (state.orders || []).find(o => o.id === p.orderId);
       if (ord && (ord.orderType === 'jasa' || ord.quotationType === 'jasa')) return false;
       return true;
     });
+    if (roleName === 'Member') {
+      productProjects = productProjects.filter(p => typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(p, activeUser) : true);
+    }
     badgeProjects.textContent = productProjects.length;
   }
 
@@ -732,6 +784,242 @@ function initSearch() {
         const input = searchBox.querySelector('input');
         if (input) input.focus();
       }
+    });
+  }
+}
+
+// ==================== PUBLIC QR CODE VERIFICATION VIEW (NO LOGIN) ====================
+function isVerificationRoute() {
+  if (typeof window === 'undefined') return false;
+  const path = (window.location.pathname || '').toLowerCase();
+  const search = window.location.search || '';
+  const hash = (window.location.hash || '').toLowerCase();
+  if (path.includes('verifikasi') || path.includes('verify')) return true;
+  if (hash.includes('verifikasi') || hash.includes('verify')) return true;
+  const params = new URLSearchParams(search);
+  if (params.has('name') && (params.has('doc') || params.has('role') || params.has('title'))) {
+    return true;
+  }
+  return false;
+}
+window.isVerificationRoute = isVerificationRoute;
+
+function handlePublicVerificationView() {
+  // Sembunyikan layar login dan layout aplikasi normal
+  const authScreen = document.getElementById('ubm-auth-screen');
+  if (authScreen) {
+    authScreen.style.display = 'none';
+    authScreen.setAttribute('aria-hidden', 'true');
+  }
+
+  const appLayout = document.getElementById('main-app-layout') || document.querySelector('.app-layout');
+  if (appLayout) {
+    appLayout.style.display = 'none';
+  }
+
+  // Tampilkan antarmuka verifikasi tanda tangan digital resmi secara inline
+  renderInlinePublicVerification();
+}
+window.handlePublicVerificationView = handlePublicVerificationView;
+
+function renderInlinePublicVerification() {
+  const container = document.getElementById('ubm-public-verification-view');
+  if (!container) return;
+
+  container.style.display = 'flex';
+
+  const params = new URLSearchParams(window.location.search);
+  const rawName = params.get('name') || 'Rizaldi Putra, M.Kom';
+  const cleanName = rawName.replace(/\.+$/, '');
+  const role = params.get('role') || (cleanName.includes('Agung') ? 'Wakil Direktur I Politeknik Takumi' : (cleanName.includes('Wahyudi') ? 'Direktur Politeknik Takumi' : 'Ketua Unit Bisnis Mandiri (UBM)'));
+  const doc = params.get('doc') || 'ST/UBM-ENG/2026/001';
+  const title = params.get('title') || 'Surat Tugas Pelaksanaan Proyek';
+  const nowStr = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) + ' WIB';
+
+  function escapeXml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  const escCleanName = escapeXml(cleanName);
+  const escRole = escapeXml(role);
+  const escDoc = escapeXml(doc);
+  const escTitle = escapeXml(title);
+  const escDate = escapeXml(nowStr);
+
+  const displayName = escCleanName.length > 36 ? escCleanName.slice(0, 33) + '...' : escCleanName;
+  const displayRole = escRole.length > 46 ? escRole.slice(0, 43) + '...' : escRole;
+  const displayDoc = escDoc.length > 32 ? escDoc.slice(0, 29) + '...' : escDoc;
+  const displayTitle = escTitle.length > 44 ? escTitle.slice(0, 41) + '...' : escTitle;
+
+  const svgContent = `<svg id="signature-badge-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 360" width="540" height="360" style="background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Roboto,Helvetica,Arial,sans-serif;display:block;width:100%;height:auto;max-width:520px;">
+  <defs>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect x="18" y="16" width="504" height="328" rx="16" fill="url(#cardGrad)" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  
+  <path d="M 18 32 A 16 16 0 0 1 34 16 L 506 16 A 16 16 0 0 1 522 32 L 522 56 L 18 56 Z" fill="#0f172a"/>
+  <rect x="18" y="56" width="504" height="3" fill="#10b981"/>
+  
+  <text x="270" y="38" fill="#ffffff" font-size="11.5" font-weight="700" letter-spacing="1.2" text-anchor="middle">
+    UNIT BISNIS MANDIRI (UBM) &bull; POLITEKNIK TAKUMI
+  </text>
+
+  <circle cx="270" cy="108" r="34" fill="url(#checkGrad)"/>
+  <circle cx="270" cy="108" r="39" fill="none" stroke="#a7f3d0" stroke-width="2.5" stroke-dasharray="4 2"/>
+  <path d="M 255 108 L 266 119 L 288 97" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="175" y="152" width="190" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="270" y="167" fill="#047857" font-size="10" font-weight="800" letter-spacing="1" text-anchor="middle">
+    &#10003; TERVERIFIKASI DIGITAL
+  </text>
+
+  <text x="270" y="202" fill="#0f172a" font-size="20" font-weight="800" text-anchor="middle">
+    Approved by ${displayName}
+  </text>
+
+  <text x="270" y="225" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">
+    ${displayRole}
+  </text>
+
+  <rect x="36" y="244" width="468" height="84" rx="10" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="50" y="266" fill="#475569" font-size="11" font-weight="600">
+    Dokumen: <tspan fill="#0f172a" font-weight="700">${displayTitle}</tspan> (${displayDoc})
+  </text>
+  <text x="50" y="288" fill="#475569" font-size="11">
+    Status Keabsahan: <tspan fill="#059669" font-weight="700">&#10003; Resmi Disetujui &amp; Sah pada Database UBM</tspan>
+  </text>
+  <text x="50" y="309" fill="#64748b" font-size="10.5">
+    Tanggal Validasi: <tspan fill="#0f172a">${escDate}</tspan> &bull; Sistem Verifikasi Otomatis UBM
+  </text>
+</svg>`;
+
+  const pdfUrl = `/api/download-signature-pdf?name=${encodeURIComponent(cleanName)}&role=${encodeURIComponent(role)}&doc=${encodeURIComponent(doc)}&title=${encodeURIComponent(title)}&date=${encodeURIComponent(nowStr)}`;
+
+  container.innerHTML = `
+    <div style="text-align: center; margin-bottom: 20px; max-width: 600px;">
+      <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 9999px; background: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px; border: 1px solid #a7f3d0;">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+        SISTEM VERIFIKASI PENGESAHAN RESMI
+      </div>
+      <h1 style="font-size: 21px; font-weight: 800; color: #1e3a8a; letter-spacing: 0.3px; margin-bottom: 4px;">Unit Bisnis Mandiri (UBM)</h1>
+      <p style="font-size: 13px; color: #64748b;">Politeknik Takumi &bull; Keabsahan Tanda Tangan Digital Resmi</p>
+    </div>
+
+    <div style="width: 100%; max-width: 540px; background: #ffffff; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04); border: 1px solid #e2e8f0; padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; align-items: center;">
+      <div style="width: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 14px; background: #f8fafc;">
+        ${svgContent}
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 16px; width: 100%; justify-content: center; flex-wrap: wrap;">
+        <a href="${pdfUrl}" download="Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; background: #2563eb; color: #ffffff;">
+          &#8681; Unduh PDF Resmi
+        </a>
+        <button id="inline-btn-download-png" type="button" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; background: #10b981; color: #ffffff; border: none;">
+          Simpan Gambar (.png)
+        </button>
+        <button id="inline-btn-copy-link" type="button" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; background: #ffffff; color: #334155; border: 1px solid #cbd5e1;">
+          Salin Tautan
+        </button>
+      </div>
+    </div>
+
+    <div style="width: 100%; max-width: 540px; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; margin-bottom: 20px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <h2 style="font-size: 14px; font-weight: 700; color: #047857; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9;">
+        Hasil Pindai &amp; Validasi Keabsahan Digital
+      </h2>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Status Dokumen</span>
+        <span style="font-weight: 700; color: #047857; background: #ecfdf5; padding: 2px 8px; border-radius: 6px; border: 1px solid #a7f3d0;">&#10003; RESMI &amp; TERVERIFIKASI</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Pernyataan</span>
+        <span style="font-weight: 700; color: #047857; font-size: 14px;">Approved by ${escCleanName}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Pejabat Pengesah</span>
+        <span style="font-weight: 600; color: #0f172a;">${escapeXml(rawName)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Jabatan Resmi</span>
+        <span style="font-weight: 600; color: #0f172a;">${escRole}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Nomor Dokumen</span>
+        <span style="font-weight: 600; color: #0f172a;">${escDoc}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #f1f5f9;">
+        <span style="color: #64748b; font-weight: 500;">Perihal Dokumen</span>
+        <span style="font-weight: 600; color: #0f172a;">${escTitle}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+        <span style="color: #64748b; font-weight: 500;">Waktu Verifikasi</span>
+        <span style="font-weight: 600; color: #0f172a;">${escDate}</span>
+      </div>
+    </div>
+
+    <div style="text-align: center; font-size: 11.5px; color: #94a3b8; margin-top: auto; padding-top: 16px; line-height: 1.6;">
+      <p>Copyright &copy; Bisnis Digital Takumi &bull; Unit Bisnis Mandiri (UBM)</p>
+      <p>Tanda tangan digital ini dilindungi oleh Protokol Validasi Sistem UBM Politeknik Takumi.</p>
+    </div>
+  `;
+
+  // Hook PNG download
+  const dlPng = document.getElementById('inline-btn-download-png');
+  if (dlPng) {
+    dlPng.addEventListener('click', () => {
+      const svgEl = document.getElementById('signature-badge-svg');
+      if (!svgEl) return;
+      const svgXml = new XMLSerializer().serializeToString(svgEl);
+      const imgBlob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+      const URLObj = window.URL || window.webkitURL || window;
+      const url = URLObj.createObjectURL(imgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 1080, 720);
+        const pngUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = `Approved_by_${cleanName.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URLObj.revokeObjectURL(url);
+        if (typeof showToast === 'function') showToast('Gambar kartu berhasil diunduh (.png)!');
+      };
+      img.src = url;
+    });
+  }
+
+  // Hook Copy link
+  const copyBtn = document.getElementById('inline-btn-copy-link');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(window.location.href)
+        .then(() => {
+          if (typeof showToast === 'function') showToast('Tautan verifikasi berhasil disalin!');
+          else alert('Tautan verifikasi berhasil disalin!');
+        })
+        .catch(() => {});
     });
   }
 }

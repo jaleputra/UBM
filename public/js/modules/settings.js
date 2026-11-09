@@ -12,14 +12,18 @@ const DEFAULT_COMPANY_SETTINGS = {
   whatsapp: "0812-3456-7890",
   email: "ubm@takumi.ac.id",
   website: "ubm.takumi.ac.id",
+  publicUrl: "https://unitbisnistakumi.netlify.app",
   address: "Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Kab. Bekasi, Jawa Barat 17530",
   city: "Bekasi",
-  leaderName: "Ir. Hendra Wijaya, M.T.",
-  leaderNip: "19850412 201012 1 002",
+  leaderName: "Rizaldi Putra, M.Kom.",
+  leaderNip: "2049770671130373",
   leaderRole: "Ketua Unit Bisnis Mandiri (UBM)",
-  wadir1Name: "Dr. Eng. Tri Wahyudi, M.Eng.",
-  wadir1Nip: "19820315 200804 1 003",
+  wadir1Name: "Agung Kaswadi, M.T.",
+  wadir1Nip: "9857752653130142",
   wadir1Role: "Wakil Direktur I Politeknik Takumi",
+  directorName: "Dr. Eng. Tri Wahyudi, M.Eng.",
+  directorNip: "197805122005011002",
+  directorRole: "Direktur Politeknik Takumi",
   headAfterSales: "Bambang S., S.T.",
   headFinance: "Siti Rahma, S.E.",
   bankName: "Bank Mandiri",
@@ -42,6 +46,7 @@ function getCompanySettings() {
     whatsapp: s.whatsapp || DEFAULT_COMPANY_SETTINGS.whatsapp,
     email: s.email || DEFAULT_COMPANY_SETTINGS.email,
     website: s.website || DEFAULT_COMPANY_SETTINGS.website,
+    publicUrl: s.publicUrl || DEFAULT_COMPANY_SETTINGS.publicUrl || "",
     address: s.address || DEFAULT_COMPANY_SETTINGS.address,
     city: s.city || DEFAULT_COMPANY_SETTINGS.city,
     leaderName: s.leaderName || DEFAULT_COMPANY_SETTINGS.leaderName,
@@ -50,6 +55,9 @@ function getCompanySettings() {
     wadir1Name: s.wadir1Name || DEFAULT_COMPANY_SETTINGS.wadir1Name,
     wadir1Nip: s.wadir1Nip || DEFAULT_COMPANY_SETTINGS.wadir1Nip,
     wadir1Role: s.wadir1Role || DEFAULT_COMPANY_SETTINGS.wadir1Role,
+    directorName: s.directorName || DEFAULT_COMPANY_SETTINGS.directorName,
+    directorNip: s.directorNip || DEFAULT_COMPANY_SETTINGS.directorNip,
+    directorRole: s.directorRole || DEFAULT_COMPANY_SETTINGS.directorRole,
     headAfterSales: s.headAfterSales || DEFAULT_COMPANY_SETTINGS.headAfterSales,
     headFinance: s.headFinance || DEFAULT_COMPANY_SETTINGS.headFinance,
     bankName: s.bankName || DEFAULT_COMPANY_SETTINGS.bankName,
@@ -61,15 +69,24 @@ function getCompanySettings() {
   };
 }
 
-let activeSettingsTab = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ubm_active_settings_tab')) || 'general';
+let activeSettingsTab = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ubm_active_settings_tab')) || 'myprofile';
 
 function switchSettingsTab(tabKey) {
+  const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || 'Member');
+  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
+
+  // Jika akun bukan pimpinan/admin, hanya diizinkan membuka tab myprofile
+  if (!canManageInstitutional && tabKey !== 'myprofile') {
+    tabKey = 'myprofile';
+  }
+
   activeSettingsTab = tabKey;
   try {
     sessionStorage.setItem('ubm_active_settings_tab', tabKey);
   } catch (e) {}
   
-  const tabs = ['general', 'officers', 'banking', 'preview', 'accounts'];
+  const tabs = ['myprofile', 'general', 'officers', 'banking', 'preview', 'accounts'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-settings-${t}`);
     const content = document.getElementById(`settings-tab-content-${t}`);
@@ -80,7 +97,11 @@ function switchSettingsTab(tabKey) {
   const mainForm = document.getElementById('settings-main-form');
   const topActions = document.getElementById('settings-top-actions');
 
-  if (tabKey === 'accounts') {
+  if (tabKey === 'myprofile') {
+    if (mainForm) mainForm.style.display = 'none';
+    if (topActions) topActions.style.display = 'none';
+    renderMyProfileTab();
+  } else if (tabKey === 'accounts') {
     if (mainForm) mainForm.style.display = 'none';
     if (topActions) topActions.style.display = 'none';
     renderAccountsTabTable();
@@ -104,7 +125,7 @@ function switchSettingsTab(tabKey) {
     }
   } else {
     if (mainForm) mainForm.style.display = 'block';
-    if (topActions) topActions.style.display = 'flex';
+    if (topActions) topActions.style.display = canManageInstitutional ? 'flex' : 'none';
   }
 
   if (tabKey === 'preview') {
@@ -118,18 +139,25 @@ function renderSettingsView() {
   const container = document.getElementById('view-settings-container');
   if (!container) return;
 
+  const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || 'Member');
+  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
   const s = getCompanySettings();
 
   container.innerHTML = `
     <!-- HEADER INTRO -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 14px;">
       <div>
-        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">Pengaturan Profil Perusahaan & Sistem</h2>
+        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0;">
+          ${canManageInstitutional ? 'Pengaturan Profil Perusahaan & Sistem' : 'Pengaturan Profil Pengguna'}
+        </h2>
         <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">
-          Kelola data identitas Unit Bisnis Mandiri (UBM), Yayasan, alamat, nomor kontak, nama pejabat resmi, serta manajemen akun pengguna dan hak akses login sistem.
+          ${canManageInstitutional 
+            ? 'Kelola data identitas Unit Bisnis Mandiri (UBM), Yayasan, alamat, nomor kontak, nama pejabat resmi, serta manajemen akun pengguna dan hak akses login sistem.'
+            : 'Kelola informasi profil pribadi Anda, nomor kontak, dan ubah password akun secara aman.'}
         </p>
       </div>
-      <div id="settings-top-actions" style="display: flex; gap: 10px; align-items: center;">
+      <div id="settings-top-actions" style="display: ${canManageInstitutional ? 'flex' : 'none'}; gap: 10px; align-items: center;">
         <button type="button" class="btn btn-outline" onclick="resetSettingsToDefault()" style="font-size: 12.5px;">
           <i data-lucide="rotate-ccw"></i> Reset Default
         </button>
@@ -142,27 +170,38 @@ function renderSettingsView() {
     <!-- SUBMODULE TABS -->
     <div class="submodule-tabs-header" style="margin-bottom: 20px;">
       <div class="submodule-nav-tabs">
-        <button type="button" class="submodule-tab-btn active" id="tab-btn-settings-general" onclick="switchSettingsTab('general')">
-          <i data-lucide="building"></i>
-          <span>1. Profil Perusahaan & Yayasan</span>
-        </button>
-        <button type="button" class="submodule-tab-btn" id="tab-btn-settings-officers" onclick="switchSettingsTab('officers')">
+        <button type="button" class="submodule-tab-btn active" id="tab-btn-settings-myprofile" onclick="switchSettingsTab('myprofile')">
           <i data-lucide="user-check"></i>
-          <span>2. Pejabat Resmi (Ketua UBM & Wadir I)</span>
+          <span>Profil Saya</span>
         </button>
-        <button type="button" class="submodule-tab-btn" id="tab-btn-settings-banking" onclick="switchSettingsTab('banking')">
-          <i data-lucide="credit-card"></i>
-          <span>3. Rekening Bank & Pembayaran</span>
-        </button>
-        <button type="button" class="submodule-tab-btn" id="tab-btn-settings-preview" onclick="switchSettingsTab('preview')">
-          <i data-lucide="eye"></i>
-          <span>4. Pratinjau Kop Surat Resmi</span>
-        </button>
-        <button type="button" class="submodule-tab-btn" id="tab-btn-settings-accounts" onclick="switchSettingsTab('accounts')">
-          <i data-lucide="users"></i>
-          <span>5. Akun Pengguna</span>
-        </button>
+        ${canManageInstitutional ? `
+          <button type="button" class="submodule-tab-btn" id="tab-btn-settings-general" onclick="switchSettingsTab('general')">
+            <i data-lucide="building"></i>
+            <span>1. Profil Perusahaan & Yayasan</span>
+          </button>
+          <button type="button" class="submodule-tab-btn" id="tab-btn-settings-officers" onclick="switchSettingsTab('officers')">
+            <i data-lucide="user-check"></i>
+            <span>2. Pejabat Resmi (Ketua UBM & Wadir I)</span>
+          </button>
+          <button type="button" class="submodule-tab-btn" id="tab-btn-settings-banking" onclick="switchSettingsTab('banking')">
+            <i data-lucide="credit-card"></i>
+            <span>3. Rekening Bank & Pembayaran</span>
+          </button>
+          <button type="button" class="submodule-tab-btn" id="tab-btn-settings-preview" onclick="switchSettingsTab('preview')">
+            <i data-lucide="eye"></i>
+            <span>4. Pratinjau Kop Surat Resmi</span>
+          </button>
+          <button type="button" class="submodule-tab-btn" id="tab-btn-settings-accounts" onclick="switchSettingsTab('accounts')">
+            <i data-lucide="users"></i>
+            <span>5. Akun Pengguna</span>
+          </button>
+        ` : ''}
       </div>
+    </div>
+
+    <!-- TAB 0: PROFIL SAYA (TERSEDIA UNTUK SEMUA ROLE) -->
+    <div id="settings-tab-content-myprofile" style="margin-bottom: 24px;">
+      <!-- Populated dynamically via renderMyProfileTab() -->
     </div>
 
     <!-- SETTINGS FORM WRAPPER -->
@@ -236,6 +275,17 @@ function renderSettingsView() {
             </div>
           </div>
 
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px; color: #047857; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="globe" style="width: 14px; height: 14px;"></i>
+              Domain / URL Publik Verifikasi QR Tanda Tangan (Agar Bisa Diakses Semua Orang)
+            </label>
+            <input type="url" name="publicUrl" class="form-control" value="${escapeAttr(s.publicUrl || '')}" placeholder="Contoh: https://ubm-app.netlify.app atau https://ubm.takumi.ac.id">
+            <span class="font-xs text-muted" style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">
+              Tautan domain ini akan disematkan ke dalam QR Code pada Surat Tugas &amp; Surat Penawaran resmi, sehingga siapa saja yang memindai QR Code dari smartphone / internet umum dapat langsung membuka gambar verifikasi tanda tangan resmi secara instan.
+            </span>
+          </div>
+
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" style="font-weight: 700; font-size: 12px; color: #1e3a8a;">Teks Copyright Aplikasi & Dokumen</label>
             <input type="text" name="copyrightText" class="form-control" value="${escapeAttr(s.copyrightText)}" placeholder="Copyright © Bisnis Digital Takumi">
@@ -284,11 +334,11 @@ function renderSettingsView() {
             <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 14px;">
               <div class="form-group" style="margin: 0;">
                 <label class="form-label" style="font-weight: 600; font-size: 12px;">Nama Lengkap & Gelar Wadir I *</label>
-                <input type="text" name="wadir1Name" class="form-control" required value="${escapeAttr(s.wadir1Name)}" placeholder="Dr. Eng. Tri Wahyudi, M.Eng.">
+                <input type="text" name="wadir1Name" class="form-control" required value="${escapeAttr(s.wadir1Name)}" placeholder="Agung Kaswadi, M.T.">
               </div>
               <div class="form-group" style="margin: 0;">
                 <label class="form-label" style="font-weight: 600; font-size: 12px;">NIP / NIK Wadir I</label>
-                <input type="text" name="wadir1Nip" class="form-control" value="${escapeAttr(s.wadir1Nip)}" placeholder="19820315 200804 1 003">
+                <input type="text" name="wadir1Nip" class="form-control" value="${escapeAttr(s.wadir1Nip)}" placeholder="9857752653130142">
               </div>
               <div class="form-group" style="margin: 0;">
                 <label class="form-label" style="font-weight: 600; font-size: 12px;">Jabatan Resmi</label>
@@ -297,10 +347,31 @@ function renderSettingsView() {
             </div>
           </div>
 
-          <!-- 3. PEJABAT LAINNYA -->
+          <!-- 3. DIREKTUR POLITEKNIK TAKUMI -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 18px; border-left: 4px solid #be185d;">
+            <h4 style="font-size: 13.5px; font-weight: 800; color: #9d174d; margin: 0 0 12px 0;">
+              3. Direktur Politeknik Takumi (Persetujuan Quotation & Pengesahan Surat Penawaran Resmi)
+            </h4>
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr 1.2fr; gap: 14px;">
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label" style="font-weight: 600; font-size: 12px;">Nama Lengkap & Gelar Direktur *</label>
+                <input type="text" name="directorName" class="form-control" required value="${escapeAttr(s.directorName)}" placeholder="Dr. Eng. Tri Wahyudi, M.Eng.">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label" style="font-weight: 600; font-size: 12px;">NIP / NIK Direktur</label>
+                <input type="text" name="directorNip" class="form-control" value="${escapeAttr(s.directorNip)}" placeholder="197805122005011002">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label" style="font-weight: 600; font-size: 12px;">Jabatan Resmi</label>
+                <input type="text" name="directorRole" class="form-control" value="${escapeAttr(s.directorRole)}" placeholder="Direktur Politeknik Takumi">
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. PEJABAT LAINNYA -->
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; border-left: 4px solid #10b981;">
             <h4 style="font-size: 13.5px; font-weight: 800; color: #065f46; margin: 0 0 12px 0;">
-              3. Pejabat Layanan Purna Jual & Keuangan
+              4. Pejabat Layanan Purna Jual & Keuangan
             </h4>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
               <div class="form-group" style="margin: 0;">
@@ -447,8 +518,10 @@ function renderSettingsView() {
                 <select id="user-form-role" class="form-control" required>
                   <option value="Administrator">1. Administrator (Akses Penuh Seluruh Sistem)</option>
                   <option value="Ketua UBM">2. Ketua UBM (Akses Penuh & Persetujuan Project / Assign Lead)</option>
-                  <option value="Keuangan">3. Keuangan (Persetujuan Pembelian, Invoice, Keuangan Project, BAST & After Sales)</option>
-                  <option value="Member" selected>4. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
+                  <option value="Direktur">3. Direktur (Pimpinan Institusi: Akses Seluruh Modul & Persetujuan Quotation)</option>
+                  <option value="Wakil Direktur I">4. Wakil Direktur I (Akses Semua Halaman & Persetujuan / Ubah Status Order Penjualan)</option>
+                  <option value="Keuangan">5. Keuangan (Persetujuan Pembelian, Invoice, Keuangan Project, BAST & After Sales)</option>
+                  <option value="Member" selected>6. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
                 </select>
               </div>
               <div class="form-group" style="margin: 0;">
@@ -556,7 +629,7 @@ function renderSettingsView() {
                 <th style="width: 190px;">DEPARTEMEN</th>
                 <th style="width: 120px;">STATUS</th>
                 <th style="width: 130px;">TANGGAL TERDAFTAR</th>
-                <th style="width: 90px; text-align: right;">AKSI</th>
+                <th style="width: 125px; text-align: right;">AKSI</th>
               </tr>
             </thead>
             <tbody id="users-table-body">
@@ -594,6 +667,9 @@ function updateSettingsLivePreview() {
     wadir1Name: form.wadir1Name?.value || DEFAULT_COMPANY_SETTINGS.wadir1Name,
     wadir1Nip: form.wadir1Nip?.value || DEFAULT_COMPANY_SETTINGS.wadir1Nip,
     wadir1Role: form.wadir1Role?.value || DEFAULT_COMPANY_SETTINGS.wadir1Role,
+    directorName: form.directorName?.value || DEFAULT_COMPANY_SETTINGS.directorName,
+    directorNip: form.directorNip?.value || DEFAULT_COMPANY_SETTINGS.directorNip,
+    directorRole: form.directorRole?.value || DEFAULT_COMPANY_SETTINGS.directorRole,
     bankName: form.bankName?.value || DEFAULT_COMPANY_SETTINGS.bankName,
     bankAccount: form.bankAccount?.value || DEFAULT_COMPANY_SETTINGS.bankAccount,
     bankAccountName: form.bankAccountName?.value || DEFAULT_COMPANY_SETTINGS.bankAccountName,
@@ -658,12 +734,16 @@ async function saveCompanySettings(event) {
     whatsapp: form.whatsapp.value.trim(),
     email: form.email.value.trim(),
     website: form.website.value.trim(),
+    publicUrl: form.publicUrl ? form.publicUrl.value.trim() : '',
     leaderName: form.leaderName.value.trim(),
     leaderNip: form.leaderNip.value.trim(),
     leaderRole: form.leaderRole.value.trim(),
     wadir1Name: form.wadir1Name.value.trim(),
     wadir1Nip: form.wadir1Nip.value.trim(),
     wadir1Role: form.wadir1Role.value.trim(),
+    directorName: form.directorName?.value?.trim() || DEFAULT_COMPANY_SETTINGS.directorName,
+    directorNip: form.directorNip?.value?.trim() || DEFAULT_COMPANY_SETTINGS.directorNip,
+    directorRole: form.directorRole?.value?.trim() || DEFAULT_COMPANY_SETTINGS.directorRole,
     headAfterSales: form.headAfterSales.value.trim(),
     headFinance: form.headFinance.value.trim(),
     bankName: form.bankName.value.trim(),
@@ -778,7 +858,11 @@ function renderAccountsTabTable() {
     const rLower = (u.role || '').toLowerCase();
     if (rLower.includes('admin')) {
       roleBadge = `<span class="badge" style="background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Administrator</span>`;
-    } else if (rLower.includes('ketua') || rLower.includes('wadir')) {
+    } else if (rLower.includes('direktur') && !rLower.includes('wakil')) {
+      roleBadge = `<span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="crown" style="width: 12px; height: 12px;"></i> Direktur</span>`;
+    } else if (rLower.includes('wadir') || rLower.includes('wakil')) {
+      roleBadge = `<span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user-check" style="width: 12px; height: 12px;"></i> Wakil Direktur I</span>`;
+    } else if (rLower.includes('ketua')) {
       roleBadge = `<span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="award" style="width: 12px; height: 12px;"></i> Ketua UBM</span>`;
     } else if (rLower.includes('finance') || rLower.includes('keuangan')) {
       roleBadge = `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="banknote" style="width: 12px; height: 12px;"></i> Keuangan</span>`;
@@ -786,11 +870,20 @@ function renderAccountsTabTable() {
       roleBadge = `<span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> Member</span>`;
     }
 
-    // Status badge
+    // Status badge & Password security status
     const isActive = (u.status || 'Aktif') === 'Aktif';
     const statusBadge = isActive
       ? `<span class="badge badge-success" style="font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></span> Aktif</span>`
       : `<span class="badge" style="background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #ef4444;"></span> Non-Aktif</span>`;
+
+    const passSecurityBadge = u.mustChangePassword
+      ? `<div style="margin-top: 4px;"><span class="badge" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 10px; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 3px;" title="Akun ini belum mengganti password default ke password pribadi"><i data-lucide="key-round" style="width: 10px; height: 10px;"></i> Wajib Ganti Password</span></div>`
+      : `<div style="margin-top: 4px;"><span class="badge" style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; font-size: 10px; font-weight: 600; padding: 2px 6px; display: inline-flex; align-items: center; gap: 3px;" title="Password pribadi telah dibuat oleh pengguna"><i data-lucide="shield-check" style="width: 10px; height: 10px; color: #16a34a;"></i> Password Pribadi</span></div>`;
+
+    // Reset password permission: only Administrator and Ketua UBM (and Wadir I)
+    const curAuth = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const curRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(curAuth) : (curAuth?.role || '');
+    const canReset = curRole === 'Administrator' || curRole === 'Ketua UBM' || curRole === 'Wakil Direktur I';
 
     // Date
     let dateStr = '-';
@@ -822,13 +915,21 @@ function renderAccountsTabTable() {
         </td>
         <td>${roleBadge}</td>
         <td style="font-size: 12.5px; color: #334155;">${escapeHtml(u.department || '-')}</td>
-        <td>${statusBadge}</td>
+        <td>
+          ${statusBadge}
+          ${passSecurityBadge}
+        </td>
         <td style="font-size: 11.5px; color: #64748b;">${dateStr}</td>
-        <td style="text-align: right; width: 90px;">
-          <div class="table-actions" style="justify-content: flex-end;">
+        <td style="text-align: right; width: 125px;">
+          <div class="table-actions" style="justify-content: flex-end; gap: 4px;">
             <button class="btn-icon" title="Edit Akun" onclick="editUserAccount('${u.id}')" style="color: #2563eb;">
               <i data-lucide="edit-3"></i>
             </button>
+            ${canReset && !isMaster ? `
+              <button class="btn-icon" title="Reset Password Akun ke Default Baru" onclick="confirmResetUserPassword('${u.id}')" style="color: #d97706;">
+                <i data-lucide="key-round"></i>
+              </button>
+            ` : ''}
             ${isMaster ? `
               <button class="btn-icon" disabled title="Akun Utama tidak dapat dihapus" style="opacity: 0.35; cursor: not-allowed; color: #94a3b8;">
                 <i data-lucide="lock"></i>
@@ -858,8 +959,9 @@ function normalizeImportedRole(rawRole) {
   if (!rawRole) return 'Member';
   const r = String(rawRole).trim().toLowerCase();
   if (r.includes('admin') || r === '1') return 'Administrator';
-  if (r.includes('ketua') || r.includes('pimpinan') || r.includes('wadir') || r === '2') return 'Ketua UBM';
-  if (r.includes('keuangan') || r.includes('finance') || r.includes('bendahara') || r === '3') return 'Keuangan';
+  if (r.includes('wadir') || r.includes('wakil') || r === '3') return 'Wakil Direktur I';
+  if (r.includes('ketua') || r.includes('pimpinan') || r === '2') return 'Ketua UBM';
+  if (r.includes('keuangan') || r.includes('finance') || r.includes('bendahara') || r === '4') return 'Keuangan';
   return 'Member';
 }
 
@@ -906,6 +1008,7 @@ function downloadUserExcelTemplate() {
   const guideRows = [
     { 'Pilihan Role / Hak Akses Valid': 'Administrator', 'Keterangan Wewenang': 'Akses penuh seluruh modul sistem, persetujuan, dan manajemen akun pengguna' },
     { 'Pilihan Role / Hak Akses Valid': 'Ketua UBM', 'Keterangan Wewenang': 'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, dan monitoring operasional' },
+    { 'Pilihan Role / Hak Akses Valid': 'Wakil Direktur I', 'Keterangan Wewenang': 'Pimpinan & Pengarah: Akses semua halaman, persetujuan dan perubahan status order penjualan' },
     { 'Pilihan Role / Hak Akses Valid': 'Keuangan', 'Keterangan Wewenang': 'Persetujuan pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales' },
     { 'Pilihan Role / Hak Akses Valid': 'Member', 'Keterangan Wewenang': 'Anggota Tim / Pelaksana Project: Akses timeline, progres task, BOM, PR, dan laporan project' },
     { 'Pilihan Role / Hak Akses Valid': '', 'Keterangan Wewenang': '' },
@@ -1202,8 +1305,10 @@ function renderBulkUserImportRows() {
                 onchange="updateBulkUserRowField(${idx}, 'role', this.value)">
           <option value="Administrator" ${acc.role === 'Administrator' ? 'selected' : ''}>1. Administrator</option>
           <option value="Ketua UBM" ${acc.role === 'Ketua UBM' ? 'selected' : ''}>2. Ketua UBM</option>
-          <option value="Keuangan" ${acc.role === 'Keuangan' ? 'selected' : ''}>3. Keuangan</option>
-          <option value="Member" ${(!acc.role || acc.role === 'Member') ? 'selected' : ''}>4. Member</option>
+          <option value="Direktur" ${acc.role === 'Direktur' ? 'selected' : ''}>3. Direktur</option>
+          <option value="Wakil Direktur I" ${acc.role === 'Wakil Direktur I' ? 'selected' : ''}>4. Wakil Direktur I</option>
+          <option value="Keuangan" ${acc.role === 'Keuangan' ? 'selected' : ''}>5. Keuangan</option>
+          <option value="Member" ${(!acc.role || acc.role === 'Member') ? 'selected' : ''}>6. Member</option>
         </select>
       </td>
       <td>
@@ -1290,6 +1395,8 @@ async function saveUserAccount(event) {
   const roleIdMap = {
     'Administrator': 'ROLE-ADMIN',
     'Ketua UBM': 'ROLE-KETUA',
+    'Direktur': 'ROLE-DIREKTUR',
+    'Wakil Direktur I': 'ROLE-WADIR1',
     'Keuangan': 'ROLE-KEUANGAN',
     'Member': 'ROLE-MEMBER'
   };
@@ -1340,6 +1447,7 @@ async function saveUserAccount(event) {
           name: r.name,
           email: r.email,
           password: r.password,
+          mustChangePassword: existing ? Boolean(existing.mustChangePassword) : true,
           role: r.role,
           roleId,
           permissions: rolePermissions,
@@ -1542,6 +1650,7 @@ async function saveUserAccount(event) {
         name,
         email,
         password,
+        mustChangePassword: true, // Wajib ganti password ke password pribadi saat login pertama
         role,
         roleId,
         permissions: rolePermissions,
@@ -1745,9 +1854,535 @@ async function deleteUserAccount(id) {
   }
 }
 
+// =========================================================
+// FITUR 1: PROFIL SAYA (TERSEDIA UNTUK SEMUA ROLE PENGGUNA)
+// =========================================================
+
+function renderMyProfileTab() {
+  const container = document.getElementById('settings-tab-content-myprofile');
+  if (!container) return;
+
+  const curAuth = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  if (!curAuth) {
+    container.innerHTML = `
+      <div class="table-card" style="padding: 24px; text-align: center; color: #64748b;">
+        <i data-lucide="lock" style="width: 32px; height: 32px; color: #94a3b8; margin-bottom: 8px;"></i>
+        <p style="font-size: 13.5px; font-weight: 600; margin: 0;">Sesi autentikasi tidak ditemukan. Silakan login kembali.</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  const user = (Array.isArray(state.users) ? state.users : []).find(u => 
+    u.id === curAuth.id || (u.email || '').toLowerCase() === (curAuth.email || '').toLowerCase()
+  ) || curAuth;
+
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(user) : (user.role || 'Member');
+  const avatar = user.avatar || generateUserAvatar(user.name);
+
+  // Role badge
+  let roleBadge = `<span class="badge" style="background: #f1f5f9; color: #475569; font-weight: 700; font-size: 11px;">${escapeHtml(roleName)}</span>`;
+  if (roleName === 'Administrator') {
+    roleBadge = `<span class="badge" style="background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Administrator</span>`;
+  } else if (roleName === 'Direktur') {
+    roleBadge = `<span class="badge" style="background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="crown" style="width: 12px; height: 12px;"></i> Direktur</span>`;
+  } else if (roleName === 'Wakil Direktur I') {
+    roleBadge = `<span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user-check" style="width: 12px; height: 12px;"></i> Wakil Direktur I</span>`;
+  } else if (roleName === 'Ketua UBM') {
+    roleBadge = `<span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="award" style="width: 12px; height: 12px;"></i> Ketua UBM</span>`;
+  } else if (roleName === 'Keuangan') {
+    roleBadge = `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="banknote" style="width: 12px; height: 12px;"></i> Keuangan</span>`;
+  } else {
+    roleBadge = `<span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> Member</span>`;
+  }
+
+  container.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start;">
+      
+      <!-- CARD 1: INFORMASI PROFIL SAYA -->
+      <div class="table-card" style="padding: 24px; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05); background: #ffffff;">
+        <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 18px 0; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="user" style="color: #2563eb; width: 18px; height: 18px;"></i>
+          Informasi Akun & Data Profil Saya
+        </h3>
+
+        <!-- User Summary Banner -->
+        <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px;">
+          <div style="width: 54px; height: 54px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 19px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(37,99,235,0.3);">
+            ${escapeHtml(avatar)}
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 15px; font-weight: 800; color: #0f172a;">${escapeHtml(user.name || 'Pengguna UBM')}</div>
+            <div style="font-size: 12px; color: #64748b; font-family: monospace; margin: 2px 0;">${escapeHtml(user.email || '-')}</div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap;">
+              ${roleBadge}
+              <span class="badge badge-success" style="font-size: 10.5px; font-weight: 600; padding: 2px 8px;">
+                ${escapeHtml(user.status || 'Aktif')}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <form id="form-my-profile" onsubmit="saveMyProfile(event)">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Nama Lengkap & Gelar *</label>
+            <input type="text" id="my-profile-name" class="form-control" required value="${escapeAttr(user.name || '')}" placeholder="Nama lengkap Anda beserta gelar">
+            <span class="font-xs text-muted">Ditampilkan pada dokumen resmi, kop penugasan, dan log aktivitas</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Email Login Akun (Terdaftar)</label>
+            <div style="position: relative;">
+              <input type="email" class="form-control" value="${escapeAttr(user.email || '')}" readonly disabled style="background: #f1f5f9; cursor: not-allowed; color: #64748b; padding-right: 36px;">
+              <span style="position: absolute; right: 12px; top: 10px; color: #94a3b8;"><i data-lucide="lock" style="width: 14px; height: 14px;"></i></span>
+            </div>
+            <span class="font-xs text-muted">Email login terikat dengan database institusi.</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Role / Hak Akses</label>
+              <input type="text" class="form-control" value="${escapeAttr(roleName)}" readonly disabled style="background: #f1f5f9; cursor: not-allowed; color: #64748b;">
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Departemen / Divisi</label>
+              <input type="text" id="my-profile-dept" class="form-control" value="${escapeAttr(user.department || 'Operations & Management')}" placeholder="Divisi atau departemen Anda">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 22px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Nomor Telepon / WhatsApp</label>
+            <input type="text" id="my-profile-phone" class="form-control" value="${escapeAttr(user.phone || '')}" placeholder="Contoh: 0812-3456-7890">
+            <span class="font-xs text-muted">Nomor kontak resmi Anda untuk koordinasi pekerjaan</span>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" id="btn-save-my-profile" class="btn btn-primary" style="background: #2563eb; border-color: #2563eb; font-weight: 700; font-size: 12.5px; padding: 9px 20px;">
+              <i data-lucide="save"></i> <span>Simpan Profil Saya</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- CARD 2: KEAMANAN & UBAH PASSWORD PRIBADI -->
+      <div class="table-card" style="padding: 24px; border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 1px 3px rgba(0,0,0,0.05); background: #ffffff;">
+        <h3 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="key-round" style="color: #2563eb; width: 18px; height: 18px;"></i>
+          Ubah Password Akun Pribadi
+        </h3>
+        <p style="font-size: 12.5px; color: #64748b; margin: 0 0 18px 0;">
+          Tentukan password baru pribadi Anda. Administrator tidak dapat melihat password pribadi yang Anda buat.
+        </p>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 12px; color: #166534; display: flex; align-items: flex-start; gap: 8px;">
+          <i data-lucide="shield-check" style="width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px;"></i>
+          <span>Password Anda disimpan secara aman dan hanya Anda yang mengetahuinya untuk akses login ke sistem.</span>
+        </div>
+
+        <form id="form-my-password" onsubmit="saveMyPasswordChange(event)">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Password Saat Ini *</label>
+            <div style="position: relative;">
+              <input type="password" id="my-pass-current" class="form-control" required placeholder="Masukkan password yang saat ini aktif" style="padding-right: 36px; font-family: monospace;">
+              <button type="button" onclick="toggleForceChangePassword('my-pass-current', 'my-eye-0')" style="position: absolute; right: 8px; top: 8px; background: none; border: none; cursor: pointer; color: #64748b;">
+                <i data-lucide="eye" id="my-eye-0" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Password Baru *</label>
+            <div style="position: relative;">
+              <input type="password" id="my-pass-new" class="form-control" required placeholder="Minimal 6 karakter" minlength="6" style="padding-right: 36px; font-family: monospace;">
+              <button type="button" onclick="toggleForceChangePassword('my-pass-new', 'my-eye-1')" style="position: absolute; right: 8px; top: 8px; background: none; border: none; cursor: pointer; color: #64748b;">
+                <i data-lucide="eye" id="my-eye-1" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+            <span class="font-xs text-muted">Minimal 6 karakter, gunakan kombinasi huruf dan angka</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label class="form-label" style="font-weight: 700; font-size: 12.5px;">Konfirmasi Password Baru *</label>
+            <div style="position: relative;">
+              <input type="password" id="my-pass-confirm" class="form-control" required placeholder="Ulangi password baru Anda" minlength="6" style="padding-right: 36px; font-family: monospace;">
+              <button type="button" onclick="toggleForceChangePassword('my-pass-confirm', 'my-eye-2')" style="position: absolute; right: 8px; top: 8px; background: none; border: none; cursor: pointer; color: #64748b;">
+                <i data-lucide="eye" id="my-eye-2" style="width: 16px; height: 16px;"></i>
+              </button>
+            </div>
+            <div id="my-pass-error-alert" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 12px; color: #dc2626; font-size: 12px; font-weight: 600; margin-top: 8px;"></div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" id="btn-save-my-pass" class="btn btn-primary" style="background: #059669; border-color: #059669; font-weight: 700; font-size: 12.5px; padding: 9px 20px;">
+              <i data-lucide="lock"></i> <span>Perbarui Password Saya</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  `;
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function saveMyProfile(event) {
+  if (event) event.preventDefault();
+  const curAuth = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  if (!curAuth) return;
+
+  const nameInput = document.getElementById('my-profile-name');
+  const deptInput = document.getElementById('my-profile-dept');
+  const phoneInput = document.getElementById('my-profile-phone');
+  const btn = document.getElementById('btn-save-my-profile');
+
+  const newName = (nameInput?.value || '').trim();
+  const newDept = (deptInput?.value || '').trim();
+  const newPhone = (phoneInput?.value || '').trim();
+
+  if (!newName) {
+    showToast('Nama Lengkap wajib diisi!', 'warning');
+    return;
+  }
+
+  const origHtml = btn ? btn.innerHTML : 'Simpan Profil Saya';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width: 14px; height: 14px;"></i> Menyimpan...`;
+  }
+
+  try {
+    const avatar = generateUserAvatar(newName);
+    const payload = {
+      name: newName,
+      department: newDept,
+      phone: newPhone,
+      avatar,
+      updatedAt: new Date().toISOString()
+    };
+
+    // 1. Update via API
+    try {
+      await fetch(`/api/users/${curAuth.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {}
+
+    // 2. Direct native Supabase update
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('users', { id: curAuth.id, ...payload });
+    }
+
+    // 3. Update local state.users
+    if (Array.isArray(state.users)) {
+      const idx = state.users.findIndex(u => u.id === curAuth.id || (u.email || '').toLowerCase() === (curAuth.email || '').toLowerCase());
+      if (idx !== -1) {
+        state.users[idx] = { ...state.users[idx], ...payload };
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(state.users)); } catch (e) {}
+      }
+    }
+
+    // 4. Update active auth session
+    const updatedAuth = { ...curAuth, ...payload };
+    const str = JSON.stringify(updatedAuth);
+    if (localStorage.getItem(AUTH_STORAGE_KEY)) {
+      localStorage.setItem(AUTH_STORAGE_KEY, str);
+    } else {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, str);
+    }
+
+    if (typeof updateAppUserUI === 'function') {
+      updateAppUserUI(updatedAuth);
+    }
+
+    showToast('Profil pribadi Anda berhasil diperbarui!', 'success');
+    renderMyProfileTab();
+  } catch (err) {
+    console.error('Error saving my profile:', err);
+    showToast('Gagal menyimpan profil: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+async function saveMyPasswordChange(event) {
+  if (event) event.preventDefault();
+  const curAuth = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  if (!curAuth) return;
+
+  const currentPassInput = document.getElementById('my-pass-current');
+  const newPassInput = document.getElementById('my-pass-new');
+  const confirmPassInput = document.getElementById('my-pass-confirm');
+  const errEl = document.getElementById('my-pass-error-alert');
+  const btn = document.getElementById('btn-save-my-pass');
+
+  const curPass = (currentPassInput?.value || '').trim();
+  const newPass = (newPassInput?.value || '').trim();
+  const confirmPass = (confirmPassInput?.value || '').trim();
+
+  if (errEl) errEl.style.display = 'none';
+
+  if (!curPass) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Harap masukkan password saat ini.'; }
+    return;
+  }
+  if (!newPass || newPass.length < 6) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Password baru minimal harus 6 karakter.'; }
+    return;
+  }
+  if (newPass === curPass) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Password baru tidak boleh sama dengan password saat ini.'; }
+    return;
+  }
+  if (newPass !== confirmPass) {
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Konfirmasi password baru tidak cocok. Harap periksa kembali.'; }
+    return;
+  }
+
+  const origHtml = btn ? btn.innerHTML : 'Perbarui Password Saya';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="spin" style="width: 14px; height: 14px;"></i> Memproses...`;
+  }
+
+  try {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: curAuth.id,
+        email: curAuth.email,
+        currentPassword: curPass,
+        newPassword: newPass
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Gagal mengubah password.');
+    }
+
+    // Direct native Supabase update
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('users', {
+        id: curAuth.id,
+        password: newPass,
+        mustChangePassword: false,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Update local state.users
+    if (Array.isArray(state.users)) {
+      const idx = state.users.findIndex(u => u.id === curAuth.id || (u.email || '').toLowerCase() === (curAuth.email || '').toLowerCase());
+      if (idx !== -1) {
+        state.users[idx].password = newPass;
+        state.users[idx].mustChangePassword = false;
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(state.users)); } catch (e) {}
+      }
+    }
+
+    if (currentPassInput) currentPassInput.value = '';
+    if (newPassInput) newPassInput.value = '';
+    if (confirmPassInput) confirmPassInput.value = '';
+
+    showToast('✅ Password akun Anda berhasil diperbarui! Simpan baik-baik password baru Anda.', 'success');
+  } catch (err) {
+    if (errEl) {
+      errEl.style.display = 'block';
+      errEl.textContent = err.message || 'Gagal mengubah password.';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+}
+
+// =========================================================
+// FITUR 2: RESET PASSWORD AKUN OLEH ADMINISTRATOR & KETUA UBM
+// =========================================================
+
+async function confirmResetUserPassword(userId) {
+  const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || '');
+
+  // Hak akses ketat: hanya Administrator, Ketua UBM, dan Wadir I
+  if (roleName !== 'Administrator' && roleName !== 'Ketua UBM' && roleName !== 'Wakil Direktur I') {
+    showToast('Hanya Administrator dan Ketua UBM yang berwenang me-reset password akun pengguna.', 'error');
+    return;
+  }
+
+  const user = (Array.isArray(state.users) ? state.users : []).find(u => u.id === userId);
+  if (!user) {
+    showToast('Data akun pengguna tidak ditemukan.', 'error');
+    return;
+  }
+
+  if (user.email === 'unitbisnis@takumi.ac.id' || user.id === 'USR-2026-001') {
+    showToast('Password Akun Super Administrator Utama tidak dapat di-reset demi keamanan sistem.', 'warning');
+    return;
+  }
+
+  const confirmed = confirm(
+    `Reset password akun untuk "${user.name}" (${user.email})?\n\n` +
+    `Sistem akan menghasilkan password default baru yang siap Anda berikan kepada pengguna. Pengguna akan diwajibkan mengganti password baru tersebut saat pertama kali login.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestedByRole: roleName })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Gagal mereset password di server.');
+    }
+
+    const newDefault = data.newDefaultPassword;
+
+    // Direct native Supabase update
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      await directSupabaseUpsertNativeRow('users', {
+        id: userId,
+        password: newDefault,
+        mustChangePassword: true,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Update local state.users
+    if (Array.isArray(state.users)) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx !== -1) {
+        state.users[idx].password = newDefault;
+        state.users[idx].mustChangePassword = true;
+        try { localStorage.setItem('ubm_cached_users', JSON.stringify(state.users)); } catch (e) {}
+      }
+    }
+
+    renderAccountsTabTable();
+
+    // Tampilkan modal hasil reset password kepada Admin/Ketua UBM
+    showResetPasswordResultModal({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      newDefaultPassword: newDefault
+    });
+  } catch (err) {
+    console.error('Error resetting user password:', err);
+    showToast('Gagal me-reset password: ' + err.message, 'error');
+  }
+}
+
+function showResetPasswordResultModal(info) {
+  let modal = document.getElementById('modal-reset-password-result');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modal-reset-password-result';
+    modal.style.zIndex = '99999';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-container" style="max-width: 500px; border-top: 4px solid #16a34a; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+      <div class="modal-header" style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 16px 20px;">
+        <h3 style="font-size: 15px; font-weight: 800; color: #166534; margin: 0; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="check-circle-2" style="color: #16a34a; width: 22px; height: 22px;"></i>
+          Password Akun Berhasil Direset!
+        </h3>
+        <button class="btn-close" onclick="closeModal('modal-reset-password-result')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <p style="font-size: 13px; color: #334155; margin: 0 0 16px 0;">
+          Password untuk akun pengguna berikut telah berhasil di-reset ke password default baru:
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 12.5px;">
+          <div style="font-weight: 700; color: #0f172a;">${escapeHtml(info.name)}</div>
+          <div style="color: #64748b; font-family: monospace;">${escapeHtml(info.email)}</div>
+          <div style="color: #2563eb; font-weight: 600; margin-top: 4px;">Role: ${escapeHtml(info.role || '-')}</div>
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label style="font-size: 12px; font-weight: 700; color: #0f172a; display: block; margin-bottom: 6px;">
+            Password Default Baru (Sementara):
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="reset-result-password-val" class="form-control" value="${escapeAttr(info.newDefaultPassword)}" readonly style="font-family: monospace; font-size: 15px; font-weight: 800; color: #1e40af; background: #eff6ff; border-color: #bfdbfe; letter-spacing: 0.5px;">
+            <button type="button" class="btn btn-primary" onclick="copyResetPasswordToClipboard()" style="white-space: nowrap; font-size: 12px; font-weight: 700; padding: 0 14px; background: #2563eb; border-color: #2563eb; display: inline-flex; align-items: center; gap: 6px;">
+              <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+              <span id="btn-copy-pass-text">Salin</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #92400e; line-height: 1.5;">
+          <strong>PENTING:</strong> Berikan password default sementara ini kepada pengguna terkait. Pada saat pertama kali pengguna login menggunakan password default ini, sistem akan langsung <strong>mewajibkan pengguna mengganti password</strong> ke password pribadinya sendiri yang hanya diketahui oleh pengguna tersebut.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 22px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modal-reset-password-result')" style="font-size: 12.5px; font-weight: 600; padding: 8px 18px;">
+            Selesai & Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('open');
+  if (window.lucide) lucide.createIcons();
+}
+
+function copyResetPasswordToClipboard() {
+  const input = document.getElementById('reset-result-password-val');
+  const btnText = document.getElementById('btn-copy-pass-text');
+  if (!input) return;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(() => {
+      if (btnText) btnText.textContent = 'Tersalin!';
+      showToast('Password default berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => { if (btnText) btnText.textContent = 'Salin'; }, 2500);
+    }).catch(() => {
+      input.select();
+      document.execCommand('copy');
+      if (btnText) btnText.textContent = 'Tersalin!';
+      showToast('Password default berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => { if (btnText) btnText.textContent = 'Salin'; }, 2500);
+    });
+  } else {
+    input.select();
+    document.execCommand('copy');
+    if (btnText) btnText.textContent = 'Tersalin!';
+    showToast('Password default berhasil disalin ke clipboard!', 'success');
+    setTimeout(() => { if (btnText) btnText.textContent = 'Salin'; }, 2500);
+  }
+}
+
 // Global window bindings
 window.switchSettingsTab = switchSettingsTab;
 window.renderSettingsView = renderSettingsView;
+window.renderMyProfileTab = renderMyProfileTab;
+window.saveMyProfile = saveMyProfile;
+window.saveMyPasswordChange = saveMyPasswordChange;
+window.confirmResetUserPassword = confirmResetUserPassword;
+window.showResetPasswordResultModal = showResetPasswordResultModal;
+window.copyResetPasswordToClipboard = copyResetPasswordToClipboard;
 window.saveCompanySettings = saveCompanySettings;
 window.resetSettingsToDefault = resetSettingsToDefault;
 window.renderAccountsTabTable = renderAccountsTabTable;
