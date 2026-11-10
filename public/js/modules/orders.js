@@ -256,7 +256,7 @@ function renderOrdersTable() {
     }
 
     // Status Column (2 Kolom Terpisah: Ketua UBM & Wakil Direktur I)
-    const isAdmin = roleName === 'Administrator';
+    const isAdmin = roleName === 'Administrator' || roleName === 'Direktur';
     const isKetuaUbm = roleName === 'Ketua UBM';
     const isWadir1 = roleName === 'Wakil Direktur I';
 
@@ -376,7 +376,7 @@ function renderOrdersTable() {
 async function approveOrderByRole(orderId, approverRole) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
-  const isAdmin = currentRole === 'Administrator';
+  const isAdmin = currentRole === 'Administrator' || currentRole === 'Direktur';
 
   // Validasi kewenangan role
   if (approverRole === 'Ketua UBM') {
@@ -516,7 +516,7 @@ async function approveOrderByRole(orderId, approverRole) {
 async function rejectOrderByRole(orderId, rejectorRole = '') {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
-  const isAdmin = currentRole === 'Administrator';
+  const isAdmin = currentRole === 'Administrator' || currentRole === 'Direktur';
 
   // Periksa kewenangan
   if (rejectorRole === 'Ketua UBM') {

@@ -74,7 +74,7 @@ let activeSettingsTab = (typeof sessionStorage !== 'undefined' && sessionStorage
 function switchSettingsTab(tabKey) {
   const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || 'Member');
-  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
+  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
 
   // Jika akun bukan pimpinan/admin, hanya diizinkan membuka tab myprofile
   if (!canManageInstitutional && tabKey !== 'myprofile') {
@@ -141,7 +141,7 @@ function renderSettingsView() {
 
   const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || 'Member');
-  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
+  const canManageInstitutional = (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I');
   const s = getCompanySettings();
 
   container.innerHTML = `
@@ -880,10 +880,10 @@ function renderAccountsTabTable() {
       ? `<div style="margin-top: 4px;"><span class="badge" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 10px; font-weight: 700; padding: 2px 6px; display: inline-flex; align-items: center; gap: 3px;" title="Akun ini belum mengganti password default ke password pribadi"><i data-lucide="key-round" style="width: 10px; height: 10px;"></i> Wajib Ganti Password</span></div>`
       : `<div style="margin-top: 4px;"><span class="badge" style="background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; font-size: 10px; font-weight: 600; padding: 2px 6px; display: inline-flex; align-items: center; gap: 3px;" title="Password pribadi telah dibuat oleh pengguna"><i data-lucide="shield-check" style="width: 10px; height: 10px; color: #16a34a;"></i> Password Pribadi</span></div>`;
 
-    // Reset password permission: only Administrator and Ketua UBM (and Wadir I)
+    // Reset password permission: Administrator, Direktur, Ketua UBM, dan Wadir I
     const curAuth = typeof getAuthUser === 'function' ? getAuthUser() : null;
     const curRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(curAuth) : (curAuth?.role || '');
-    const canReset = curRole === 'Administrator' || curRole === 'Ketua UBM' || curRole === 'Wakil Direktur I';
+    const canReset = curRole === 'Administrator' || curRole === 'Direktur' || curRole === 'Ketua UBM' || curRole === 'Wakil Direktur I';
 
     // Date
     let dateStr = '-';
@@ -959,9 +959,10 @@ function normalizeImportedRole(rawRole) {
   if (!rawRole) return 'Member';
   const r = String(rawRole).trim().toLowerCase();
   if (r.includes('admin') || r === '1') return 'Administrator';
-  if (r.includes('wadir') || r.includes('wakil') || r === '3') return 'Wakil Direktur I';
+  if ((r.includes('direktur') && !r.includes('wadir') && !r.includes('wakil')) || r === '3') return 'Direktur';
+  if (r.includes('wadir') || r.includes('wakil') || r === '4') return 'Wakil Direktur I';
   if (r.includes('ketua') || r.includes('pimpinan') || r === '2') return 'Ketua UBM';
-  if (r.includes('keuangan') || r.includes('finance') || r.includes('bendahara') || r === '4') return 'Keuangan';
+  if (r.includes('keuangan') || r.includes('finance') || r.includes('bendahara') || r === '5') return 'Keuangan';
   return 'Member';
 }
 
@@ -2215,9 +2216,9 @@ async function confirmResetUserPassword(userId) {
   const curUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(curUser) : (curUser?.role || '');
 
-  // Hak akses ketat: hanya Administrator, Ketua UBM, dan Wadir I
-  if (roleName !== 'Administrator' && roleName !== 'Ketua UBM' && roleName !== 'Wakil Direktur I') {
-    showToast('Hanya Administrator dan Ketua UBM yang berwenang me-reset password akun pengguna.', 'error');
+  // Hak akses ketat: Administrator, Direktur, Ketua UBM, dan Wadir I
+  if (roleName !== 'Administrator' && roleName !== 'Direktur' && roleName !== 'Ketua UBM' && roleName !== 'Wakil Direktur I') {
+    showToast('Hanya Administrator, Direktur, dan Ketua UBM yang berwenang me-reset password akun pengguna.', 'error');
     return;
   }
 

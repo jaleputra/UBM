@@ -47,6 +47,7 @@ function getNormalizedRole(user) {
   if (!u || !u.role) return 'Member';
   const r = (u.role || '').toLowerCase().trim();
   if (r.includes('admin')) return 'Administrator';
+  if (r.includes('direktur') && !r.includes('wadir') && !r.includes('wakil')) return 'Direktur';
   if (r.includes('wadir') || r.includes('wakil')) return 'Wakil Direktur I';
   if (r.includes('ketua')) return 'Ketua UBM';
   if (r.includes('keuangan') || r.includes('finance')) return 'Keuangan';
@@ -57,6 +58,23 @@ function getNormalizedRole(user) {
 const ROLE_PERMISSIONS = {
   'Administrator': {
     name: 'Administrator',
+    allowedViews: ['dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'settings'],
+    canApproveOrder: true,
+    canAssignLead: true,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canApproveBOM: true,
+    canSubmitPR: true,
+    canApprovePurchasing: true,
+    canManageInvoices: true,
+    canManageFinance: true,
+    canManageBAST: true,
+    canManageAfterSales: true,
+    canManageSettings: true
+  },
+  'Direktur': {
+    name: 'Direktur',
     allowedViews: ['dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'invoices', 'bast', 'finance', 'service', 'maintenance', 'settings'],
     canApproveOrder: true,
     canAssignLead: true,
@@ -178,7 +196,7 @@ function isUserProjectLead(projectIdOrOrderId = null, user = null) {
   const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
   if (!u) return false;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : 'Member';
-  if (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
+  if (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
 
   const uName = (u.name || '').trim().toLowerCase();
   const uEmail = (u.email || '').trim().toLowerCase();
@@ -209,7 +227,7 @@ function isUserAssignedToProject(projectIdOrOrderId, user = null) {
   const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
   if (!u) return false;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : 'Member';
-  if (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
+  if (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
 
   const uName = (u.name || '').trim().toLowerCase();
   const uEmail = (u.email || '').trim().toLowerCase();
@@ -272,7 +290,7 @@ function canUserCreateMasterBOM(user = null) {
   const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
   if (!u) return false;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : (u.role || 'Member');
-  if (roleName === 'Administrator' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
+  if (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
   if (typeof isUserProjectLead === 'function' && isUserProjectLead(null, u)) return true;
   return false;
 }

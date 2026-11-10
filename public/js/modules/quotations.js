@@ -30,8 +30,8 @@ async function approveQuotationByRole(quotationId, approverRole) {
     return;
   }
 
-  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
-  const currentRole = activeUser?.role || '';
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   const isAdmin = currentRole === 'Administrator';
   const isKetuaUbm = currentRole === 'Ketua UBM';
   const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
@@ -131,8 +131,8 @@ async function rejectQuotationByRole(quotationId, rejectorRole) {
     return;
   }
 
-  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
-  const currentRole = activeUser?.role || '';
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   const isAdmin = currentRole === 'Administrator';
   const isKetuaUbm = currentRole === 'Ketua UBM';
   const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
@@ -214,8 +214,8 @@ function renderQuotationsTable() {
     return;
   }
 
-  const activeUser = typeof getLoggedInUser === 'function' ? getLoggedInUser() : null;
-  const currentRole = activeUser?.role || '';
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   const isAdmin = currentRole === 'Administrator';
   const isKetuaUbm = currentRole === 'Ketua UBM';
   const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
@@ -584,8 +584,8 @@ function openQuotationModal(quotationData = null) {
 
         <div style="display: grid; grid-template-columns: 1.4fr 1.4fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
-            <label class="form-label">Nama Calon Pelanggan / Perusahaan *</label>
-            <input type="text" name="customerName" class="form-control" placeholder="PT / CV / Instansi / Perorangan" required value="${escapeAttr(quotationData?.customerName || '')}">
+            <label class="form-label">Nama Calon Pelanggan / Perusahaan</label>
+            <input type="text" name="customerName" class="form-control" placeholder="PT / CV / Instansi (Bisa dikosongkan jika ingin ditulis tangan)" value="${escapeAttr(quotationData?.customerName || '')}">
           </div>
           <div class="form-group">
             <label class="form-label">Nama Project / Pekerjaan *</label>
@@ -1172,7 +1172,7 @@ async function submitQuotation(event, id) {
 
   const payload = {
     quotationType,
-    customerName: form.customerName.value.trim(),
+    customerName: form.customerName.value.trim() || 'Calon Pelanggan (Ditulis Tangan)',
     projectName: form.projectName ? form.projectName.value.trim() : '',
     picName: form.picName.value.trim(),
     customerPhone: form.customerPhone.value.trim(),
@@ -1294,14 +1294,11 @@ function buildQuotationPrintableHtml(quo) {
       <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 18px; padding: 12px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #cbd5e1;">
         <div>
           <div class="font-sm font-bold text-muted" style="margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">KEPADA YTH (CALON CUSTOMER):</div>
-          <div class="font-bold text-main" style="font-size: 14px;">${escapeHtml(quo.customerName)}</div>
-          ${quo.projectName ? `<div class="font-sm font-bold" style="font-size: 12px; color: #1e40af; margin-top: 2px;">Project: ${escapeHtml(quo.projectName)}</div>` : ''}
+          <div style="font-size: 14px; min-height: 24px; border-bottom: 1.5px dotted #64748b; width: 280px; margin-bottom: 6px; letter-spacing: 2px; color: #94a3b8;">......................................................................</div>
+          ${quo.projectName ? `<div class="font-sm font-bold" style="font-size: 12px; color: #1e40af; margin-top: 4px;">Project: ${escapeHtml(quo.projectName)}</div>` : ''}
           ${quo.picName ? `<div class="font-sm font-bold text-primary" style="font-size: 11.5px; margin-top: 2px;">UP: ${escapeHtml(quo.picName)}</div>` : ''}
-          <div class="font-sm text-muted" style="margin-top: 2px; font-size: 11px;">${quo.customerAddress || 'Alamat tidak dicantumkan'}</div>
-          <div class="font-sm" style="margin-top: 4px; font-size: 11px;">
-            Telp / WA: <strong>${quo.customerPhone || '-'}</strong>
-            ${quo.customerEmail ? ` &bull; Email: ${escapeHtml(quo.customerEmail)}` : ''}
-          </div>
+          ${quo.customerAddress && quo.customerAddress !== 'Alamat tidak dicantumkan' ? `<div class="font-sm text-muted" style="margin-top: 2px; font-size: 11px;">${escapeHtml(quo.customerAddress)}</div>` : ''}
+          ${quo.customerPhone ? `<div class="font-sm" style="margin-top: 4px; font-size: 11px;">Telp / WA: <strong>${escapeHtml(quo.customerPhone)}</strong></div>` : ''}
         </div>
         <div style="border-left: 1px dashed #cbd5e1; padding-left: 14px;">
           <div class="font-sm font-bold text-muted" style="margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">INFORMASI PENAWARAN:</div>
@@ -1459,16 +1456,16 @@ function buildQuotationPrintableHtml(quo) {
         let ketuaSigHtml = '';
         if (quo.approvalKetuaUbm) {
           const qrSvg = (typeof generateQRCodeSvg === 'function')
-            ? generateQRCodeSvg(leaderVerifyUrl, 2.2, 1)
-            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 66px; height: 66px; display: block; margin: 0 auto;" alt="QR Code" />`;
+            ? generateQRCodeSvg(leaderVerifyUrl, 2, 1)
+            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
           ketuaSigHtml = `
-            <div style="min-height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 10px auto; text-align: center;">
+            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
               <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
-                <div style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+                <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
                   ${qrSvg}
                 </div>
-                <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+                <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
                   ✓ TERVERIFIKASI DIGITAL
                 </div>
               </a>
@@ -1476,7 +1473,7 @@ function buildQuotationPrintableHtml(quo) {
           `;
         } else {
           ketuaSigHtml = `
-            <div style="height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 10px auto; text-align: center;">
+            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
               <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
               <span>(Tanda Tangan & Cap UBM)</span>
               <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Ketua UBM)</span>
@@ -1487,16 +1484,16 @@ function buildQuotationPrintableHtml(quo) {
         let directorSigHtml = '';
         if (quo.approvalDirektur) {
           const qrSvg = (typeof generateQRCodeSvg === 'function')
-            ? generateQRCodeSvg(directorVerifyUrl, 2.2, 1)
-            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(directorVerifyUrl)}" style="width: 66px; height: 66px; display: block; margin: 0 auto;" alt="QR Code" />`;
+            ? generateQRCodeSvg(directorVerifyUrl, 2, 1)
+            : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(directorVerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
           directorSigHtml = `
-            <div style="min-height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 10px auto; text-align: center;">
+            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
               <a href="${directorVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(directorCleanName)}">
-                <div style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+                <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
                   ${qrSvg}
                 </div>
-                <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+                <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
                   ✓ TERVERIFIKASI DIGITAL
                 </div>
               </a>
@@ -1504,7 +1501,7 @@ function buildQuotationPrintableHtml(quo) {
           `;
         } else {
           directorSigHtml = `
-            <div style="height: 105px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 10px auto; text-align: center;">
+            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
               <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
               <span>(Tanda Tangan & Cap Institusi)</span>
               <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Direktur)</span>
@@ -1517,12 +1514,13 @@ function buildQuotationPrintableHtml(quo) {
             <!-- 1. CALON PELANGGAN (KIRI) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
               <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Disetujui Oleh (Calon Pelanggan),</div>
-              <div style="font-weight: 700; font-size: 11px; color: #0f172a; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(quo.customerName)}</div>
-              <div style="height: 105px; display: flex; align-items: flex-end; justify-content: center; margin: 10px auto; padding-bottom: 8px;">
-                <div style="border-bottom: 1px dashed #94a3b8; width: 130px; margin-bottom: 4px;"></div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; margin-bottom: 2px; min-height: 18px; letter-spacing: 1.5px;">.........................................</div>
+              <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
+                <div style="border-bottom: 1px dashed #94a3b8; width: 130px; margin-bottom: 6px;"></div>
+                <span style="font-style: italic; color: #94a3b8; font-size: 9.5px;">(Tanda Tangan & Cap Perusahaan)</span>
               </div>
-              <div style="font-weight: bold; margin-top: 6px; font-size: 11px;">
-                ( ${escapeHtml(quo.picName || '.....................................')} )
+              <div style="font-weight: bold; margin-top: 2px; font-size: 11px;">
+                ( ..................................... )
               </div>
               <div class="text-muted" style="font-size: 9px; margin-top: 2px;">Tanda Tangan & Cap Perusahaan</div>
             </div>
@@ -1530,9 +1528,9 @@ function buildQuotationPrintableHtml(quo) {
             <!-- 2. KETUA UNIT BISNIS MANDIRI (TENGAH) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
               <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Hormat Kami,</div>
-              <div style="font-weight: 700; font-size: 11px; color: #1e40af; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
+              <div style="font-weight: 700; font-size: 11px; color: #1e40af; margin-top: 2px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
               ${ketuaSigHtml}
-              <div style="font-weight: bold; margin-top: 6px; font-size: 11px; text-decoration: underline;">
+              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; text-decoration: underline;">
                 ${escapeHtml(leaderDisplayName)}
               </div>
               <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.leaderNip || '-')}</div>
@@ -1541,9 +1539,9 @@ function buildQuotationPrintableHtml(quo) {
             <!-- 3. DIREKTUR POLITEKNIK TAKUMI (KANAN) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
               <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Mengetahui & Menyetujui,</div>
-              <div style="font-weight: 700; font-size: 11px; color: #9d174d; margin-top: 2px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.directorRole || 'Direktur Politeknik Takumi')}</div>
+              <div style="font-weight: 700; font-size: 11px; color: #9d174d; margin-top: 2px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.directorRole || 'Direktur Politeknik Takumi')}</div>
               ${directorSigHtml}
-              <div style="font-weight: bold; margin-top: 6px; font-size: 11px; text-decoration: underline;">
+              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; text-decoration: underline;">
                 ${escapeHtml(directorDisplayName)}
               </div>
               <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.directorNip || '-')}</div>
@@ -1588,6 +1586,12 @@ function viewQuotationDetail(id) {
   const isDirekturApproved = Boolean(quo.approvalDirektur);
   const isDualApproved = Boolean(isKetuaApproved && isDirekturApproved);
 
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
+  const isAdmin = currentRole === 'Administrator';
+  const isKetuaUbm = currentRole === 'Ketua UBM';
+  const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+
   content.innerHTML = `
     <!-- STRIP AKSI INTERAKTIF MODAL (NO-PRINT) -->
     <div class="no-print" style="background: #f1f5f9; padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -1610,6 +1614,22 @@ function viewQuotationDetail(id) {
         ` : ''}
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        ${(!isConverted && !isDirekturApproved && (isDirektur || isAdmin)) ? `
+          <button type="button" class="btn btn-sm" style="background: #0284c7; color: #ffffff; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="approveQuotationByRole('${quo.id}', 'Direktur'); viewQuotationDetail('${quo.id}');" title="Setujui penawaran ini sebagai Direktur">
+            <i data-lucide="check" style="width: 12px; height: 12px;"></i> Setujui Direktur
+          </button>
+          <button type="button" class="btn btn-sm btn-outline text-danger" style="border-color: #fca5a5; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="rejectQuotationByRole('${quo.id}', 'Direktur'); closeModal('preview-modal');" title="Tolak penawaran ini">
+            <i data-lucide="x" style="width: 12px; height: 12px;"></i> Tolak
+          </button>
+        ` : ''}
+        ${(!isConverted && !isKetuaApproved && (isKetuaUbm || isAdmin)) ? `
+          <button type="button" class="btn btn-sm" style="background: #16a34a; color: #ffffff; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="approveQuotationByRole('${quo.id}', 'Ketua UBM'); viewQuotationDetail('${quo.id}');" title="Setujui penawaran ini sebagai Ketua UBM">
+            <i data-lucide="check" style="width: 12px; height: 12px;"></i> Setujui Ketua UBM
+          </button>
+          <button type="button" class="btn btn-sm btn-outline text-danger" style="border-color: #fca5a5; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" onclick="rejectQuotationByRole('${quo.id}', 'Ketua UBM'); closeModal('preview-modal');" title="Tolak penawaran ini">
+            <i data-lucide="x" style="width: 12px; height: 12px;"></i> Tolak
+          </button>
+        ` : ''}
         <button type="button" class="btn btn-sm btn-outline" style="color: #16a34a; border-color: #86efac; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="shareQuotationWhatsApp('${quo.id}')">
           <i data-lucide="message-circle"></i> Share WhatsApp (PDF)
         </button>

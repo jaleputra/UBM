@@ -767,10 +767,10 @@ function renderTeamAssignmentWorkspace(orderId) {
     }
   }
 
-  // Wewenang: Hanya Lead Project atau Administrator yang dapat mendaftarkan/mengubah anggota tim
+  // Wewenang: Hanya Lead Project, Direktur, atau Administrator yang dapat mendaftarkan/mengubah anggota tim
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
-  const isAdmin = roleName === 'Administrator';
+  const isAdmin = roleName === 'Administrator' || roleName === 'Direktur';
   const isLead = (typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true) || canAssignLead || !activeProj.projectLead || activeProj.projectLead === 'Belum diassign';
   if (deptInput) deptInput.disabled = !isLead;
 
@@ -3173,7 +3173,8 @@ function updateTeamAssignmentEmailPreview() {
   if (!box) return;
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const isAdmin = (typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '') === 'Administrator';
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
+  const isAdmin = roleName === 'Administrator' || roleName === 'Direktur';
   if (!isAdmin) {
     box.style.display = 'none';
     return;
@@ -3269,16 +3270,16 @@ function buildTeamAssignmentLetterHtml(data) {
   let ketuaSigHtml = '';
   if (isDualApproved || isKetuaApproved) {
     const qrSvg = (typeof generateQRCodeSvg === 'function')
-      ? generateQRCodeSvg(leaderVerifyUrl, 2.3, 1)
-      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+      ? generateQRCodeSvg(leaderVerifyUrl, 2, 1)
+      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
     ketuaSigHtml = `
-      <div style="min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px auto; text-align: center;">
-        <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
-          <div style="width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+      <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
+        <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
+          <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
             ${qrSvg}
           </div>
-          <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+          <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
             ✓ TERVERIFIKASI DIGITAL
           </div>
         </a>
@@ -3286,10 +3287,10 @@ function buildTeamAssignmentLetterHtml(data) {
     `;
   } else {
     ketuaSigHtml = `
-      <div style="height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 12px auto; text-align: center;">
+      <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
         <div style="border-bottom: 1px dashed #cbd5e1; width: 140px; margin-bottom: 6px;"></div>
         <span>(Tanda Tangan & Cap UBM)</span>
-        <span style="font-size: 9px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Ketua UBM)</span>
+        <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Ketua UBM)</span>
       </div>
     `;
   }
@@ -3297,16 +3298,16 @@ function buildTeamAssignmentLetterHtml(data) {
   let wadirSigHtml = '';
   if (isDualApproved || isWadirApproved) {
     const qrSvg = (typeof generateQRCodeSvg === 'function')
-      ? generateQRCodeSvg(wadir1VerifyUrl, 2.3, 1)
-      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(wadir1VerifyUrl)}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+      ? generateQRCodeSvg(wadir1VerifyUrl, 2, 1)
+      : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(wadir1VerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
     wadirSigHtml = `
-      <div style="min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px auto; text-align: center;">
-        <a href="${wadir1VerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(wadir1CleanName)}">
-          <div style="width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; padding: 2px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; margin: 0 auto;">
+      <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
+        <a href="${wadir1VerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(wadir1CleanName)}">
+          <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
             ${qrSvg}
           </div>
-          <div style="font-size: 8px; color: #047857; font-weight: 700; margin-top: 5px; letter-spacing: 0.2px; text-align: center;">
+          <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
             ✓ TERVERIFIKASI DIGITAL
           </div>
         </a>
@@ -3314,10 +3315,10 @@ function buildTeamAssignmentLetterHtml(data) {
     `;
   } else {
     wadirSigHtml = `
-      <div style="height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 12px auto; text-align: center;">
+      <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
         <div style="border-bottom: 1px dashed #cbd5e1; width: 140px; margin-bottom: 6px;"></div>
         <span>(Tanda Tangan & Cap)</span>
-        <span style="font-size: 9px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Wadir I)</span>
+        <span style="font-size: 8.5px; color: #b45309; margin-top: 2px;">(Menunggu Persetujuan Wadir I)</span>
       </div>
     `;
   }
@@ -3550,18 +3551,18 @@ function buildTeamAssignmentLetterHtml(data) {
           <!-- 1. KETUA UBM (SEBELAH KIRI) -->
           <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px;">Yang Menugaskan,</div>
-            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.leaderRole)}</div>
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.leaderRole)}</div>
             ${ketuaSigHtml}
-            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 6px;">${escapeHtml(leaderDisplayName)}</div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 2px;">${escapeHtml(leaderDisplayName)}</div>
             <div style="font-size: 11px; margin-top: 2px;">NIP/NIK. ${escapeHtml(compSettings.leaderNip || '-')}</div>
           </div>
 
           <!-- 2. WAKIL DIREKTUR I (SEBELAH KANAN) -->
           <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
             <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px;">Mengetahui & Mengesahkan,</div>
-            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; min-height: 18px;">${escapeHtml(compSettings.wadir1Role)}</div>
+            <div style="font-weight: bold; font-size: 12px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.wadir1Role)}</div>
             ${wadirSigHtml}
-            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 6px;">${escapeHtml(wadir1DisplayName)}</div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 12.5px; margin-top: 2px;">${escapeHtml(wadir1DisplayName)}</div>
             <div style="font-size: 11px; margin-top: 2px;">NIP/NIK. ${escapeHtml(compSettings.wadir1Nip || '-')}</div>
           </div>
 
@@ -3595,7 +3596,8 @@ function exportTeamAssignmentLetterPDF(orderId = null) {
 
   if (content) {
     const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-    const isAdmin = (typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '') === 'Administrator';
+    const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
+    const isAdmin = roleName === 'Administrator' || roleName === 'Direktur';
 
     const adminActionTopBar = isAdmin ? `
       <div class="no-print" style="margin-bottom: 14px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
@@ -3619,8 +3621,8 @@ window.exportTeamAssignmentLetterPDF = exportTeamAssignmentLetterPDF;
 async function sendTeamAssignmentEmail(orderId = null) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
-  if (roleName !== 'Administrator') {
-    showToast('⚠️ Akses Ditolak: Hanya role Administrator yang dapat mengirim Surat Tugas via Email!', 'error');
+  if (roleName !== 'Administrator' && roleName !== 'Direktur') {
+    showToast('⚠️ Akses Ditolak: Hanya role Administrator dan Direktur yang dapat mengirim Surat Tugas via Email!', 'error');
     return;
   }
 

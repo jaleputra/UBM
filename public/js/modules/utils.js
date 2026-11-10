@@ -1140,7 +1140,7 @@ window.directSupabaseFetchResource = directSupabaseFetchResource;
 window.directSupabaseSyncResource = directSupabaseSyncResource;
 
 // ==================== QR CODE GENERATOR HELPER ====================
-function generateQRCodeSvg(text, cellSize = 2.3, margin = 1) {
+function generateQRCodeSvg(text, cellSize = 2, margin = 1) {
   if (!text || typeof text !== 'string') return '';
   try {
     const qrEngine = (typeof qrcode !== 'undefined') ? qrcode : (window.qrcode || null);
@@ -1148,7 +1148,15 @@ function generateQRCodeSvg(text, cellSize = 2.3, margin = 1) {
       const qr = qrEngine(0, 'M');
       qr.addData(text);
       qr.make();
-      return qr.createSvgTag(cellSize, margin);
+      // scalable: true menghilangkan ukuran piksel statis agar SVG tidak pernah meluap/keluar kotak
+      let svg = qr.createSvgTag({ cellSize: cellSize || 2, margin: (margin !== undefined && margin !== null) ? margin : 1, scalable: true });
+      if (svg && svg.startsWith('<svg')) {
+        svg = svg.replace(/<svg\b([^>]*)>/i, (match, attrs) => {
+          const cleanedAttrs = attrs.replace(/\bwidth="[^"]*"/gi, '').replace(/\bheight="[^"]*"/gi, '');
+          return `<svg${cleanedAttrs} width="100%" height="100%" style="display:block;width:100%;height:100%;max-width:100%;max-height:100%;margin:0 auto;">`;
+        });
+        return svg;
+      }
     }
   } catch (err) {
     console.warn('QR Code generation notice:', err.message);
@@ -1156,7 +1164,7 @@ function generateQRCodeSvg(text, cellSize = 2.3, margin = 1) {
 
   // Fallback to URL-based QR code if qrcode library is not ready
   const encoded = encodeURIComponent(text);
-  return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encoded}" style="width: 68px; height: 68px; display: block; margin: 0 auto;" alt="QR Code" />`;
+  return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encoded}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 }
 window.generateQRCodeSvg = generateQRCodeSvg;
 

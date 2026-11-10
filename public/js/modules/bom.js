@@ -207,7 +207,7 @@ function renderBOMMasterListTable() {
 
     const canApproveBOM = typeof hasRolePermission === 'function'
       ? hasRolePermission('canApproveBOM')
-      : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+      : ['Administrator', 'Direktur', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
 
     const statusBadgeHtml = canApproveBOM ? `
       <select class="form-control form-control-sm" style="font-size: 11px; padding: 2px 6px; font-weight: 700; border-radius: 6px; cursor: pointer; width: auto; display: inline-block; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${bom.orderId || ''}', '${bom.id}', this.value)">
@@ -222,7 +222,7 @@ function renderBOMMasterListTable() {
     `;
 
     const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(bom.orderId || bom.projectId, activeUser) : false;
-    const canEditOrDelete = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
+    const canEditOrDelete = (userRole === 'Administrator' || userRole === 'Direktur' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
 
     const actionButtonsHtml = canEditOrDelete ? `
       <div class="table-actions">
@@ -333,7 +333,7 @@ async function changeOrderBOMStatus(orderId, bomId, newStatus) {
   const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
   const canApprove = (typeof hasRolePermission === 'function')
     ? hasRolePermission('canApproveBOM')
-    : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+    : ['Administrator', 'Direktur', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
 
   if (!canApprove) {
     if (typeof showToast === 'function') {
@@ -558,7 +558,7 @@ function renderBOMPendingOrders() {
           const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
           const canApproveBOM = typeof hasRolePermission === 'function'
             ? hasRolePermission('canApproveBOM')
-            : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+            : ['Administrator', 'Direktur', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
 
           statusBadgeHtml = canApproveBOM ? `
             <select class="form-control form-control-sm" style="font-size: 11px; padding: 3px 8px; font-weight: 700; border-radius: 6px; cursor: pointer; width: auto; display: inline-block; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
@@ -651,7 +651,7 @@ function renderBOMPendingOrders() {
           const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
           const canApproveBOM = typeof hasRolePermission === 'function'
             ? hasRolePermission('canApproveBOM')
-            : ['Administrator', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
+            : ['Administrator', 'Direktur', 'Wakil Direktur I', 'Ketua UBM', 'Keuangan'].includes(userRole);
 
           statusBadgeHtml = canApproveBOM ? `
             <select class="form-control form-control-sm" style="font-size: 10.5px; padding: 2px 6px; font-weight: 700; border-radius: 4px; display: inline-block; width: auto; margin-left: 6px; ${statusColorStyle}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); changeOrderBOMStatus('${item.orderId}', '${item.relatedBOM.id}', this.value)">
@@ -1303,7 +1303,7 @@ function openBOMPage(bomData = null, defaultOrderId = null, defaultItemName = nu
 
       const project = (state.projects || []).find(p => p.orderId === defaultOrderId);
       const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
-      const isAdminOrKetua = activeUser && (activeUser.role === 'Administrator' || activeUser.role === 'Ketua UBM' || activeUser.role === 'Wakil Direktur I' || (typeof getNormalizedRole === 'function' && ['Administrator', 'Ketua UBM', 'Wakil Direktur I'].includes(getNormalizedRole(activeUser))));
+      const isAdminOrKetua = activeUser && (activeUser.role === 'Administrator' || activeUser.role === 'Direktur' || activeUser.role === 'Ketua UBM' || activeUser.role === 'Wakil Direktur I' || (typeof getNormalizedRole === 'function' && ['Administrator', 'Direktur', 'Ketua UBM', 'Wakil Direktur I'].includes(getNormalizedRole(activeUser))));
       if (!hasProjectLead && !isAdminOrKetua) {
         showToast(`⚠️ Harap tentukan dan simpan Project Leader terlebih dahulu pada menu Penugasan Tim untuk Order ${defaultOrderId}!`, 'warning');
         if (typeof openTeamAssignmentPage === 'function') {
@@ -1930,7 +1930,7 @@ async function handleBOMPageSubmit(e) {
   } else {
     const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(orderId, activeUser) : true;
     const canManage = typeof hasRolePermission === 'function' ? hasRolePermission('canManageBOM') : true;
-    const isAdminOrKetua = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I');
+    const isAdminOrKetua = (userRole === 'Administrator' || userRole === 'Direktur' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I');
     if (activeUser && !isAdminOrKetua && !canManage && !isLead) {
       showToast('⚠️ Hanya Lead Project yang ditugaskan pada order ini atau Administrator yang berwenang mengisi dan menyimpan BOM.', 'warning');
       return;
@@ -2253,7 +2253,7 @@ function editBOM(bomId) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const userRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
   const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(bom.orderId || bom.projectId, activeUser) : false;
-  const canEdit = (userRole === 'Administrator' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
+  const canEdit = (userRole === 'Administrator' || userRole === 'Direktur' || userRole === 'Ketua UBM' || userRole === 'Wakil Direktur I' || isLead);
 
   if (!canEdit) {
     showToast('⚠️ Member hanya dapat melihat struktur BOM. Pengubahan hanya dapat dilakukan oleh Administrator, Lead Project, dan Ketua UBM.', 'info');

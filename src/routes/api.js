@@ -129,6 +129,31 @@ const DEFAULT_ROLES = [
     canManageSettings: true
   },
   {
+    id: 'ROLE-DIREKTUR',
+    roleName: 'Direktur',
+    label: 'Direktur',
+    badgeColor: '#be185d',
+    description: 'Pimpinan Institusi: Akses penuh seluruh modul sistem seperti administrator dan persetujuan resmi (ACC) pada Surat Penawaran (Quotation)',
+    allowedViews: [
+      'dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form',
+      'purchasing', 'project-reports', 'timeline', 'invoices', 'bast',
+      'finance', 'service', 'maintenance', 'settings'
+    ],
+    canApproveOrder: true,
+    canAssignLead: true,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canApproveBOM: true,
+    canSubmitPR: true,
+    canApprovePurchasing: true,
+    canManageInvoices: true,
+    canManageFinance: true,
+    canManageBAST: true,
+    canManageAfterSales: true,
+    canManageSettings: true
+  },
+  {
     id: 'ROLE-KETUA',
     roleName: 'Ketua UBM',
     label: 'Ketua UBM',
@@ -229,10 +254,11 @@ const DEFAULT_ROLES = [
 function getRoleConfig(roleStr) {
   const rLower = (roleStr || '').toLowerCase();
   if (rLower.includes('admin') || rLower.includes('super')) return DEFAULT_ROLES[0];
+  if (rLower.includes('direktur') && !rLower.includes('wadir') && !rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-DIREKTUR') || DEFAULT_ROLES[0];
   if (rLower.includes('wadir') || rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-WADIR1') || DEFAULT_ROLES[1];
-  if (rLower.includes('ketua') || rLower.includes('pimpinan')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KETUA') || DEFAULT_ROLES[1];
-  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KEUANGAN') || DEFAULT_ROLES[3];
-  return DEFAULT_ROLES.find(r => r.id === 'ROLE-MEMBER') || DEFAULT_ROLES[4];
+  if (rLower.includes('ketua') || rLower.includes('pimpinan')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KETUA') || DEFAULT_ROLES[2];
+  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KEUANGAN') || DEFAULT_ROLES[4];
+  return DEFAULT_ROLES.find(r => r.id === 'ROLE-MEMBER') || DEFAULT_ROLES[5];
 }
 
 module.exports = function(broadcastReload) {
@@ -2430,11 +2456,11 @@ end run
       const userId = req.params.id;
       const { requestedByRole, customDefaultPassword } = req.body || {};
 
-      // Verifikasi wewenang: hanya Administrator dan Ketua UBM (serta Wakil Direktur I)
+      // Verifikasi wewenang: hanya Administrator, Direktur, Ketua UBM, serta Wakil Direktur I
       const roleNorm = (requestedByRole || '').toLowerCase();
-      const isAllowed = !requestedByRole || roleNorm.includes('admin') || roleNorm.includes('ketua') || roleNorm.includes('wadir') || roleNorm.includes('wakil');
+      const isAllowed = !requestedByRole || roleNorm.includes('admin') || roleNorm.includes('direktur') || roleNorm.includes('ketua') || roleNorm.includes('wadir') || roleNorm.includes('wakil');
       if (requestedByRole && !isAllowed) {
-        return res.status(403).json({ error: 'Hanya Administrator dan Ketua UBM yang berwenang mereset password akun pengguna.' });
+        return res.status(403).json({ error: 'Hanya Administrator, Direktur, dan Ketua UBM yang berwenang mereset password akun pengguna.' });
       }
 
       const users = await fetchSupabaseUsers();
