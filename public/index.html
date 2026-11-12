@@ -2909,6 +2909,9 @@
           <button type="button" id="btn-send-assignment-email-header" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700; display: none;" onclick="sendTeamAssignmentEmail()" title="Khusus Administrator: Kirim PDF Surat Tugas otomatis ke Email Lead & Member">
             <i data-lucide="mail"></i> Kirim via Email
           </button>
+          <button type="button" id="btn-copy-assignment-email-header" class="btn btn-sm btn-outline" style="color: #047857; border-color: #6ee7b7; background: #ecfdf5; font-weight: 700; display: none;" onclick="copyTeamAssignmentEmailMessage()" title="Salin body pesan email Penugasan Tim & PIC sesuai project ini">
+            <i data-lucide="copy"></i> Copy Pesan
+          </button>
           <button type="button" class="btn btn-sm btn-outline" style="color: #4338ca; border-color: #c7d2fe;" onclick="exportTeamAssignmentLetterPDF()"><i data-lucide="printer"></i> Cetak Surat Tugas</button>
           <button class="btn-close" onclick="closeModal('team-assignment-modal')"><i data-lucide="x"></i></button>
         </div>
@@ -3007,9 +3010,12 @@
 
         <!-- FOOTER ACTION -->
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
-          <div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <button type="button" id="btn-send-assignment-email-footer" class="btn btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700; padding: 9px 18px; display: none; align-items: center; gap: 6px;" onclick="sendTeamAssignmentEmail()" title="Khusus Administrator: Kirim File PDF Surat Tugas otomatis ke Email Lead & Member">
               <i data-lucide="send"></i> Kirim via Email (PDF Surat Tugas)
+            </button>
+            <button type="button" id="btn-copy-assignment-email-footer" class="btn btn-outline" style="color: #047857; border-color: #6ee7b7; background: #ecfdf5; font-weight: 700; padding: 9px 16px; display: none; align-items: center; gap: 6px;" onclick="copyTeamAssignmentEmailMessage()" title="Salin body pesan email Penugasan Tim & PIC sesuai project ini">
+              <i data-lucide="copy"></i> Copy Pesan
             </button>
           </div>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
@@ -4173,7 +4179,7 @@
   <script src="js/modules/logs.js?v=20261029_1"></script>
   <script src="js/modules/quotations.js?v=20261112_5"></script>
   <script src="js/modules/orders.js?v=20261112_3"></script>
-  <script src="js/modules/projects.js?v=20261112_2"></script>
+  <script src="js/modules/projects.js?v=20261112_3"></script>
   <script src="js/modules/bom.js?v=20261112_1"></script>
   <script src="js/modules/purchasing.js?v=20261112_4"></script>
   <script src="js/modules/po.js?v=20261029_1"></script>

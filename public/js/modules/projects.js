@@ -372,8 +372,11 @@ function viewProjectDetail(projectId) {
         </button>
         ` : ''}
         ${detailRole === 'Administrator' ? `
-        <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff;" onclick="closeModal('project-detail-modal'); sendTeamAssignmentEmail('${p.orderId || p.id || ''}')">
+        <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff;" onclick="closeModal('project-detail-modal'); sendTeamAssignmentEmail('${escapeAttr(p.orderId || p.id || '')}')">
           <i data-lucide="mail"></i> Kirim Surat Tugas via Email
+        </button>
+        <button type="button" class="btn btn-sm btn-outline" style="color: #047857; border-color: #6ee7b7; background: #ecfdf5;" onclick="copyTeamAssignmentEmailMessage('${escapeAttr(p.orderId || p.id || '')}')">
+          <i data-lucide="copy"></i> Copy Pesan
         </button>
         ` : ''}
         <button type="button" class="btn btn-sm btn-outline" style="color: #0284c7; border-color: #bae6fd;" onclick="closeModal('project-detail-modal'); openProjectTimelinePage('${p.orderId || p.id || ''}')">
@@ -862,12 +865,16 @@ function renderTeamAssignmentWorkspace(orderId) {
   if (addMemberBtn) addMemberBtn.style.display = isLead ? 'inline-flex' : 'none';
   if (saveTeamBtn) saveTeamBtn.style.display = isLead ? 'inline-flex' : 'none';
 
-  // Tombol Kirim via Email KHUSUS Role Administrator
+  // Tombol Kirim via Email & Copy Pesan KHUSUS Role Administrator / Direktur
   const emailBtnHeader = document.getElementById('btn-send-assignment-email-header');
   const emailBtnFooter = document.getElementById('btn-send-assignment-email-footer');
+  const copyBtnHeader = document.getElementById('btn-copy-assignment-email-header');
+  const copyBtnFooter = document.getElementById('btn-copy-assignment-email-footer');
   const emailInfoBox = document.getElementById('pm-admin-email-info-box');
   if (emailBtnHeader) emailBtnHeader.style.display = isAdmin ? 'inline-flex' : 'none';
   if (emailBtnFooter) emailBtnFooter.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (copyBtnHeader) copyBtnHeader.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (copyBtnFooter) copyBtnFooter.style.display = isAdmin ? 'inline-flex' : 'none';
   if (emailInfoBox) emailInfoBox.style.display = isAdmin ? 'block' : 'none';
   if (isAdmin && typeof updateTeamAssignmentEmailPreview === 'function') {
     updateTeamAssignmentEmailPreview();
@@ -3236,8 +3243,9 @@ function getTeamAssignmentLetterData(orderId = null) {
   const isWadirApproved = Boolean(order?.approvalWadir1);
   const isDualApproved = Boolean(isKetuaApproved && isWadirApproved);
 
-  const isModalOpen = document.getElementById('team-assignment-modal')?.classList.contains('active') &&
-    (!orderId || orderId === currentActiveProjectOrderId);
+  const modalEl = document.getElementById('team-assignment-modal');
+  const isModalVisible = Boolean(modalEl && (modalEl.classList.contains('open') || modalEl.classList.contains('active')));
+  const isModalOpen = isModalVisible && (!orderId || orderId === currentActiveProjectOrderId || orderId === project?.id || orderId === project?.orderId);
 
   const leadSelectEl = document.getElementById('pm-lead-name');
   const leadName = (isModalOpen ? leadSelectEl?.value?.trim() : '') || project?.projectLead || 'Belum diassign';
@@ -3377,6 +3385,82 @@ function getTeamAssignmentLetterData(orderId = null) {
     pdfFilename
   };
 }
+
+function buildTeamAssignmentEmailBody(data) {
+  if (!data) return '';
+  const teamText = (Array.isArray(data.team) && data.team.length > 0)
+    ? data.team.map(m => `${m.name} (${m.role || 'Member'})`).join(', ')
+    : '-';
+  return [
+    `Surat Tugas Project "${data.projectName}"`,
+    ``,
+    `Yth. Project Lead (${data.leadName}) dan Tim Pelaksana Proyek,`,
+    ``,
+    `Berikut kami kirimkan dokumen resmi Surat Tugas Project "${data.projectName}" (${data.pdfFilename}) yang telah terlampir pada email ini.`,
+    ``,
+    `Detail Penugasan:`,
+    `- Nama Project : ${data.projectName}`,
+    `- No. Referensi : ${data.targetOrderId}`,
+    `- Project Lead : ${data.leadName} (${data.leadEmail || '-'})`,
+    `- Anggota Tim  : ${teamText}`,
+    ``,
+    `Hormat kami,`,
+    `${data.adminName}`,
+    `Administrator (${data.adminEmail})`
+  ].join('\n');
+}
+window.buildTeamAssignmentEmailBody = buildTeamAssignmentEmailBody;
+
+function fallbackCopyTextToClipboard(text, onSuccess = null) {
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    if (typeof textarea.select === 'function') textarea.select();
+    const ok = typeof document.execCommand === 'function' ? document.execCommand('copy') : false;
+    textarea.remove();
+    if (ok) {
+      if (typeof onSuccess === 'function') onSuccess();
+    } else if (typeof showToast === 'function') {
+      showToast('⚠️ Browser tidak mengizinkan copy otomatis. Silakan salin teks secara manual.', 'warning');
+    }
+    return ok;
+  } catch (e) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Gagal menyalin pesan ke clipboard.', 'error');
+    }
+    return false;
+  }
+}
+
+function copyTeamAssignmentEmailMessage(orderId = null) {
+  const modalEl = document.getElementById('team-assignment-modal');
+  const isModalVisible = Boolean(modalEl && (modalEl.classList.contains('open') || modalEl.classList.contains('active')));
+  const selectVal = isModalVisible ? document.getElementById('pm-order-select')?.value : null;
+  const targetId = orderId || selectVal || currentActiveProjectOrderId;
+  const data = getTeamAssignmentLetterData(targetId);
+  const bodyText = buildTeamAssignmentEmailBody(data);
+
+  const onSuccess = () => {
+    if (typeof showToast === 'function') {
+      showToast(`📋 Body email Penugasan Tim untuk project "${data.projectName}" berhasil disalin!`, 'success');
+    }
+  };
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(bodyText).then(onSuccess).catch(() => {
+      fallbackCopyTextToClipboard(bodyText, onSuccess);
+    });
+  } else {
+    fallbackCopyTextToClipboard(bodyText, onSuccess);
+  }
+  return bodyText;
+}
+window.copyTeamAssignmentEmailMessage = copyTeamAssignmentEmailMessage;
 
 function updateTeamAssignmentEmailPreview() {
   const box = document.getElementById('pm-admin-email-info-box');
@@ -3814,9 +3898,14 @@ function exportTeamAssignmentLetterPDF(orderId = null) {
         <div style="font-size: 12px; color: #065f46;">
           <strong>Pesan Email:</strong> "${escapeHtml(data.emailMessage)}" &bull; <strong>Dari:</strong> ${escapeHtml(data.adminEmail)} &rarr; <strong>Ke:</strong> ${escapeHtml(data.recipientEmails.join(', ') || 'Lead & Tim')}
         </div>
-        <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700;" onclick="closeModal('preview-modal'); sendTeamAssignmentEmail('${escapeAttr(data.orderId || data.projectId || data.targetOrderId)}')">
-          <i data-lucide="send"></i> Kirim via Email ke Lead & Tim
-        </button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-sm btn-primary" style="background: #059669; border-color: #059669; color: #ffffff; font-weight: 700;" onclick="closeModal('preview-modal'); sendTeamAssignmentEmail('${escapeAttr(data.orderId || data.projectId || data.targetOrderId)}')">
+            <i data-lucide="send"></i> Kirim via Email ke Lead & Tim
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" style="color: #047857; border-color: #6ee7b7; background: #ffffff; font-weight: 700;" onclick="copyTeamAssignmentEmailMessage('${escapeAttr(data.orderId || data.projectId || data.targetOrderId)}')">
+            <i data-lucide="copy"></i> Copy Pesan
+          </button>
+        </div>
       </div>
     ` : '';
 
@@ -3855,7 +3944,8 @@ async function sendTeamAssignmentEmail(orderId = null) {
   }
 
   // Jika modal Penugasan Tim sedang terbuka, simpan data penugasan tim terlebih dahulu secara otomatis ke database
-  const isTeamModalOpen = document.getElementById('team-assignment-modal')?.classList.contains('active');
+  const modalTeamEl = document.getElementById('team-assignment-modal');
+  const isTeamModalOpen = Boolean(modalTeamEl && (modalTeamEl.classList.contains('open') || modalTeamEl.classList.contains('active')));
   if (isTeamModalOpen) {
     try {
       const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
@@ -3960,23 +4050,7 @@ async function sendTeamAssignmentEmail(orderId = null) {
 
     // 2. Susun isi pesan email resmi (Surat Tugas Project "(Nama project)")
     const defaultPdfLink = `${window.location.origin}/uploads/projects/${data.pdfFilename}`;
-    const emailBodyText = [
-      `Surat Tugas Project "${data.projectName}"`,
-      ``,
-      `Yth. Project Lead (${data.leadName}) dan Tim Pelaksana Proyek,`,
-      ``,
-      `Berikut kami kirimkan dokumen resmi Surat Tugas Project "${data.projectName}" (${data.pdfFilename}) yang telah terlampir pada email ini.`,
-      ``,
-      `Detail Penugasan:`,
-      `- Nama Project : ${data.projectName}`,
-      `- No. Referensi : ${data.targetOrderId}`,
-      `- Project Lead : ${data.leadName} (${data.leadEmail || '-'})`,
-      `- Anggota Tim  : ${data.team.map(m => `${m.name} (${m.role || 'Member'})`).join(', ') || '-'}`,
-      ``,
-      `Hormat kami,`,
-      `${data.adminName}`,
-      `Administrator (${data.adminEmail})`
-    ].join('\n');
+    const emailBodyText = buildTeamAssignmentEmailBody(data);
 
     // 3. Kirim ke endpoint backend /api/projects/send-assignment-email
     // Backend akan menyimpan PDF dan otomatis membuka aplikasi Mail dengan file PDF langsung ter-attach!
@@ -4108,6 +4182,9 @@ async function sendTeamAssignmentEmail(orderId = null) {
           </button>
           <button type="button" class="btn btn-outline" style="padding: 10px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="triggerAssignmentGmailCompose()">
             <i data-lucide="mail"></i> Buka Gmail Web (${escapeHtml(data.adminEmail)})
+          </button>
+          <button type="button" class="btn btn-outline" style="color: #047857; border-color: #6ee7b7; background: #ecfdf5; padding: 10px; font-size: 12.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="copyTeamAssignmentEmailMessage('${escapeAttr(data.orderId || data.projectId || data.targetOrderId)}')">
+            <i data-lucide="copy"></i> Copy Pesan Email
           </button>
         </div>
       `;
