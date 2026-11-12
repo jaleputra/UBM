@@ -1803,6 +1803,11 @@ function buildQuotationPrintableHtml(quo) {
   const isDraft = isQuotationDraft(quo);
   const isJasa = quo.quotationType === 'jasa';
   const cleanQuoNotes = getQuotationDisplayNotes(quo.notes);
+  const rawCustomerName = String(quo.customerName || '').trim();
+  const customerDisplayName = (rawCustomerName && rawCustomerName !== 'Calon Pelanggan (Ditulis Tangan)')
+    ? rawCustomerName
+    : '';
+  const picDisplayName = String(quo.picName || '').trim();
   const discountRow = quo.discount > 0 ? `
     <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0;">
       <span>Potongan / Diskon:</span>
@@ -1859,9 +1864,9 @@ function buildQuotationPrintableHtml(quo) {
       <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 18px; padding: 12px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #cbd5e1;">
         <div>
           <div class="font-sm font-bold text-muted" style="margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">KEPADA YTH (CALON CUSTOMER):</div>
-          <div style="font-size: 14px; min-height: 24px; border-bottom: 1.5px dotted #64748b; width: 280px; margin-bottom: 6px; letter-spacing: 2px; color: #94a3b8;">......................................................................</div>
+          ${customerDisplayName ? `<div class="font-bold text-main" style="font-size: 14px; margin-bottom: 2px;">${escapeHtml(customerDisplayName)}</div>` : (!picDisplayName ? `<div class="font-bold text-main" style="font-size: 14px; margin-bottom: 2px;">-</div>` : '')}
+          ${picDisplayName ? `<div class="font-sm font-bold text-primary" style="font-size: 12px; margin-top: 2px;">UP / PIC (Kontak Person): ${escapeHtml(picDisplayName)}</div>` : ''}
           ${quo.projectName ? `<div class="font-sm font-bold" style="font-size: 12px; color: #1e40af; margin-top: 4px;">Project: ${escapeHtml(quo.projectName)}</div>` : ''}
-          ${quo.picName ? `<div class="font-sm font-bold text-primary" style="font-size: 11.5px; margin-top: 2px;">UP: ${escapeHtml(quo.picName)}</div>` : ''}
           ${quo.customerAddress && quo.customerAddress !== 'Alamat tidak dicantumkan' ? `<div class="font-sm text-muted" style="margin-top: 2px; font-size: 11px;">${escapeHtml(quo.customerAddress)}</div>` : ''}
           ${quo.customerPhone ? `<div class="font-sm" style="margin-top: 4px; font-size: 11px;">Telp / WA: <strong>${escapeHtml(quo.customerPhone)}</strong></div>` : ''}
         </div>
@@ -2084,10 +2089,10 @@ function buildQuotationPrintableHtml(quo) {
                 <div style="border-bottom: 1px dashed #94a3b8; width: 130px; margin-bottom: 6px;"></div>
                 <span style="font-style: italic; color: #94a3b8; font-size: 9.5px;">(Tanda Tangan & Cap Perusahaan)</span>
               </div>
-              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; ${quo.picName && String(quo.picName).trim() ? 'text-decoration: underline;' : ''}">
-                ${quo.picName && String(quo.picName).trim() ? escapeHtml(String(quo.picName).trim()) : '( ..................................... )'}
+              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; ${picDisplayName ? 'text-decoration: underline;' : ''}">
+                ${picDisplayName ? escapeHtml(picDisplayName) : '( ..................................... )'}
               </div>
-              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">${quo.picName && String(quo.picName).trim() ? 'PIC / Kontak Person Pelanggan' : 'Tanda Tangan & Cap Perusahaan'}</div>
+              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">${picDisplayName ? 'PIC / Kontak Person Pelanggan' : 'Tanda Tangan & Cap Perusahaan'}</div>
             </div>
 
             <!-- 2. KETUA UNIT BISNIS MANDIRI (TENGAH) -->
