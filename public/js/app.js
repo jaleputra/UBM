@@ -406,6 +406,14 @@ async function fetchResource(resource) {
         if (typeof ensureOrderPOData === 'function') ensureOrderPOData(o);
         if (typeof ensureOrderApprovalData === 'function') ensureOrderApprovalData(o);
       });
+    } else if (resource === 'quotations' && Array.isArray(result)) {
+      result.forEach(q => {
+        if (typeof ensureQuotationApprovalData === 'function') ensureQuotationApprovalData(q);
+      });
+    } else if (resource === 'purchasing' && Array.isArray(result)) {
+      result.forEach(p => {
+        if (typeof ensurePurchasingApprovalData === 'function') ensurePurchasingApprovalData(p);
+      });
     }
     state[resource] = Array.isArray(result) ? result : [];
     if (resource === 'users' && Array.isArray(result) && result.length > 0) {
@@ -442,11 +450,16 @@ function updateSidebarBadges() {
   const badgeLogs = document.getElementById('badge-logs-count');
   if (badgeLogs) badgeLogs.textContent = state.activity_logs?.length || 0;
 
-  const badgeQuotation = document.getElementById('badge-quotation-count');
-  if (badgeQuotation) badgeQuotation.textContent = state.quotations?.length || 0;
-
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Administrator';
+
+  const badgeQuotation = document.getElementById('badge-quotation-count');
+  if (badgeQuotation) {
+    const visibleQuos = (typeof isQuotationVisibleToUser === 'function')
+      ? (state.quotations || []).filter(q => isQuotationVisibleToUser(q, activeUser))
+      : (state.quotations || []);
+    badgeQuotation.textContent = visibleQuos.length;
+  }
 
   const badgeOrder = document.getElementById('badge-order-count');
   if (badgeOrder) {

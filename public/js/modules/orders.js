@@ -487,11 +487,19 @@ async function approveOrderByRole(orderId, approverRole) {
         const targetQuo = (state.quotations || []).find(q => q.id === quoRef);
         if (targetQuo && targetQuo.status !== 'Accepted') {
           targetQuo.status = 'Accepted';
+          targetQuo.isDraft = false;
+          targetQuo.publishedAt = targetQuo.publishedAt || new Date().toISOString();
           fetch(`/api/quotations/${quoRef}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...targetQuo, status: 'Accepted' })
+            body: JSON.stringify({ ...targetQuo, status: 'Accepted', isDraft: false })
           }).catch(e => console.warn('Sync quotation error:', e));
+          if (typeof directSupabaseUpsertNativeRow === 'function') {
+            directSupabaseUpsertNativeRow('quotations', targetQuo).catch(() => {});
+          }
+          if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state.quotations)) {
+            directSupabaseSyncResource('quotations', state.quotations).catch(() => {});
+          }
 
           if (typeof renderQuotationsTable === 'function') {
             renderQuotationsTable();
@@ -557,15 +565,31 @@ async function rejectOrderByRole(orderId, rejectorRole = '') {
 
     if (targetQuo) {
       targetQuo.status = 'Draft';
+      targetQuo.isDraft = true;
+      targetQuo.publishedAt = null;
+      targetQuo.approvalKetuaUbm = false;
+      targetQuo.approvalKetuaUbmBy = null;
+      targetQuo.approvalKetuaUbmDate = null;
+      targetQuo.approvalDirektur = false;
+      targetQuo.approvalDirekturBy = null;
+      targetQuo.approvalDirekturDate = null;
       targetQuo.orderId = null;
       targetQuo.rejectionNotes = rejectionNote;
-      targetQuo.notes = targetQuo.notes ? `${rejectionNote}\n\n${targetQuo.notes}` : rejectionNote;
+      const cleanPrevNotes = typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(targetQuo._rawNotes || targetQuo.notes || '') : (targetQuo.notes || '');
+      targetQuo.notes = cleanPrevNotes ? `${rejectionNote}\n\n${cleanPrevNotes}` : rejectionNote;
+      targetQuo._rawNotes = targetQuo.notes;
 
       await fetch(`/api/quotations/${targetQuo.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(targetQuo)
-      });
+      }).catch(() => {});
+      if (typeof directSupabaseUpsertNativeRow === 'function') {
+        await directSupabaseUpsertNativeRow('quotations', targetQuo).catch(() => {});
+      }
+      if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state.quotations)) {
+        await directSupabaseSyncResource('quotations', state.quotations).catch(() => {});
+      }
     } else {
       // Jika order dibuat langsung tanpa quotation asal, buatkan Quotation baru berstatus Draft agar data tidak hilang
       const newQuoId = 'QUO-' + (order.id ? order.id.replace('ORD-', '') : Date.now());
@@ -578,6 +602,12 @@ async function rejectOrderByRole(orderId, rejectorRole = '') {
         quotationDate: order.orderDate || new Date().toISOString().split('T')[0],
         validUntil: order.dueDate || '',
         status: 'Draft',
+        isDraft: true,
+        publishedAt: null,
+        createdBy: activeUser?.email || activeUser?.name || '',
+        rejectionNotes: rejectionNote,
+        approvalKetuaUbm: false,
+        approvalDirektur: false,
         quotationType: isServiceOrder(order) ? 'jasa' : 'produk',
         items: order.items || [],
         additionalServices: order.additionalServices || [],
@@ -596,7 +626,13 @@ async function rejectOrderByRole(orderId, rejectorRole = '') {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newQuo)
-      });
+      }).catch(() => {});
+      if (typeof directSupabaseUpsertNativeRow === 'function') {
+        await directSupabaseUpsertNativeRow('quotations', newQuo).catch(() => {});
+      }
+      if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state.quotations)) {
+        await directSupabaseSyncResource('quotations', state.quotations).catch(() => {});
+      }
     }
 
     // Hapus project terkait jika ada
@@ -667,11 +703,19 @@ async function updateOrderStatusDirect(orderId, newStatus = 'Accepted') {
         const targetQuo = (state.quotations || []).find(q => q.id === quoRef);
         if (targetQuo && targetQuo.status !== 'Accepted') {
           targetQuo.status = 'Accepted';
+          targetQuo.isDraft = false;
+          targetQuo.publishedAt = targetQuo.publishedAt || new Date().toISOString();
           fetch(`/api/quotations/${quoRef}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...targetQuo, status: 'Accepted' })
+            body: JSON.stringify({ ...targetQuo, status: 'Accepted', isDraft: false })
           }).catch(e => console.warn('Sync quotation status error:', e));
+          if (typeof directSupabaseUpsertNativeRow === 'function') {
+            directSupabaseUpsertNativeRow('quotations', targetQuo).catch(() => {});
+          }
+          if (typeof directSupabaseSyncResource === 'function' && Array.isArray(state.quotations)) {
+            directSupabaseSyncResource('quotations', state.quotations).catch(() => {});
+          }
 
           if (typeof renderQuotationsTable === 'function') {
             renderQuotationsTable();
@@ -827,6 +871,13 @@ function autoFillOrderFromQuotation(quoId) {
   const quo = (state.quotations || []).find(q => q.id === quoId);
   if (!quo) return;
 
+  if (quo.status === 'Draft' || Boolean(quo.isDraft)) {
+    showToast(`📝 Quotation ${quoId} masih berstatus Draft (Belum Terbit). Terbitkan dan lengkapi persetujuan terlebih dahulu!`, 'warning');
+    const select = document.getElementById('order-quotation-select');
+    if (select) select.value = '';
+    return;
+  }
+
   const form = document.getElementById('order-form');
   if (!form) return;
 
@@ -853,7 +904,8 @@ function autoFillOrderFromQuotation(quoId) {
     toggleOrderTypeUI('produk');
   }
 
-  if (form.customerName) form.customerName.value = quo.customerName || '';
+  const safeCust = (quo.customerName && quo.customerName !== 'Calon Pelanggan (Ditulis Tangan)') ? quo.customerName : '';
+  if (form.customerName) form.customerName.value = safeCust;
   if (form.projectName) form.projectName.value = quo.projectName || (quo.items?.[0]?.itemName || '');
   if (form.customerPhone) form.customerPhone.value = quo.customerPhone || '';
   if (form.customerAddress) form.customerAddress.value = quo.customerAddress || '';
@@ -865,8 +917,9 @@ function autoFillOrderFromQuotation(quoId) {
       quo.additionalServices.map((s, idx) => `${idx + 1}. ${s.serviceName} (${s.qty} ${s.unit || 'Lot'} @ ${formatRupiah(s.unitPrice)}) = ${formatRupiah(s.total)}`).join('\n');
   }
 
+  const cleanQuoNotes = typeof cleanDisplayNotes === 'function' ? cleanDisplayNotes(quo.notes) : (quo.notes || '');
   if (form.notes) {
-    form.notes.value = `Dikonversi dari Surat Penawaran Harga (${isQuoJasa ? 'JASA' : 'PRODUK'}) #${quo.id}.\nKetentuan Garansi: ${quo.warranty || '-'}.\nLead time: ${quo.leadTime || '-'}.${serviceNotes}${quo.notes ? `\n\nCatatan Tambahan:\n${quo.notes}` : ''}`;
+    form.notes.value = `Dikonversi dari Surat Penawaran Harga (${isQuoJasa ? 'JASA' : 'PRODUK'}) #${quo.id}.\nKetentuan Garansi: ${quo.warranty || '-'}.\nLead time: ${quo.leadTime || '-'}.${serviceNotes}${cleanQuoNotes ? `\n\nCatatan Tambahan:\n${cleanQuoNotes}` : ''}`;
   }
 
   const taxInput = document.getElementById('order-tax-rate');
@@ -966,16 +1019,17 @@ function openOrderModal(orderData = null) {
           </div>
           <select id="order-quotation-select" class="form-control" onchange="autoFillOrderFromQuotation(this.value)" ${isEdit ? 'disabled' : ''} style="font-size: 12px; background: #ffffff;">
             <option value="">-- Tanpa Referensi Quotation (Order Baru Lepas) --</option>
-            ${(state.quotations || []).map(q => {
+            ${(state.quotations || []).filter(q => (quotationId === q.id) || !(q.status === 'Draft' || Boolean(q.isDraft))).map(q => {
     const alreadyUsedOrder = (state.orders || []).find(o => (!isEdit || o.id !== orderData?.id) && (o.quotationId === q.id || (o.notes && o.notes.includes(q.id))));
+    const qCust = (q.customerName && q.customerName !== 'Calon Pelanggan (Ditulis Tangan)') ? q.customerName : (q.projectName || 'Calon Pelanggan');
     if (alreadyUsedOrder) {
       return `<option value="${q.id}" ${(quotationId === q.id) ? 'selected' : 'disabled'} style="color: #94a3b8; background: #f8fafc;">
-                  [${q.id}] ${q.customerName} - ⚠️ Sudah Dikonversi (Order #${alreadyUsedOrder.id})
+                  [${q.id}] ${escapeHtml(qCust)} - ⚠️ Sudah Dikonversi (Order #${alreadyUsedOrder.id})
                 </option>`;
     }
     const qTypeBadge = q.quotationType === 'jasa' ? '🛠️ Jasa' : '📦 Produk';
     return `<option value="${q.id}" ${(quotationId === q.id) ? 'selected' : ''}>
-                [${q.id}] [${qTypeBadge}] ${q.customerName} - ${formatRupiah(q.grandTotal)} (${q.status === 'Accepted' ? '✅ Disetujui' : q.status === 'Sent' ? '✉️ Terkirim' : q.status})
+                [${q.id}] [${qTypeBadge}] ${escapeHtml(qCust)} - ${formatRupiah(q.grandTotal)} (${q.status === 'Accepted' ? '✅ Disetujui' : q.status === 'Sent' ? '✉️ Terkirim' : q.status})
               </option>`;
   }).join('')}
           </select>

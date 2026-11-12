@@ -18,7 +18,10 @@ const {
   ensureOrderApprovalData,
   embedApprovalInNotes,
   ensureQuotationApprovalData,
-  embedQuotationApprovalInNotes
+  embedQuotationApprovalInNotes,
+  ensurePurchasingApprovalData,
+  embedPurchasingApprovalInNotes,
+  isPurchasingDualApproved
 } = require('../utils/dbHelper');
 const { generateSignatureVerificationPdf } = require('../utils/pdfCertHelper');
 
@@ -227,6 +230,30 @@ const DEFAULT_ROLES = [
     canManageSettings: false
   },
   {
+    id: 'ROLE-PPIC',
+    roleName: 'PPIC',
+    label: 'PPIC',
+    badgeColor: '#0f766e',
+    description: 'Production Planning & Inventory Control: Pengelolaan perencanaan produksi, BOM, stok barang, dan persetujuan PR Purchasing bersama Keuangan',
+    allowedViews: [
+      'dashboard', 'logs', 'orders', 'projects', 'bom', 'bom-form',
+      'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'settings'
+    ],
+    canApproveOrder: false,
+    canAssignLead: false,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canApproveBOM: false,
+    canSubmitPR: true,
+    canApprovePurchasing: true,
+    canManageInvoices: false,
+    canManageFinance: false,
+    canManageBAST: false,
+    canManageAfterSales: false,
+    canManageSettings: false
+  },
+  {
     id: 'ROLE-MEMBER',
     roleName: 'Member',
     label: 'Member',
@@ -253,12 +280,13 @@ const DEFAULT_ROLES = [
 
 function getRoleConfig(roleStr) {
   const rLower = (roleStr || '').toLowerCase();
-  if (rLower.includes('admin') || rLower.includes('super')) return DEFAULT_ROLES[0];
+  if (rLower.includes('admin') || rLower.includes('super')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-ADMIN') || DEFAULT_ROLES[0];
   if (rLower.includes('direktur') && !rLower.includes('wadir') && !rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-DIREKTUR') || DEFAULT_ROLES[0];
-  if (rLower.includes('wadir') || rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-WADIR1') || DEFAULT_ROLES[1];
-  if (rLower.includes('ketua') || rLower.includes('pimpinan')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KETUA') || DEFAULT_ROLES[2];
-  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KEUANGAN') || DEFAULT_ROLES[4];
-  return DEFAULT_ROLES.find(r => r.id === 'ROLE-MEMBER') || DEFAULT_ROLES[5];
+  if (rLower.includes('wadir') || rLower.includes('wakil')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-WADIR1') || DEFAULT_ROLES[0];
+  if (rLower.includes('ketua') || rLower.includes('pimpinan')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KETUA') || DEFAULT_ROLES[0];
+  if (rLower.includes('ppic') || rLower.includes('inventory')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-PPIC') || DEFAULT_ROLES[0];
+  if (rLower.includes('keuangan') || rLower.includes('finance') || rLower.includes('accounting') || rLower.includes('bendahara')) return DEFAULT_ROLES.find(r => r.id === 'ROLE-KEUANGAN') || DEFAULT_ROLES[0];
+  return DEFAULT_ROLES.find(r => r.id === 'ROLE-MEMBER') || DEFAULT_ROLES[DEFAULT_ROLES.length - 1];
 }
 
 module.exports = function(broadcastReload) {
@@ -474,6 +502,7 @@ module.exports = function(broadcastReload) {
           quotations[i] = {
             ...q,
             status: 'Sent',
+            isDraft: false,
             orderId: null,
             updatedAt: new Date().toISOString()
           };
@@ -644,9 +673,11 @@ module.exports = function(broadcastReload) {
       const existingProcessList = await fetchAuthoritativeList('purchasing_process');
       const existingMasterList = await fetchAuthoritativeList('master_items');
 
-      const approvedPRs = prList.filter(
-        pr => pr && (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved')
-      );
+      const approvedPRs = prList.filter(pr => {
+        if (!pr) return false;
+        ensurePurchasingApprovalData(pr);
+        return isPurchasingDualApproved(pr);
+      });
 
       const newProcessList = [];
       const masterMap = new Map();
@@ -1646,9 +1677,10 @@ end run
         fetchAuthoritativeList('quotations')
       ]);
 
-      const totalQuotations = quotations.length;
-      const totalQuotationValue = quotations.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
-      const activeQuotations = quotations.filter(q => q.status === 'Sent' || q.status === 'Draft' || q.status === 'Pengajuan').length;
+      const publishedQuotations = quotations.filter(q => !(q.status === 'Draft' || Boolean(q.isDraft)));
+      const totalQuotations = publishedQuotations.length;
+      const totalQuotationValue = publishedQuotations.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
+      const activeQuotations = publishedQuotations.filter(q => q.status === 'Sent' || q.status === 'Pengajuan').length;
 
       const totalOrders = orders.length;
       const totalOrderValue = orders.reduce((sum, o) => sum + (Number(o.grandTotal) || 0), 0);
@@ -1663,7 +1695,7 @@ end run
         .reduce((sum, i) => sum + (Number(i.grandTotal) - (Number(i.paidAmount) || 0)), 0);
 
       const totalPurchasing = purchasing.length;
-      const pendingPurchasing = purchasing.filter(p => p.status === 'Pending' || p.status === 'In Review').length;
+      const pendingPurchasing = purchasing.filter(p => !p.status || p.status === 'Pengajuan' || p.status === 'Pending' || p.status === 'In Review').length;
 
       const totalBOM = bom.length;
       const totalDeliveries = delivery.length;
@@ -1671,9 +1703,9 @@ end run
 
       // Recent activities feed
       const recentActivities = [
-        ...quotations.slice(-2).map(q => ({
+        ...publishedQuotations.slice(-2).map(q => ({
           type: 'Quotation',
-          title: `Penawaran #${q.id} - ${q.customerName}`,
+          title: `Penawaran #${q.id} - ${q.customerName || q.projectName || 'Calon Customer'}`,
           date: q.quotationDate || q.createdAt?.split('T')[0],
           amount: q.grandTotal,
           status: q.status
@@ -1859,9 +1891,15 @@ end run
     router.get(`/${resourceName}`, async (req, res) => {
       try {
         let items = await fetchAuthoritativeList(resourceName);
+        if (resourceName === 'purchasing' && Array.isArray(items)) {
+          items.forEach(p => ensurePurchasingApprovalData(p));
+        }
         if ((resourceName === 'purchasing_process' || resourceName === 'master_items') && items.length === 0) {
           const prList = await fetchAuthoritativeList('purchasing');
-          const hasApprovedPR = prList.some(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+          const hasApprovedPR = prList.some(pr => {
+            ensurePurchasingApprovalData(pr);
+            return isPurchasingDualApproved(pr);
+          });
           if (hasApprovedPR) {
             await syncPurchasingProcessAndMasterItems(prList);
             items = await fetchAuthoritativeList(resourceName);
@@ -1922,6 +1960,22 @@ end run
           ensureOrderApprovalData(newItem);
           newItem = processPOFileStorage(newItem, newId);
         } else if (resourceName === 'quotations') {
+          const isDraftQuo = newItem.status === 'Draft' || Boolean(newItem.isDraft);
+          if (isDraftQuo) {
+            newItem.status = 'Draft';
+            newItem.isDraft = true;
+            newItem.publishedAt = null;
+            newItem.approvalKetuaUbm = false;
+            newItem.approvalKetuaUbmBy = null;
+            newItem.approvalKetuaUbmDate = null;
+            newItem.approvalDirektur = false;
+            newItem.approvalDirekturBy = null;
+            newItem.approvalDirekturDate = null;
+          } else {
+            newItem.status = newItem.status || 'Sent';
+            newItem.isDraft = false;
+            newItem.publishedAt = newItem.publishedAt || new Date().toISOString();
+          }
           ensureQuotationApprovalData(newItem);
         } else if (resourceName === 'bom') {
           const comps = Array.isArray(newItem.components) ? newItem.components : [];
@@ -1944,6 +1998,15 @@ end run
           if (!updatedItem.poDocument && existingItem.poDocument) {
             updatedItem.poDocument = existingItem.poDocument;
           }
+        } else if (resourceName === 'purchasing') {
+          if (!newItem.status || newItem.status === 'Pending' || newItem.status === 'In Review') {
+            newItem.status = 'Pengajuan';
+          }
+          const hasBoth = Boolean(newItem.approvalPpic === true && newItem.approvalKeuangan === true);
+          if ((newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') && !hasBoth) {
+            newItem.status = 'Pengajuan';
+          }
+          ensurePurchasingApprovalData(newItem);
         } else if (resourceName === 'po') {
           if (newItem.expectedDelivery && !newItem.expectedDate) newItem.expectedDate = newItem.expectedDelivery;
           if (newItem.expectedDate && !newItem.expectedDelivery) newItem.expectedDelivery = newItem.expectedDate;
@@ -1984,7 +2047,7 @@ end run
             } else if (resourceName === 'delivery') {
               await syncDeliveryRelationsOnSave(newItem);
             } else if (resourceName === 'purchasing') {
-              if (newItem.status === 'Disetujui' || newItem.status === 'Stock' || newItem.status === 'Approved') {
+              if (isPurchasingDualApproved(newItem)) {
                 await syncPurchasingProcessAndMasterItems(items);
               }
             } else if (resourceName === 'purchasing_process') {
@@ -2068,15 +2131,56 @@ end run
           ensureOrderApprovalData(updatedItem);
           updatedItem = processPOFileStorage(updatedItem, req.params.id);
         } else if (resourceName === 'quotations') {
-          if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
-            updatedItem.approvalKetuaUbm = existingItem.approvalKetuaUbm;
-            updatedItem.approvalKetuaUbmBy = existingItem.approvalKetuaUbmBy;
-            updatedItem.approvalKetuaUbmDate = existingItem.approvalKetuaUbmDate;
-          }
-          if (updatedItem.approvalDirektur === undefined && existingItem.approvalDirektur !== undefined) {
-            updatedItem.approvalDirektur = existingItem.approvalDirektur;
-            updatedItem.approvalDirekturBy = existingItem.approvalDirekturBy;
-            updatedItem.approvalDirekturDate = existingItem.approvalDirekturDate;
+          const requestedStatus = req.body?.status;
+          const targetIsDraft =
+            requestedStatus === 'Draft' ||
+            req.body?.isDraft === true ||
+            (requestedStatus === undefined && req.body?.isDraft !== false && (existingItem.status === 'Draft' || Boolean(existingItem.isDraft)));
+
+          if (targetIsDraft && requestedStatus !== 'Sent' && req.body?.isDraft !== false) {
+            if (req.body?.approvalKetuaUbm === true || req.body?.approvalDirektur === true) {
+              return res.status(400).json({
+                error: 'Quotation berstatus Draft tidak dapat disetujui oleh Ketua UBM atau Direktur sebelum disimpan & diterbitkan.'
+              });
+            }
+            updatedItem.status = 'Draft';
+            updatedItem.isDraft = true;
+            updatedItem.publishedAt = null;
+            updatedItem.approvalKetuaUbm = false;
+            updatedItem.approvalKetuaUbmBy = null;
+            updatedItem.approvalKetuaUbmDate = null;
+            updatedItem.approvalDirektur = false;
+            updatedItem.approvalDirekturBy = null;
+            updatedItem.approvalDirekturDate = null;
+          } else {
+            const transitioningToSent = updatedItem.status === 'Sent' && (
+              existingItem.status === 'Draft' ||
+              existingItem.status === 'Rejected' ||
+              Boolean(existingItem.isDraft)
+            );
+            updatedItem.isDraft = false;
+            if (transitioningToSent) {
+              updatedItem.publishedAt = new Date().toISOString();
+              updatedItem.rejectionNotes = null;
+              updatedItem.approvalKetuaUbm = false;
+              updatedItem.approvalKetuaUbmBy = null;
+              updatedItem.approvalKetuaUbmDate = null;
+              updatedItem.approvalDirektur = false;
+              updatedItem.approvalDirekturBy = null;
+              updatedItem.approvalDirekturDate = null;
+            } else {
+              updatedItem.publishedAt = updatedItem.publishedAt || existingItem.publishedAt || existingItem.createdAt || new Date().toISOString();
+              if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
+                updatedItem.approvalKetuaUbm = existingItem.approvalKetuaUbm;
+                updatedItem.approvalKetuaUbmBy = existingItem.approvalKetuaUbmBy;
+                updatedItem.approvalKetuaUbmDate = existingItem.approvalKetuaUbmDate;
+              }
+              if (updatedItem.approvalDirektur === undefined && existingItem.approvalDirektur !== undefined) {
+                updatedItem.approvalDirektur = existingItem.approvalDirektur;
+                updatedItem.approvalDirekturBy = existingItem.approvalDirekturBy;
+                updatedItem.approvalDirekturDate = existingItem.approvalDirekturDate;
+              }
+            }
           }
           ensureQuotationApprovalData(updatedItem);
         } else if (resourceName === 'bom') {
@@ -2100,6 +2204,45 @@ end run
           if (!updatedItem.poDocument && existingItem.poDocument) {
             updatedItem.poDocument = existingItem.poDocument;
           }
+        } else if (resourceName === 'purchasing') {
+          if (existingItem && existingItem.id) {
+            ensurePurchasingApprovalData(existingItem);
+          }
+          if (updatedItem.approvalPpic === undefined && existingItem.approvalPpic !== undefined) {
+            updatedItem.approvalPpic = existingItem.approvalPpic;
+            updatedItem.approvalPpicBy = existingItem.approvalPpicBy;
+            updatedItem.approvalPpicDate = existingItem.approvalPpicDate;
+          }
+          if (updatedItem.approvalKeuangan === undefined && existingItem.approvalKeuangan !== undefined) {
+            updatedItem.approvalKeuangan = existingItem.approvalKeuangan;
+            updatedItem.approvalKeuanganBy = existingItem.approvalKeuanganBy;
+            updatedItem.approvalKeuanganDate = existingItem.approvalKeuanganDate;
+          }
+
+          const isRejectedReq = updatedItem.status === 'Ditolak' || updatedItem.status === 'Rejected';
+          const ppicOk = Boolean(updatedItem.approvalPpic);
+          const keuOk = Boolean(updatedItem.approvalKeuangan);
+
+          if (isRejectedReq) {
+            updatedItem.status = 'Ditolak';
+            updatedItem.approvalPpic = ppicOk;
+            updatedItem.approvalKeuangan = keuOk;
+          } else if (ppicOk && keuOk) {
+            updatedItem.status = (updatedItem.status === 'Stock' || updatedItem.status === 'Approved')
+              ? updatedItem.status
+              : 'Disetujui';
+            if (!updatedItem.approvedBy || updatedItem.approvedBy === '-') {
+              updatedItem.approvedBy = `${updatedItem.approvalPpicBy || 'PPIC'} (PPIC) & ${updatedItem.approvalKeuanganBy || 'Keuangan'} (Keuangan)`;
+            }
+          } else {
+            if (req.body && (req.body.status === 'Disetujui' || req.body.status === 'Stock' || req.body.status === 'Approved')) {
+              return res.status(400).json({
+                error: 'Dokumen PR membutuhkan persetujuan lengkap dari PPIC dan Keuangan sebelum berstatus Disetujui.'
+              });
+            }
+            updatedItem.status = 'Pengajuan';
+          }
+          ensurePurchasingApprovalData(updatedItem);
         } else if (resourceName === 'po') {
           if (updatedItem.expectedDelivery && !updatedItem.expectedDate) updatedItem.expectedDate = updatedItem.expectedDelivery;
           if (updatedItem.expectedDate && !updatedItem.expectedDelivery) updatedItem.expectedDelivery = updatedItem.expectedDate;
@@ -2120,6 +2263,15 @@ end run
         ]);
         updatedItem._syncedNative = upRes.synced;
 
+        // Sinkronisasi purchasing_process & master_items secara sinkron saat PR baru saja mencapai Dual Approval (atau berubah dari status Disetujui)
+        if (resourceName === 'purchasing' && (isPurchasingDualApproved(updatedItem) || isPurchasingDualApproved(existingItem))) {
+          try {
+            await syncPurchasingProcessAndMasterItems(items);
+          } catch (syncPrErr) {
+            console.warn(`[Sync Purchasing Process PUT /${resourceName}/${req.params.id}] Notice:`, syncPrErr.message);
+          }
+        }
+
         // Respond immediately to client so UI is ultra fast!
         broadcastReload({ type: 'reload', resource: resourceName });
         res.json(updatedItem);
@@ -2138,11 +2290,6 @@ end run
               if (updatedItem.actualUsageReport) await syncPurchasingProcessAndMasterItems();
             } else if (resourceName === 'delivery') {
               await syncDeliveryRelationsOnSave(updatedItem);
-            } else if (resourceName === 'purchasing') {
-              const checkStatus = updatedItem.status || existingItem.status;
-              if (checkStatus === 'Disetujui' || checkStatus === 'Stock' || checkStatus === 'Approved') {
-                await syncPurchasingProcessAndMasterItems(items);
-              }
             } else if (resourceName === 'purchasing_process') {
               await syncProcessItemBackToPurchasing(updatedItem);
             } else if (resourceName === 'invoices') {

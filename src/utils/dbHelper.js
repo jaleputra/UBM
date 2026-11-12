@@ -108,7 +108,7 @@ function mapToSnakeCase(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (key.startsWith('_')) continue;
+    if (key.startsWith('_') || value === undefined) continue;
     result[camelToSnake(key)] = value;
   }
   return result;
@@ -219,6 +219,29 @@ function toSqlDateOrNull(val, fallbackToday = false) {
   return fallbackToday ? new Date().toISOString().split('T')[0] : null;
 }
 
+function toSqlTimestampOrNull(val, fallbackNow = false) {
+  if (val && typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed && trimmed !== '-' && !Number.isNaN(Date.parse(trimmed))) {
+      return new Date(trimmed).toISOString();
+    }
+  } else if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    return val.toISOString();
+  }
+  return fallbackNow ? new Date().toISOString() : null;
+}
+
+const TIMESTAMP_COLS = new Set([
+  'approval_ketua_ubm_date',
+  'approval_direktur_date',
+  'approval_wadir1_date',
+  'approval_ppic_date',
+  'approval_keuangan_date',
+  'published_at',
+  'created_at',
+  'updated_at'
+]);
+
 const NOT_NULL_DATE_COLS = new Set([
   'quotation_date',
   'order_date',
@@ -278,7 +301,116 @@ function cleanDisplayNotes(notes) {
     .replace(/<!--UBM_BOM_META:[\s\S]*?-->/g, '')
     .replace(/<!--UBM_APPROVAL_DATA:[\s\S]*?-->/g, '')
     .replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '')
+    .replace(/<!--UBM_PR_APPROVAL:[\s\S]*?-->/g, '')
     .trim();
+}
+
+// ==================== PURCHASING (PR) DUAL APPROVAL CARRIER HELPERS ====================
+function embedPurchasingApprovalInNotes(notes, approvalData) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_PR_APPROVAL:[\s\S]*?-->/g, '').trim();
+  if (!approvalData || (
+    approvalData.approvalPpic === undefined &&
+    approvalData.approvalKeuangan === undefined &&
+    !approvalData.approvalPpicBy &&
+    !approvalData.approvalKeuanganBy &&
+    !approvalData.rejectionNotes
+  )) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    approvalPpic: Boolean(approvalData.approvalPpic),
+    approvalPpicBy: approvalData.approvalPpicBy || '',
+    approvalPpicDate: approvalData.approvalPpicDate || '',
+    approvalKeuangan: Boolean(approvalData.approvalKeuangan),
+    approvalKeuanganBy: approvalData.approvalKeuanganBy || '',
+    approvalKeuanganDate: approvalData.approvalKeuanganDate || '',
+    rejectionNotes: approvalData.rejectionNotes || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_PR_APPROVAL:${payload}-->` : `<!--UBM_PR_APPROVAL:${payload}-->`;
+}
+
+function extractPurchasingApprovalFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_PR_APPROVAL:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensurePurchasingApprovalData(pr) {
+  if (!pr || typeof pr !== 'object') return pr;
+
+  // 1. Ekstrak metadata approval dari notes jika properti belum tersedia
+  const meta = extractPurchasingApprovalFromNotes(pr.notes) || extractPurchasingApprovalFromNotes(pr._rawNotes);
+  if (meta) {
+    if (pr.approvalPpic === undefined && meta.approvalPpic !== undefined) {
+      pr.approvalPpic = Boolean(meta.approvalPpic);
+    } else if (meta.approvalPpic === true && pr.approvalPpic !== true && pr.status !== 'Ditolak' && pr.status !== 'Rejected') {
+      pr.approvalPpic = true;
+    }
+    if (!pr.approvalPpicBy && meta.approvalPpicBy) pr.approvalPpicBy = meta.approvalPpicBy;
+    if (!pr.approvalPpicDate && meta.approvalPpicDate) pr.approvalPpicDate = meta.approvalPpicDate;
+
+    if (pr.approvalKeuangan === undefined && meta.approvalKeuangan !== undefined) {
+      pr.approvalKeuangan = Boolean(meta.approvalKeuangan);
+    } else if (meta.approvalKeuangan === true && pr.approvalKeuangan !== true && pr.status !== 'Ditolak' && pr.status !== 'Rejected') {
+      pr.approvalKeuangan = true;
+    }
+    if (!pr.approvalKeuanganBy && meta.approvalKeuanganBy) pr.approvalKeuanganBy = meta.approvalKeuanganBy;
+    if (!pr.approvalKeuanganDate && meta.approvalKeuanganDate) pr.approvalKeuanganDate = meta.approvalKeuanganDate;
+
+    if (!pr.rejectionNotes && meta.rejectionNotes) pr.rejectionNotes = meta.rejectionNotes;
+  }
+
+  const isLegacyApproved = (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  const isRejected = (pr.status === 'Ditolak' || pr.status === 'Rejected');
+
+  if (isRejected) {
+    pr.approvalPpic = Boolean(pr.approvalPpic);
+    pr.approvalKeuangan = Boolean(pr.approvalKeuangan);
+  } else if (isLegacyApproved) {
+    // Pertahankan backward compatibility untuk PR yang sudah berstatus Disetujui/Stock sebelum fitur dual approval
+    if (pr.approvalPpic !== true) {
+      pr.approvalPpic = true;
+      pr.approvalPpicBy = pr.approvalPpicBy || (pr.approvedBy && pr.approvedBy !== '-' ? pr.approvedBy : 'PPIC (Auto-Approved)');
+      pr.approvalPpicDate = pr.approvalPpicDate || pr.updatedAt || pr.requestDate || new Date().toISOString();
+    }
+    if (pr.approvalKeuangan !== true) {
+      pr.approvalKeuangan = true;
+      pr.approvalKeuanganBy = pr.approvalKeuanganBy || (pr.approvedBy && pr.approvedBy !== '-' ? pr.approvedBy : 'Keuangan (Auto-Approved)');
+      pr.approvalKeuanganDate = pr.approvalKeuanganDate || pr.updatedAt || pr.requestDate || new Date().toISOString();
+    }
+  } else {
+    pr.approvalPpic = Boolean(pr.approvalPpic);
+    pr.approvalKeuangan = Boolean(pr.approvalKeuangan);
+    if (pr.approvalPpic && pr.approvalKeuangan) {
+      pr.status = 'Disetujui';
+    } else if (!pr.status || pr.status === 'Pending' || pr.status === 'In Review') {
+      pr.status = 'Pengajuan';
+    }
+  }
+
+  if (pr.approvalPpic || pr.approvalKeuangan || pr.approvalPpicBy || pr.approvalKeuanganBy || pr.rejectionNotes) {
+    pr.notes = embedPurchasingApprovalInNotes(pr.notes, pr);
+  }
+
+  return pr;
+}
+
+function isPurchasingDualApproved(pr) {
+  if (!pr || typeof pr !== 'object') return false;
+  if (pr.status === 'Ditolak' || pr.status === 'Rejected') return false;
+  return Boolean(
+    pr.approvalPpic === true &&
+    pr.approvalKeuangan === true &&
+    (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved')
+  );
 }
 
 // ==================== QUOTATION DUAL APPROVAL CARRIER HELPERS ====================
@@ -314,6 +446,28 @@ function extractQuotationApprovalFromNotes(notes) {
 
 function ensureQuotationApprovalData(quo, db = null) {
   if (!quo || typeof quo !== 'object') return quo;
+
+  // 0. Guard ketat: Quotation berstatus Draft TIDAK BOLEH memiliki status approval
+  const isDraftQuo = quo.status === 'Draft' || Boolean(quo.isDraft);
+  if (isDraftQuo) {
+    quo.status = 'Draft';
+    quo.isDraft = true;
+    quo.approvalKetuaUbm = false;
+    quo.approvalKetuaUbmBy = null;
+    quo.approvalKetuaUbmDate = null;
+    quo.approvalDirektur = false;
+    quo.approvalDirekturBy = null;
+    quo.approvalDirekturDate = null;
+    if (typeof quo.notes === 'string' && quo.notes.includes('<!--UBM_QUO_APPROVAL:')) {
+      quo.notes = quo.notes.replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+    }
+    if (typeof quo._rawNotes === 'string' && quo._rawNotes.includes('<!--UBM_QUO_APPROVAL:')) {
+      quo._rawNotes = quo._rawNotes.replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+    }
+    return quo;
+  }
+
+  quo.isDraft = false;
 
   // 1. Ekstrak dari notes jika belum ada di properti objek
   const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
@@ -362,7 +516,7 @@ function ensureQuotationApprovalData(quo, db = null) {
       quo.status = 'Accepted';
     }
   } else {
-    // Quotation baru: harus persetujuan eksplisit
+    // Quotation terbit baru: harus persetujuan eksplisit
     quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
     quo.approvalDirektur = Boolean(quo.approvalDirektur);
   }
@@ -640,10 +794,18 @@ function prepareNativeTablePayload(resourceName, rawItem) {
     item.department = item.department || 'Produksi & Project';
     item.requestDate = toSqlDateOrNull(item.requestDate || item.requiredDate, true);
     item.urgency = item.urgency || 'Medium';
-    item.status = item.status || 'Pending';
+    item.status = item.status || 'Pengajuan';
     item.items = Array.isArray(item.items) ? item.items : [];
     item.totalEstimated = Number(item.totalEstimated ?? item.grandTotal ?? 0);
     item.approvedBy = item.approvedBy || '-';
+    item.approvalPpic = Boolean(item.approvalPpic);
+    item.approvalPpicBy = item.approvalPpicBy || null;
+    item.approvalPpicDate = item.approvalPpicDate || null;
+    item.approvalKeuangan = Boolean(item.approvalKeuangan);
+    item.approvalKeuanganBy = item.approvalKeuanganBy || null;
+    item.approvalKeuanganDate = item.approvalKeuanganDate || null;
+    item.rejectionNotes = item.rejectionNotes || null;
+    ensurePurchasingApprovalData(item);
   } else if (resourceName === 'bom') {
     item.productName = item.productName || 'Produk Manufaktur';
     item.productCode = item.productCode || item.id || 'BOM-ITEM';
@@ -683,25 +845,49 @@ function prepareNativeTablePayload(resourceName, rawItem) {
     item.receivedBy = item.receivedBy || '-';
     item.receivedAt = item.receivedAt || '-';
   } else if (resourceName === 'quotations') {
-    item.customerName = item.customerName || 'Customer';
+    const isDraftQuo = item.status === 'Draft' || Boolean(item.isDraft);
+    item.quotationType = item.quotationType || 'produk';
+    item.customerName = (item.customerName !== undefined && item.customerName !== null && String(item.customerName).trim() !== '')
+      ? String(item.customerName).trim()
+      : (isDraftQuo ? '' : 'Calon Pelanggan (Ditulis Tangan)');
+    item.projectName = item.projectName || '';
+    item.customerPhone = item.customerPhone || '';
+    item.customerEmail = item.customerEmail || '';
+    item.customerAddress = item.customerAddress || '';
+    item.picName = item.picName || '';
     item.quotationDate = toSqlDateOrNull(item.quotationDate, true);
     item.validUntil = toSqlDateOrNull(item.validUntil, false);
-    item.status = item.status || 'Sent';
+    item.status = isDraftQuo ? 'Draft' : (item.status || 'Sent');
+    item.isDraft = isDraftQuo;
+    item.warranty = item.warranty || '';
+    item.leadTime = item.leadTime || '';
+    item.paymentTerms = item.paymentTerms || '';
     item.items = Array.isArray(item.items) ? item.items : [];
+    item.additionalServices = Array.isArray(item.additionalServices) ? item.additionalServices : [];
+    item.rabItems = Array.isArray(item.rabItems) ? item.rabItems : [];
+    item.mainItemsTotal = Number(item.mainItemsTotal ?? 0);
+    item.servicesTotal = Number(item.servicesTotal ?? 0);
+    item.itemsTotal = Number(item.itemsTotal ?? 0);
+    item.warrantyFee = Number(item.warrantyFee ?? 0);
     item.subtotal = Number(item.subtotal ?? 0);
     item.discount = Number(item.discount ?? 0);
     item.taxRate = Number(item.taxRate ?? 11);
     item.taxAmount = Number(item.taxAmount ?? 0);
     item.grandTotal = Number(item.grandTotal ?? 0);
+    item.totalModal = Number(item.totalModal ?? 0);
+    item.estimatedProfit = Number(item.estimatedProfit ?? 0);
+    item.rejectionNotes = item.rejectionNotes || null;
+    item.createdBy = item.createdBy || null;
+    item.publishedAt = isDraftQuo ? null : toSqlTimestampOrNull(item.publishedAt || item.createdAt, true);
 
     // Guaranteed Dual Approval carrier in notes and native columns for Supabase quotations table
     ensureQuotationApprovalData(item);
-    item.approvalKetuaUbm = Boolean(item.approvalKetuaUbm);
-    item.approvalKetuaUbmBy = item.approvalKetuaUbmBy || null;
-    item.approvalKetuaUbmDate = toSqlDateOrNull(item.approvalKetuaUbmDate, false);
-    item.approvalDirektur = Boolean(item.approvalDirektur);
-    item.approvalDirekturBy = item.approvalDirekturBy || null;
-    item.approvalDirekturDate = toSqlDateOrNull(item.approvalDirekturDate, false);
+    item.approvalKetuaUbm = isDraftQuo ? false : Boolean(item.approvalKetuaUbm);
+    item.approvalKetuaUbmBy = isDraftQuo ? null : (item.approvalKetuaUbmBy || null);
+    item.approvalKetuaUbmDate = isDraftQuo ? null : toSqlTimestampOrNull(item.approvalKetuaUbmDate, false);
+    item.approvalDirektur = isDraftQuo ? false : Boolean(item.approvalDirektur);
+    item.approvalDirekturBy = isDraftQuo ? null : (item.approvalDirekturBy || null);
+    item.approvalDirekturDate = isDraftQuo ? null : toSqlTimestampOrNull(item.approvalDirekturDate, false);
   } else if (resourceName === 'projects') {
     item.projectName = item.projectName || item.customerName || 'Project UBM';
     item.startDate = toSqlDateOrNull(item.startDate, true);
@@ -790,9 +976,12 @@ function prepareNativeTablePayload(resourceName, rawItem) {
 
   const snake = mapToSnakeCase(item);
 
-  // Sanitize any date columns in snake_case
+  // Sanitize any date / timestamp columns in snake_case
   for (const key of Object.keys(snake)) {
-    if (NOT_NULL_DATE_COLS.has(key) || (resourceName === 'activity_logs' && key === 'end_date') || (resourceName === 'invoices' && key === 'due_date')) {
+    if (TIMESTAMP_COLS.has(key)) {
+      const isRequiredTs = key === 'created_at' || key === 'updated_at';
+      snake[key] = toSqlTimestampOrNull(snake[key], isRequiredTs);
+    } else if (NOT_NULL_DATE_COLS.has(key) || (resourceName === 'activity_logs' && key === 'end_date') || (resourceName === 'invoices' && key === 'due_date')) {
       snake[key] = toSqlDateOrNull(snake[key], true);
     } else if (NULLABLE_DATE_COLS.has(key) || key.endsWith('_date')) {
       snake[key] = toSqlDateOrNull(snake[key], false);
@@ -898,6 +1087,9 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
     if (resourceName === 'quotations') {
       ensureQuotationApprovalData(item);
     }
+    if (resourceName === 'purchasing') {
+      ensurePurchasingApprovalData(item);
+    }
     if (resourceName === 'bom') {
       ensureBOMProjectData(item);
     }
@@ -946,6 +1138,18 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
   }
   if (resourceName === 'quotations') {
     if (cloudRecord) {
+      if (cloudRecord.isDraft !== undefined && (merged.isDraft === undefined || merged.isDraft === null)) {
+        merged.isDraft = cloudRecord.isDraft;
+      }
+      if (cloudRecord.createdBy && !merged.createdBy) {
+        merged.createdBy = cloudRecord.createdBy;
+      }
+      if (cloudRecord.publishedAt && !merged.publishedAt) {
+        merged.publishedAt = cloudRecord.publishedAt;
+      }
+      if (cloudRecord.rejectionNotes && !merged.rejectionNotes) {
+        merged.rejectionNotes = cloudRecord.rejectionNotes;
+      }
       if (cloudRecord.approvalKetuaUbmBy && !merged.approvalKetuaUbmBy) {
         merged.approvalKetuaUbmBy = cloudRecord.approvalKetuaUbmBy;
       }
@@ -960,6 +1164,32 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
       }
     }
     ensureQuotationApprovalData(merged);
+  }
+  if (resourceName === 'purchasing') {
+    if (cloudRecord) {
+      if (cloudRecord.rejectionNotes && !merged.rejectionNotes) {
+        merged.rejectionNotes = cloudRecord.rejectionNotes;
+      }
+      if (cloudRecord.approvalPpic !== undefined && (merged.approvalPpic === undefined || merged.approvalPpic === null || (merged.approvalPpic === false && cloudRecord.approvalPpic === true && merged.status !== 'Ditolak' && merged.status !== 'Rejected'))) {
+        merged.approvalPpic = cloudRecord.approvalPpic;
+      }
+      if (cloudRecord.approvalPpicBy && !merged.approvalPpicBy) {
+        merged.approvalPpicBy = cloudRecord.approvalPpicBy;
+      }
+      if (cloudRecord.approvalPpicDate && !merged.approvalPpicDate) {
+        merged.approvalPpicDate = cloudRecord.approvalPpicDate;
+      }
+      if (cloudRecord.approvalKeuangan !== undefined && (merged.approvalKeuangan === undefined || merged.approvalKeuangan === null || (merged.approvalKeuangan === false && cloudRecord.approvalKeuangan === true && merged.status !== 'Ditolak' && merged.status !== 'Rejected'))) {
+        merged.approvalKeuangan = cloudRecord.approvalKeuangan;
+      }
+      if (cloudRecord.approvalKeuanganBy && !merged.approvalKeuanganBy) {
+        merged.approvalKeuanganBy = cloudRecord.approvalKeuanganBy;
+      }
+      if (cloudRecord.approvalKeuanganDate && !merged.approvalKeuanganDate) {
+        merged.approvalKeuanganDate = cloudRecord.approvalKeuanganDate;
+      }
+    }
+    ensurePurchasingApprovalData(merged);
   }
   if (resourceName === 'bom') {
     ensureBOMProjectData(merged);
@@ -1054,6 +1284,11 @@ async function fetchAuthoritativeList(resourceName) {
           ensureQuotationApprovalData(q, db);
         });
       }
+      if (resourceName === 'purchasing') {
+        cloudList.forEach(p => {
+          ensurePurchasingApprovalData(p);
+        });
+      }
       db[resourceName] = cloudList;
       writeDB(db);
       return cloudList;
@@ -1083,6 +1318,11 @@ async function saveAuthoritativeList(resourceName, items) {
   if (resourceName === 'quotations') {
     cleanList.forEach(q => {
       ensureQuotationApprovalData(q);
+    });
+  }
+  if (resourceName === 'purchasing') {
+    cleanList.forEach(p => {
+      ensurePurchasingApprovalData(p);
     });
   }
   const db = readDB();
@@ -1129,6 +1369,10 @@ module.exports = {
   embedQuotationApprovalInNotes,
   extractQuotationApprovalFromNotes,
   ensureQuotationApprovalData,
+  embedPurchasingApprovalInNotes,
+  extractPurchasingApprovalFromNotes,
+  ensurePurchasingApprovalData,
+  isPurchasingDualApproved,
   CLOUD_SYNC_PREFIX,
   DB_FILE: LOCAL_DB_FILE
 };

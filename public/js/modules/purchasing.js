@@ -5,6 +5,86 @@
 
 let activePurchasingTab = 'docs';
 
+function isPRDualApproved(pr) {
+  if (!pr || typeof pr !== 'object') return false;
+  if (typeof ensurePurchasingApprovalData === 'function') {
+    ensurePurchasingApprovalData(pr);
+  }
+  if (typeof isPurchasingDualApproved === 'function') {
+    return isPurchasingDualApproved(pr);
+  }
+  if (pr.status === 'Ditolak' || pr.status === 'Rejected') return false;
+  return Boolean(
+    pr.approvalPpic === true &&
+    pr.approvalKeuangan === true &&
+    (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved')
+  );
+}
+
+function getPRCleanNotes(notes) {
+  if (typeof cleanDisplayNotes === 'function') return cleanDisplayNotes(notes);
+  return String(notes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
+async function persistPurchasingRecord(prItem, isEditMode = false) {
+  if (!prItem || !prItem.id) {
+    return { ok: false, error: 'ID Request Pengadaan tidak valid' };
+  }
+
+  if (!Array.isArray(state.purchasing)) state.purchasing = [];
+  const existingIdx = state.purchasing.findIndex(p => p.id === prItem.id);
+  if (existingIdx !== -1) {
+    state.purchasing[existingIdx] = { ...state.purchasing[existingIdx], ...prItem };
+  } else {
+    state.purchasing.unshift(prItem);
+  }
+
+  let apiOk = false;
+  let apiErrorMsg = '';
+  let finalRecord = prItem;
+
+  try {
+    const url = isEditMode ? `/api/purchasing/${prItem.id}` : '/api/purchasing';
+    const method = isEditMode ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prItem)
+    });
+    if (res.ok) {
+      apiOk = true;
+      const saved = await res.json().catch(() => null);
+      if (saved && typeof saved === 'object' && saved.id) {
+        finalRecord = saved;
+        const idxAfter = state.purchasing.findIndex(p => p.id === saved.id);
+        if (idxAfter !== -1) state.purchasing[idxAfter] = saved;
+      }
+    } else {
+      const errBody = await res.json().catch(() => ({}));
+      apiErrorMsg = errBody.error || errBody.message || '';
+      if (res.status >= 400 && res.status < 500 && apiErrorMsg) {
+        return { ok: false, status: res.status, error: apiErrorMsg };
+      }
+    }
+  } catch (err) {
+    apiErrorMsg = err.message || 'Gagal menghubungi API server';
+  }
+
+  let nativeOk = Boolean(finalRecord?._syncedNative);
+  if (!nativeOk && typeof directSupabaseUpsertNativeRow === 'function') {
+    nativeOk = await directSupabaseUpsertNativeRow('purchasing', finalRecord).catch(() => false);
+  }
+  let cloudOk = false;
+  if (typeof directSupabaseSyncResource === 'function') {
+    cloudOk = await directSupabaseSyncResource('purchasing', state.purchasing).catch(() => false);
+  }
+
+  if (apiOk || nativeOk || cloudOk) {
+    return { ok: true, data: finalRecord, syncedNative: nativeOk, syncedCloud: cloudOk, viaApi: apiOk };
+  }
+  return { ok: false, error: apiErrorMsg || 'Gagal menyimpan PR ke server maupun Supabase' };
+}
+
 function switchPurchasingTab(tabName) {
   activePurchasingTab = tabName;
   const docsBtn = document.getElementById('tab-btn-pr-docs');
@@ -44,8 +124,8 @@ function renderPurchasingTable() {
   const badgeDocs = document.getElementById('badge-tab-pr-docs-count');
   if (badgeDocs) badgeDocs.textContent = prList.length;
 
-  // 2. Hitung counter untuk Barang yang Disetujui (Tab Proses Pembelian)
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  // 2. Hitung counter untuk Barang yang Disetujui (Tab Proses Pembelian — wajib dual approval PPIC & Keuangan)
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
   let totalApprovedItemsCount = 0;
   let matchedMasterItemsCount = 0;
 
@@ -78,11 +158,15 @@ function renderPurchasingTable() {
 
   if (statusFilter !== 'ALL') {
     list = list.filter(p => {
+      const dualApproved = isPRDualApproved(p);
       if (statusFilter === 'Pengajuan' || statusFilter === 'Pending') {
-        return p.status === 'Pengajuan' || p.status === 'Pending' || !p.status;
+        return !dualApproved && p.status !== 'Ditolak' && p.status !== 'Rejected';
       }
       if (statusFilter === 'Disetujui' || statusFilter === 'Stock' || statusFilter === 'Approved') {
-        return p.status === 'Disetujui' || p.status === 'Stock' || p.status === 'Approved';
+        return dualApproved;
+      }
+      if (statusFilter === 'Ditolak' || statusFilter === 'Rejected') {
+        return p.status === 'Ditolak' || p.status === 'Rejected';
       }
       return p.status === statusFilter;
     });
@@ -100,54 +184,92 @@ function renderPurchasingTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 24px;">Tidak ada data request pengadaan barang (PR) ditemukan.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding: 24px;">Tidak ada data request pengadaan barang (PR) ditemukan.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = list.map(pr => {
-    const isApproved = pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved';
-    const isRejected = pr.status === 'Ditolak' || pr.status === 'Rejected';
-    const isPengajuan = !isApproved && !isRejected;
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
+  const isKeuangan = currentRole === 'Keuangan';
 
-    let statusHtml = '';
-    if (isApproved) {
-      statusHtml = `
-        <span class="badge" style="font-size: 11.5px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #86efac; background-color: #dcfce7; color: #15803d; cursor: default;" title="Status terkunci: Disetujui">
-          <i data-lucide="check-circle" style="width: 13px; height: 13px;"></i> Disetujui
-        </span>
-      `;
-    } else if (isRejected) {
-      statusHtml = `
-        <span class="badge" style="font-size: 11.5px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #fca5a5; background-color: #fee2e2; color: #b91c1c; cursor: default;" title="Status terkunci: Ditolak. Gunakan tombol 'Salin' untuk mengajukan kembali">
-          <i data-lucide="x-circle" style="width: 13px; height: 13px;"></i> Ditolak
-        </span>
-      `;
-    } else {
-      const canApprove = typeof hasRolePermission === 'function' ? hasRolePermission('canApprovePurchasing') : true;
-      if (!canApprove) {
-        statusHtml = `
-          <span class="badge" style="font-size: 11.5px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; border-radius: 4px; border: 1px solid #fde68a; background-color: #fef3c7; color: #b45309;" title="Menunggu persetujuan Bagian Keuangan">
-            🟡 Pengajuan
+  const renderApprovalColumn = (pr, roleLabel, isSlotApproved, slotBy, canAct, isOverallRejected) => {
+    const isSlotRejected = isOverallRejected && String(slotBy || '').startsWith('Ditolak');
+    if (isSlotApproved) {
+      return `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;" title="Disetujui oleh: ${escapeAttr(slotBy || roleLabel)}">
+            <i data-lucide="check-circle" style="width: 10px; height: 10px; color: #10b981;"></i> Disetujui
           </span>
-        `;
-      } else {
-        statusHtml = `
-          <div style="display: flex; justify-content: flex-start; align-items: center;">
-            <select class="pr-status-select status-pengajuan"
-                    onchange="updatePurchasingStatusDirect('${pr.id}', this.value)"
-                    title="Persetujuan Keuangan: Pilih status persetujuan Request Pengadaan">
-              <option value="Pengajuan" selected>🟡 Pengajuan</option>
-              <option value="Disetujui">🟢 Disetujui</option>
-              <option value="Ditolak">🔴 Ditolak</option>
-            </select>
-          </div>
-        `;
-      }
+          <span style="font-size: 8px; color: #047857; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(slotBy || roleLabel)}
+          </span>
+        </div>
+      `;
     }
+    if (isSlotRejected) {
+      return `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+          <span class="badge" style="font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; display: inline-flex; align-items: center; gap: 3px;" title="${escapeAttr(slotBy || 'Ditolak ' + roleLabel)}${pr.rejectionNotes ? '\nAlasan: ' + escapeAttr(pr.rejectionNotes) : ''}">
+            <i data-lucide="x-circle" style="width: 10px; height: 10px; color: #ef4444;"></i> Ditolak
+          </span>
+          <span style="font-size: 8px; color: #b91c1c; font-weight: 600; line-height: 1.1; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(slotBy || roleLabel)}
+          </span>
+        </div>
+      `;
+    }
+    if (isOverallRejected) {
+      return `
+        <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">
+          Perlu Revisi
+        </span>
+      `;
+    }
+    if (canAct) {
+      const btnBg = roleLabel === 'PPIC' ? '#0f766e' : '#16a34a';
+      return `
+        <div style="display: flex; gap: 3px; justify-content: center; align-items: center; flex-wrap: nowrap;">
+          <button type="button" class="btn btn-xs" style="background: ${btnBg}; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); approvePurchasingByRole('${pr.id}', '${roleLabel}')" title="Setujui PR ini sebagai ${roleLabel}">
+            <i data-lucide="check" style="width: 9px; height: 9px;"></i> Setuju
+          </button>
+          <button type="button" class="btn btn-xs" style="background: #ef4444; color: #ffffff; border: none; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; white-space: nowrap;" onclick="event.stopPropagation(); rejectPurchasingByRole('${pr.id}', '${roleLabel}')" title="Tidak Setuju / Tolak PR ini sebagai ${roleLabel}">
+            <i data-lucide="x" style="width: 9px; height: 9px;"></i> Tidak
+          </button>
+        </div>
+      `;
+    }
+    return `
+      <span class="badge" style="font-size: 8.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 2px;" title="Menunggu persetujuan ${roleLabel}">
+        <i data-lucide="clock" style="width: 8px; height: 8px;"></i> Menunggu
+      </span>
+    `;
+  };
+
+  tbody.innerHTML = list.map(pr => {
+    const isApproved = isPRDualApproved(pr);
+    const isRejected = pr.status === 'Ditolak' || pr.status === 'Rejected';
+    const ppicOk = !isRejected && Boolean(pr.approvalPpic);
+    const keuanganOk = !isRejected && Boolean(pr.approvalKeuangan);
+
+    const statusPpicHtml = renderApprovalColumn(pr, 'PPIC', ppicOk, pr.approvalPpicBy, isAdmin || isPPIC, isRejected);
+    const statusKeuanganHtml = renderApprovalColumn(pr, 'Keuangan', keuanganOk, pr.approvalKeuanganBy, isAdmin || isKeuangan, isRejected);
+
+    const statusMiniBadge = isApproved
+      ? `<span class="badge" style="font-size: 8.5px; padding: 1.5px 5px; background: #dcfce7; color: #15803d; font-weight: 700; cursor: pointer;" onclick="event.stopPropagation(); switchPurchasingTab('process')" title="Kedua pihak sudah menyetujui — Data masuk ke Tab Proses Pembelian Barang">✅ Proses Pembelian</span>`
+      : (isRejected
+        ? `<span class="badge" style="font-size: 8.5px; padding: 1.5px 5px; background: #fee2e2; color: #b91c1c; font-weight: 700;" title="${escapeAttr(pr.rejectionNotes || 'PR Ditolak')}">❌ Ditolak</span>`
+        : ((ppicOk || keuanganOk)
+          ? `<span class="badge" style="font-size: 8.5px; padding: 1.5px 5px; background: #fef3c7; color: #b45309; font-weight: 700;">🟡 Menunggu ${ppicOk ? 'Keuangan' : 'PPIC'}</span>`
+          : `<span class="badge" style="font-size: 8.5px; padding: 1.5px 5px; background: #e0f2fe; color: #0369a1; font-weight: 700;">⏳ Pengajuan</span>`));
 
     return `
       <tr style="${isApproved ? 'background-color: #f0fdf4;' : (isRejected ? 'background-color: #fef2f2;' : '')}">
-        <td class="mono-id">${pr.id}</td>
+        <td>
+          <div class="mono-id">${pr.id}</div>
+          <div style="margin-top: 2px;">${statusMiniBadge}</div>
+        </td>
         <td>
           <div class="font-bold">${escapeAttr(pr.requestor || '-')}</div>
           <div class="text-muted font-sm">${escapeAttr(pr.department || 'Umum')}</div>
@@ -160,7 +282,8 @@ function renderPurchasingTable() {
           </span>
         </td>
         <td class="font-bold text-primary">${formatRupiah(pr.totalEstimated || 0)}</td>
-        <td>${statusHtml}</td>
+        <td style="text-align: center; padding: 6px 4px;" onclick="event.stopPropagation()">${statusPpicHtml}</td>
+        <td style="text-align: center; padding: 6px 4px;" onclick="event.stopPropagation()">${statusKeuanganHtml}</td>
         <td class="text-right">
           <div class="table-actions" style="justify-content: flex-end;">
             ${isRejected ? `<button class="btn-icon" style="color: #2563eb;" title="Salin & Ajukan Ulang PR yang Ditolak" onclick="event.stopPropagation(); duplicateAndReapplyPR('${pr.id}')"><i data-lucide="copy"></i></button>` : ''}
@@ -186,12 +309,11 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
       await directSupabaseUpsertNativeRow('purchasing', prRecord);
     }
 
-    // Hanya sinkronkan purchasing_process & master_items jika status Disetujui
-    const isApproved = prRecord && (prRecord.status === 'Disetujui' || prRecord.status === 'Stock' || prRecord.status === 'Approved');
-    if (!isApproved) return;
+    // Hanya sinkronkan purchasing_process & master_items jika status Disetujui lengkap (PPIC & Keuangan)
+    if (!isPRDualApproved(prRecord)) return;
 
     const prList = state.purchasing || [];
-    const approvedPRs = prList.filter(p => p.status === 'Disetujui' || p.status === 'Stock' || p.status === 'Approved');
+    const approvedPRs = prList.filter(p => isPRDualApproved(p));
     const masterMap = new Map();
 
     for (const pr of approvedPRs) {
@@ -342,68 +464,223 @@ async function directSyncPurchasingTablesToSupabase(prRecord) {
   }
 }
 
-// Function update status PR langsung dari tabel (Pengajuan <-> Disetujui <-> Ditolak)
-async function updatePurchasingStatusDirect(prId, newStatus) {
-  if (typeof hasRolePermission === 'function' && !hasRolePermission('canApprovePurchasing')) {
-    showToast('⚠️ Anda tidak memiliki wewenang untuk menyetujui pengadaan barang (Wewenang Bagian Keuangan / Pimpinan).', 'warning');
-    renderPurchasingTable();
-    return;
-  }
-
+// Persetujuan Dual Approval Dokumen PR (PPIC & Keuangan)
+async function approvePurchasingByRole(prId, approverRole) {
+  const targetRole = String(approverRole || '').trim().toLowerCase() === 'ppic'
+    ? 'PPIC'
+    : (String(approverRole || '').trim().toLowerCase() === 'keuangan' ? 'Keuangan' : approverRole);
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr) {
     showToast('Data Request Pengadaan tidak ditemukan', 'warning');
-    return;
+    return false;
   }
 
-  const oldStatus = pr.status || 'Pengajuan';
-  if (oldStatus === newStatus) return;
-
-  if (oldStatus === 'Disetujui' || oldStatus === 'Stock' || oldStatus === 'Approved') {
-    showToast('⚠️ Status Persetujuan PR yang sudah Disetujui telah terkunci permanen dan tidak dapat diubah kembali!', 'warning');
-    renderPurchasingTable();
-    return;
+  if (typeof ensurePurchasingApprovalData === 'function') {
+    ensurePurchasingApprovalData(pr);
   }
 
-  pr.status = newStatus;
+  if (isPRDualApproved(pr)) {
+    showToast('⚠️ Status Persetujuan PR yang sudah Disetujui lengkap telah terkunci permanen!', 'info');
+    return false;
+  }
 
-  try {
-    const res = await fetch(`/api/purchasing/${prId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(pr)
-    });
+  if (pr.status === 'Ditolak' || pr.status === 'Rejected') {
+    showToast('⚠️ Dokumen PR ini sudah Ditolak. Gunakan tombol "Salin & Ajukan Ulang" untuk membuat pengajuan baru.', 'warning');
+    return false;
+  }
 
-    if (res.ok) {
-      await directSyncPurchasingTablesToSupabase(pr);
-      await Promise.allSettled([
-        fetchResource('purchasing'),
-        fetchResource('purchasing_process'),
-        fetchResource('master_items')
-      ]);
-      if (newStatus === 'Disetujui' || newStatus === 'Stock' || newStatus === 'Approved') {
-        showToast(`✅ PR ${prId} DISETUJUI & TERKUNCI! Dokumen tidak dapat diedit lagi, barang masuk ke tabel "Proses Pembelian Barang" di Supabase.`, 'success');
-      } else if (newStatus === 'Ditolak') {
-        showToast(`🔴 Request Pengadaan ${prId} DITOLAK.`, 'info');
-      } else {
-        showToast(`🟡 Status PR ${prId} diubah menjadi PENGAJUAN.`, 'info');
-      }
-      renderPurchasingTable();
-      renderPurchasingProcessTable();
-      renderPurchasingItemsTable();
-      updateSidebarBadges();
-    } else {
-      pr.status = oldStatus;
-      showToast('Gagal memperbarui status PR di server', 'error');
-      renderPurchasingTable();
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
+  const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
+  const isKeuangan = currentRole === 'Keuangan';
+
+  if (targetRole === 'PPIC') {
+    if (!isAdmin && !isPPIC) {
+      showToast('⚠️ Hanya role PPIC atau Administrator yang berwenang menyetujui kolom PPIC.', 'warning');
+      return false;
     }
-  } catch (err) {
-    console.error('Error updating PR status:', err);
-    pr.status = oldStatus;
-    showToast('Terjadi kesalahan jaringan', 'error');
-    renderPurchasingTable();
+    if (pr.approvalPpic) {
+      showToast('Persetujuan PPIC sudah tercatat pada PR ini.', 'info');
+      return false;
+    }
+  } else if (targetRole === 'Keuangan') {
+    if (!isAdmin && !isKeuangan) {
+      showToast('⚠️ Hanya Bagian Keuangan atau Administrator yang berwenang menyetujui kolom Keuangan.', 'warning');
+      return false;
+    }
+    if (pr.approvalKeuangan) {
+      showToast('Persetujuan Keuangan sudah tercatat pada PR ini.', 'info');
+      return false;
+    }
+  } else {
+    showToast('Role persetujuan PR tidak dikenal.', 'error');
+    return false;
   }
+
+  const approverName = activeUser?.name || targetRole;
+  const nowIso = new Date().toISOString();
+
+  if (targetRole === 'PPIC') {
+    pr.approvalPpic = true;
+    pr.approvalPpicBy = approverName;
+    pr.approvalPpicDate = nowIso;
+  } else if (targetRole === 'Keuangan') {
+    pr.approvalKeuangan = true;
+    pr.approvalKeuanganBy = approverName;
+    pr.approvalKeuanganDate = nowIso;
+  }
+
+  const dualApproved = Boolean(pr.approvalPpic && pr.approvalKeuangan);
+  if (dualApproved) {
+    pr.status = 'Disetujui';
+    pr.approvedBy = `${pr.approvalPpicBy || 'PPIC'} (PPIC) & ${pr.approvalKeuanganBy || 'Keuangan'} (Keuangan)`;
+    pr.rejectionNotes = '';
+  } else {
+    pr.status = 'Pengajuan';
+  }
+  pr.updatedAt = nowIso;
+
+  if (typeof embedPurchasingApprovalInNotes === 'function') {
+    const targetNotes = pr._rawNotes || pr.notes || '';
+    const embedded = embedPurchasingApprovalInNotes(targetNotes, pr);
+    pr._rawNotes = embedded;
+    pr.notes = embedded;
+  }
+
+  // Optimistic UI Update
+  renderPurchasingTable();
+  renderPurchasingProcessTable();
+  renderPurchasingItemsTable();
+  updateSidebarBadges();
+
+  const saveRes = await persistPurchasingRecord(pr, true);
+  if (!saveRes.ok) {
+    showToast(`Gagal memperbarui persetujuan PR: ${saveRes.error || 'Terjadi kesalahan'}`, 'error');
+    return false;
+  }
+
+  if (dualApproved) {
+    await directSyncPurchasingTablesToSupabase(pr);
+    await Promise.allSettled([
+      fetchResource('purchasing'),
+      fetchResource('purchasing_process'),
+      fetchResource('master_items')
+    ]);
+    showToast(`🎉 Persetujuan LENGKAP (PPIC & Keuangan)! PR ${prId} resmi Disetujui & data barang otomatis masuk ke Tab "Proses Pembelian Barang".`, 'success');
+  } else {
+    const waitingRole = targetRole === 'PPIC' ? 'Keuangan' : 'PPIC';
+    showToast(`✅ Persetujuan ${targetRole} untuk PR ${prId} tersimpan! Menunggu persetujuan ${waitingRole} agar masuk ke Tab Proses Pembelian Barang.`, 'success');
+  }
+
+  renderPurchasingTable();
+  renderPurchasingProcessTable();
+  renderPurchasingItemsTable();
+  updateSidebarBadges();
+  return true;
 }
+
+async function rejectPurchasingByRole(prId, rejectorRole, explicitReason = null) {
+  const targetRole = String(rejectorRole || '').trim().toLowerCase() === 'ppic'
+    ? 'PPIC'
+    : (String(rejectorRole || '').trim().toLowerCase() === 'keuangan' ? 'Keuangan' : rejectorRole);
+  const pr = (state.purchasing || []).find(p => p.id === prId);
+  if (!pr) {
+    showToast('Data Request Pengadaan tidak ditemukan', 'warning');
+    return false;
+  }
+
+  if (isPRDualApproved(pr)) {
+    showToast('⚠️ Status PR yang sudah Disetujui lengkap telah terkunci permanen!', 'warning');
+    return false;
+  }
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
+  const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
+  const isKeuangan = currentRole === 'Keuangan';
+
+  if (targetRole === 'PPIC' && !isAdmin && !isPPIC) {
+    showToast('⚠️ Hanya role PPIC atau Administrator yang dapat menolak pada kolom PPIC.', 'warning');
+    return false;
+  }
+  if (targetRole === 'Keuangan' && !isAdmin && !isKeuangan) {
+    showToast('⚠️ Hanya Bagian Keuangan atau Administrator yang dapat menolak pada kolom Keuangan.', 'warning');
+    return false;
+  }
+
+  const reason = explicitReason !== null
+    ? explicitReason
+    : prompt(`Tolak Request Pengadaan ${prId} sebagai ${targetRole}?\n\nMasukkan catatan / alasan penolakan (opsional):`, '');
+  if (reason === null) {
+    return false;
+  }
+
+  const rejectorName = activeUser?.name || targetRole;
+  const nowIso = new Date().toISOString();
+
+  if (targetRole === 'PPIC') {
+    pr.approvalPpic = false;
+    pr.approvalPpicBy = `Ditolak oleh ${rejectorName}`;
+    pr.approvalPpicDate = nowIso;
+  } else if (targetRole === 'Keuangan') {
+    pr.approvalKeuangan = false;
+    pr.approvalKeuanganBy = `Ditolak oleh ${rejectorName}`;
+    pr.approvalKeuanganDate = nowIso;
+  }
+
+  pr.status = 'Ditolak';
+  pr.approvedBy = '-';
+  if (String(reason).trim()) {
+    pr.rejectionNotes = `[${targetRole} - ${rejectorName}]: ${String(reason).trim()}`;
+  }
+  pr.updatedAt = nowIso;
+
+  if (typeof embedPurchasingApprovalInNotes === 'function') {
+    const targetNotes = pr._rawNotes || pr.notes || '';
+    const embedded = embedPurchasingApprovalInNotes(targetNotes, pr);
+    pr._rawNotes = embedded;
+    pr.notes = embedded;
+  }
+
+  renderPurchasingTable();
+  renderPurchasingProcessTable();
+  renderPurchasingItemsTable();
+  updateSidebarBadges();
+
+  const saveRes = await persistPurchasingRecord(pr, true);
+  if (saveRes.ok) {
+    showToast(`🔴 Request Pengadaan ${prId} DITOLAK oleh ${targetRole}. Data tidak diteruskan ke Proses Pembelian Barang.`, 'warning');
+  } else {
+    showToast(`Gagal menyimpan penolakan PR: ${saveRes.error || 'Terjadi kesalahan'}`, 'error');
+  }
+
+  renderPurchasingTable();
+  renderPurchasingProcessTable();
+  renderPurchasingItemsTable();
+  updateSidebarBadges();
+  return saveRes.ok;
+}
+
+// Compat handler jika masih dipanggil langsung
+async function updatePurchasingStatusDirect(prId, newStatus) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
+  const targetRole = currentRole === 'Keuangan' ? 'Keuangan' : 'PPIC';
+  if (newStatus === 'Disetujui') {
+    return approvePurchasingByRole(prId, targetRole);
+  }
+  if (newStatus === 'Ditolak') {
+    return rejectPurchasingByRole(prId, targetRole);
+  }
+  showToast('Persetujuan PR dilakukan secara terpisah melalui tombol Setuju / Tolak pada kolom PPIC dan Keuangan.', 'info');
+  renderPurchasingTable();
+}
+
+window.approvePurchasingByRole = approvePurchasingByRole;
+window.rejectPurchasingByRole = rejectPurchasingByRole;
+window.isPRDualApproved = isPRDualApproved;
 
 // =========================================================
 // TAB 2: PROSES PEMBELIAN BARANG (BARANG DARI PR DISETUJUI)
@@ -413,8 +690,8 @@ function renderPurchasingProcessTable() {
   const tbody = document.getElementById('table-purchasing-process-body');
   const prList = state.purchasing || [];
 
-  // Ambil hanya PR yang berstatus Disetujui / Stock / Approved
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  // Ambil hanya PR yang sudah disetujui lengkap oleh PPIC & Keuangan
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
 
   // Kumpulkan semua item dari PR yang disetujui
   const allApprovedItems = [];
@@ -508,7 +785,7 @@ function renderPurchasingProcessTable() {
           <i data-lucide="shopping-cart" style="width: 32px; height: 32px; color: #94a3b8; margin: 0 auto 8px auto; display: block;"></i>
           <strong>Tidak ada data proses pembelian barang ditemukan.</strong>
           <div style="font-size: 11.5px; color: #64748b; margin-top: 4px;">
-            ${allApprovedItems.length === 0 ? 'Barang akan muncul di sini secara otomatis setelah dokumen PR berstatus <strong>Disetujui</strong>.' : 'Coba ubah kata kunci pencarian atau filter status barang di atas.'}
+            ${allApprovedItems.length === 0 ? 'Barang akan muncul di sini secara otomatis setelah dokumen PR disetujui oleh <strong>PPIC</strong> dan <strong>Keuangan</strong>.' : 'Coba ubah kata kunci pencarian atau filter status barang di atas.'}
           </div>
         </td>
       </tr>
@@ -1056,7 +1333,7 @@ function previewPurchasingItemImage(imgSrc, title = 'Foto Bukti Barang') {
 // Export Proses Pembelian to CSV
 function exportPurchasingProcessToCSV() {
   const prList = state.purchasing || [];
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
 
   const rows = [
     ['No', 'No PR', 'Pemohon', 'Departemen', 'Nama Barang', 'Spesifikasi', 'Qty', 'Satuan', 'Tgl Pemesanan', 'Link Pemesanan', 'Harga Beli Satuan (Rp)', 'Total Biaya (Rp)', 'Tgl Sampai', 'Nama Penerima', 'Status Barang', 'Catatan']
@@ -1106,8 +1383,8 @@ function renderPurchasingItemsTable() {
   const tbody = document.getElementById('table-purchasing-items-body');
   const prList = state.purchasing || [];
 
-  // Ambil hanya PR yang disetujui
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  // Ambil hanya PR yang disetujui lengkap oleh PPIC & Keuangan
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
 
   // KETENTUAN UTAMA: HANYA BARANG DENGAN STATUS 'Sesuai' YANG MASUK DATABASE MASTER BARANG
   const masterMap = new Map();
@@ -1558,7 +1835,7 @@ async function deletePurchasingItem(prId, itemIndex) {
 
 function exportPurchasingItemsToCSV() {
   const prList = state.purchasing || [];
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
 
   const masterMap = new Map();
   approvedPRs.forEach(pr => {
@@ -1631,7 +1908,7 @@ function exportPurchasingItemsToCSV() {
 function openPurchasingModal(prData = null, isClone = false) {
   const isEdit = !isClone && !!(prData && prData.id);
   const statusValue = isEdit ? (prData?.status || 'Pengajuan') : 'Pengajuan';
-  const isApproved = !isClone && (statusValue === 'Disetujui' || statusValue === 'Stock' || statusValue === 'Approved');
+  const isApproved = !isClone && isPRDualApproved(prData);
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
@@ -1670,25 +1947,20 @@ function openPurchasingModal(prData = null, isClone = false) {
   const formPurpose = hasPrefilledData ? (prData?.purpose || '') : '';
   const formRequestDate = hasPrefilledData ? (prData?.requestDate || (isClone ? new Date().toISOString().split('T')[0] : '')) : '';
   const formRequiredDate = hasPrefilledData ? (prData?.requiredDate || '') : '';
-  const formNotes = hasPrefilledData ? (prData?.notes || '') : '';
-
-  const isRejected = statusValue === 'Ditolak' || statusValue === 'Rejected';
-  const statusBadge = isApproved ? 'badge-success' :
-                      isRejected ? 'badge-danger' : 'badge-amber';
-  const statusLabel = isApproved ? '🟢 Disetujui' :
-                      isRejected ? '🔴 Ditolak' : '🟡 Pengajuan';
+  const formNotes = hasPrefilledData ? getPRCleanNotes(prData?.notes || '') : '';
 
   const formBody = document.getElementById('form-modal-body');
   formBody.innerHTML = `
     <form id="purchasing-form" onsubmit="submitPurchasing(event, '${isEdit ? prData.id : ''}')" style="display: flex; flex-direction: column; gap: 20px;">
       
-      <!-- CARD 1: INFORMASI PEMOHON & STATUS PENGADAAN -->
+      <!-- CARD 1: INFORMASI PEMOHON & PENGADAAN -->
       <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 18px 20px;">
         <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px;">
-          <i data-lucide="clipboard-check" style="width: 16px; height: 16px; color: #2563eb;"></i> Informasi Pemohon & Status Pengadaan (PR)
+          <i data-lucide="clipboard-check" style="width: 16px; height: 16px; color: #2563eb;"></i> Informasi Pemohon & Pengadaan (PR)
         </h4>
 
-        <div style="display: grid; grid-template-columns: 1.5fr 1.2fr 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+        <input type="hidden" name="status" value="${escapeAttr(statusValue)}">
+        <div style="display: grid; grid-template-columns: 1.5fr 1.2fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
             <label class="form-label">Nama Pemohon (Requestor) *</label>
             <select name="requestor" class="form-control" required>
@@ -1716,14 +1988,6 @@ function openPurchasingModal(prData = null, isClone = false) {
               <option value="Medium" ${formUrgency === 'Medium' ? 'selected' : ''}>🟡 Medium (3-5 Hari)</option>
               <option value="High" ${formUrgency === 'High' ? 'selected' : ''}>🔴 High / Urgent (1-2 Hari)</option>
             </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Status Persetujuan</label>
-            <input type="hidden" name="status" value="${escapeAttr(statusValue)}">
-            <div class="form-control" style="background-color: #f8fafc; font-weight: 700; display: flex; align-items: center; justify-content: space-between; cursor: default; border-color: #cbd5e1;">
-              <span class="badge ${statusBadge}" style="font-size: 11px; padding: 4px 8px;">${statusLabel}</span>
-              <span class="text-muted font-sm" style="font-size: 10px; font-weight: 500;">${isClone ? 'Status Baru: Pengajuan' : 'Otomatis'}</span>
-            </div>
           </div>
         </div>
 
@@ -1825,7 +2089,7 @@ function openPurchasingModal(prData = null, isClone = false) {
 // Helper: Ambil daftar Master Barang unik yang berstatus 'Sesuai' beserta stok tersedia riil
 function getMasterItemsList() {
   const prList = state.purchasing || [];
-  const approvedPRs = prList.filter(pr => pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  const approvedPRs = prList.filter(pr => isPRDualApproved(pr));
   const masterMap = new Map();
 
   approvedPRs.forEach(pr => {
@@ -2051,8 +2315,8 @@ async function submitPurchasing(e, editId = '') {
   const isActuallyEdit = editId && editId !== '' && editId !== 'undefined' && editId !== 'null';
   const existingPR = isActuallyEdit ? (state.purchasing || []).find(p => p.id === editId) : null;
 
-  if (isActuallyEdit && existingPR && (existingPR.status === 'Disetujui' || existingPR.status === 'Stock' || existingPR.status === 'Approved')) {
-    showToast(`⚠️ Request Pengadaan ${existingPR.id} sudah berstatus Disetujui (Terkunci) sehingga tidak dapat diedit lagi!`, 'warning');
+  if (isActuallyEdit && existingPR && isPRDualApproved(existingPR)) {
+    showToast(`⚠️ Request Pengadaan ${existingPR.id} sudah berstatus Disetujui lengkap PPIC & Keuangan (Terkunci) sehingga tidak dapat diedit lagi!`, 'warning');
     closeModal('form-modal');
     return;
   }
@@ -2088,6 +2352,10 @@ async function submitPurchasing(e, editId = '') {
   const totalEstimated = calculatePurchasingTotals();
   const targetId = isActuallyEdit ? editId : `PR-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
 
+  const rawFormNotes = formData.get('notes') || '';
+  const cleanFormNotes = getPRCleanNotes(rawFormNotes);
+  const preserveExistingApproval = isActuallyEdit && existingPR && existingPR.status !== 'Ditolak' && existingPR.status !== 'Rejected';
+
   const payload = {
     id: targetId,
     requestor: formData.get('requestor') || 'Umum',
@@ -2096,13 +2364,26 @@ async function submitPurchasing(e, editId = '') {
     requiredDate: formData.get('requiredDate') || '',
     urgency: formData.get('urgency') || 'Normal',
     purpose: formData.get('purpose') || '',
-    status: isActuallyEdit ? (existingPR?.status || formData.get('status') || 'Pengajuan') : 'Pengajuan',
+    status: preserveExistingApproval ? (existingPR.status || 'Pengajuan') : 'Pengajuan',
+    approvalPpic: preserveExistingApproval ? Boolean(existingPR.approvalPpic) : false,
+    approvalPpicBy: preserveExistingApproval ? (existingPR.approvalPpicBy || null) : null,
+    approvalPpicDate: preserveExistingApproval ? (existingPR.approvalPpicDate || null) : null,
+    approvalKeuangan: preserveExistingApproval ? Boolean(existingPR.approvalKeuangan) : false,
+    approvalKeuanganBy: preserveExistingApproval ? (existingPR.approvalKeuanganBy || null) : null,
+    approvalKeuanganDate: preserveExistingApproval ? (existingPR.approvalKeuanganDate || null) : null,
+    rejectionNotes: preserveExistingApproval ? (existingPR.rejectionNotes || '') : '',
+    approvedBy: '-',
     items,
     totalEstimated,
-    notes: formData.get('notes') || '',
+    notes: cleanFormNotes,
     createdAt: isActuallyEdit ? (existingPR?.createdAt || new Date().toISOString()) : new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+
+  if (typeof embedPurchasingApprovalInNotes === 'function' && (payload.approvalPpic || payload.approvalKeuangan)) {
+    payload.notes = embedPurchasingApprovalInNotes(cleanFormNotes, payload);
+    payload._rawNotes = payload.notes;
+  }
 
   // 1. OPTIMISTIC UPDATE: Terapkan ke state & UI seketika tanpa membuat user menunggu
   if (!state.purchasing) state.purchasing = [];
@@ -2118,29 +2399,17 @@ async function submitPurchasing(e, editId = '') {
   switchPurchasingTab('docs');
   renderPurchasingTable();
   updateSidebarBadges();
-  showToast(`✅ Request Pengadaan ${targetId} berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'}!`, 'success');
+  showToast(`✅ Request Pengadaan ${targetId} berhasil ${isActuallyEdit ? 'diperbarui' : 'diajukan'}! Menunggu persetujuan PPIC & Keuangan.`, 'success');
 
-  // 2. SIMPAN KE DATABASE (API & Direct Supabase) SECARA PARALEL DI BACKGROUND
-  const apiCall = fetch(isActuallyEdit ? `/api/purchasing/${targetId}` : '/api/purchasing', {
-    method: isActuallyEdit ? 'PUT' : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  const directCall = (typeof directSupabaseUpsertNativeRow === 'function')
-    ? directSupabaseUpsertNativeRow('purchasing', payload)
-    : Promise.resolve();
-
-  Promise.allSettled([apiCall, directCall]).then(async () => {
-    // Jika PR berstatus Disetujui, jalankan sinkronisasi barang ke proses & master di background
-    if (payload.status === 'Disetujui' || payload.status === 'Stock' || payload.status === 'Approved') {
+  // 2. SIMPAN KE DATABASE (API & Direct Supabase)
+  persistPurchasingRecord(payload, isActuallyEdit).then(async () => {
+    if (isPRDualApproved(payload)) {
       if (typeof directSyncPurchasingTablesToSupabase === 'function') {
-        directSyncPurchasingTablesToSupabase(payload).catch(() => {});
+        await directSyncPurchasingTablesToSupabase(payload).catch(() => {});
       }
       if (typeof renderPurchasingProcessTable === 'function') renderPurchasingProcessTable();
       if (typeof renderPurchasingItemsTable === 'function') renderPurchasingItemsTable();
     }
-    // Refresh quiet di background untuk menjamin konsistensi 100%
     if (typeof fetchResource === 'function') {
       fetchResource('purchasing').then(() => {
         renderPurchasingTable();
@@ -2156,11 +2425,33 @@ function viewPurchasingDetail(prId) {
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr) return;
 
+  if (typeof ensurePurchasingApprovalData === 'function') {
+    ensurePurchasingApprovalData(pr);
+  }
+
   const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
     companyName: 'Unit Bisnis Mandiri (UBM) Politeknik Takumi',
     tagline: 'Engineering, Manufacturing, & Automation Solutions',
     address: 'Kawasan Industri EJIP Plot 8L, Cikarang Selatan, Bekasi'
   };
+
+  const isApproved = isPRDualApproved(pr);
+  const isRejected = pr.status === 'Ditolak' || pr.status === 'Rejected';
+  const ppicOk = !isRejected && Boolean(pr.approvalPpic);
+  const keuanganOk = !isRejected && Boolean(pr.approvalKeuangan);
+  const ppicRejected = isRejected && String(pr.approvalPpicBy || '').startsWith('Ditolak');
+  const keuanganRejected = isRejected && String(pr.approvalKeuanganBy || '').startsWith('Ditolak');
+  const displayNotes = getPRCleanNotes(pr.notes);
+
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
+  const isKeuangan = currentRole === 'Keuangan';
+
+  const statusText = isApproved
+    ? 'Disetujui (PPIC & Keuangan)'
+    : (isRejected ? 'Ditolak' : (ppicOk || keuanganOk ? `Menunggu ${ppicOk ? 'Keuangan' : 'PPIC'} (1/2)` : 'Pengajuan (Menunggu PPIC & Keuangan)'));
 
   const content = document.getElementById('preview-modal-content');
   content.innerHTML = `
@@ -2178,7 +2469,7 @@ function viewPurchasingDetail(prId) {
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; padding: 14px; background: #f8fafc; border-radius: 6px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 18px; padding: 14px; background: #f8fafc; border-radius: 6px;">
         <div>
           <div class="font-sm font-bold text-muted">PEMOHON (REQUESTOR):</div>
           <div class="font-bold text-main" style="font-size: 15px;">${escapeAttr(pr.requestor)}</div>
@@ -2186,11 +2477,35 @@ function viewPurchasingDetail(prId) {
           <div class="font-sm text-muted">Keperluan: ${escapeAttr(pr.purpose || '-')}</div>
         </div>
         <div class="text-right">
-          <div class="font-sm font-bold text-muted">URGENSI & STATUS:</div>
-          <div>Urgensi: <span class="badge badge-purple">${pr.urgency || 'Normal'}</span></div>
-          <div>Status PR: <span class="badge ${pr.status === 'Disetujui' || pr.status === 'Stock' ? 'badge-success' : (pr.status === 'Ditolak' ? 'badge-danger' : 'badge-info')}">${pr.status || 'Pengajuan'}</span></div>
+          <div class="font-sm font-bold text-muted">URGENSI & STATUS PERSETUJUAN:</div>
+          <div style="margin-top: 3px;">Urgensi: <span class="badge badge-purple">${pr.urgency || 'Normal'}</span></div>
+          <div style="margin-top: 4px;">Status PR: <span class="badge ${isApproved ? 'badge-success' : (isRejected ? 'badge-danger' : 'badge-amber')}">${statusText}</span></div>
+          <div style="margin-top: 6px; display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap;">
+            <span class="badge ${ppicOk ? 'badge-success' : (ppicRejected ? 'badge-danger' : 'badge-amber')}" style="font-size: 10px;">
+              PPIC: ${ppicOk ? 'Disetujui' : (ppicRejected ? 'Ditolak' : 'Menunggu')}
+            </span>
+            <span class="badge ${keuanganOk ? 'badge-success' : (keuanganRejected ? 'badge-danger' : 'badge-amber')}" style="font-size: 10px;">
+              Keuangan: ${keuanganOk ? 'Disetujui' : (keuanganRejected ? 'Ditolak' : 'Menunggu')}
+            </span>
+          </div>
         </div>
       </div>
+
+      ${!isApproved && !isRejected && ((isAdmin || isPPIC) && !ppicOk || (isAdmin || isKeuangan) && !keuanganOk) ? `
+        <div class="no-print" style="margin-bottom: 16px; padding: 10px 14px; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <span style="font-size: 12px; font-weight: 700; color: #0f766e;">Tindakan Persetujuan Dokumen PR:</span>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            ${(isAdmin || isPPIC) && !ppicOk ? `
+              <button type="button" class="btn btn-sm" style="background: #0f766e; color: #ffffff; border: none; font-weight: 700;" onclick="Promise.resolve(approvePurchasingByRole('${pr.id}', 'PPIC')).then(() => viewPurchasingDetail('${pr.id}'))">Setujui PPIC</button>
+              <button type="button" class="btn btn-sm btn-outline text-danger" style="border-color: #fca5a5; font-weight: 700;" onclick="Promise.resolve(rejectPurchasingByRole('${pr.id}', 'PPIC')).then(ok => { if (ok) viewPurchasingDetail('${pr.id}'); })">Tolak (PPIC)</button>
+            ` : ''}
+            ${(isAdmin || isKeuangan) && !keuanganOk ? `
+              <button type="button" class="btn btn-sm" style="background: #16a34a; color: #ffffff; border: none; font-weight: 700;" onclick="Promise.resolve(approvePurchasingByRole('${pr.id}', 'Keuangan')).then(() => viewPurchasingDetail('${pr.id}'))">Setujui Keuangan</button>
+              <button type="button" class="btn btn-sm btn-outline text-danger" style="border-color: #fca5a5; font-weight: 700;" onclick="Promise.resolve(rejectPurchasingByRole('${pr.id}', 'Keuangan')).then(ok => { if (ok) viewPurchasingDetail('${pr.id}'); })">Tolak (Keuangan)</button>
+            ` : ''}
+          </div>
+        </div>
+      ` : ''}
 
       <table class="doc-table">
         <thead>
@@ -2232,29 +2547,40 @@ function viewPurchasingDetail(prId) {
         </div>
       </div>
 
-      ${pr.notes ? `<div class="mt-4 p-3 bg-light rounded font-sm"><strong>Catatan Khusus:</strong> ${escapeAttr(pr.notes)}</div>` : ''}
+      ${displayNotes ? `<div class="mt-4 p-3 bg-light rounded font-sm"><strong>Catatan Khusus:</strong> ${escapeHtml(displayNotes)}</div>` : ''}
+      ${isRejected && pr.rejectionNotes ? `<div class="mt-3 p-3 rounded font-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;"><strong>Alasan Penolakan:</strong> ${escapeHtml(pr.rejectionNotes)}</div>` : ''}
 
-      <div style="display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; text-align: center;">
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 36px; padding-top: 20px; border-top: 1px dashed #cbd5e1; text-align: center;">
         <div>
           <div class="font-sm text-muted">Pemohon,</div>
-          <div style="margin-top: 50px; font-weight: bold;">( ${escapeAttr(pr.requestor)} )</div>
+          <div style="margin-top: 46px; font-weight: bold;">( ${escapeAttr(pr.requestor)} )</div>
         </div>
         <div>
-          <div class="font-sm text-muted">Disetujui Oleh (Head of Dept),</div>
-          <div style="margin-top: 50px; font-weight: bold;">( Department Manager )</div>
+          <div class="font-sm text-muted">Disetujui Oleh (PPIC),</div>
+          <div style="margin-top: 14px; font-size: 11px; font-weight: 700; color: ${ppicOk ? '#047857' : (ppicRejected ? '#b91c1c' : '#b45309')};">
+            ${ppicOk ? '✓ Disetujui' : (ppicRejected ? '✕ Ditolak' : '⏳ Menunggu')}
+          </div>
+          <div style="margin-top: 18px; font-weight: bold;">( ${escapeHtml(ppicOk ? (pr.approvalPpicBy || 'PPIC') : (ppicRejected ? pr.approvalPpicBy : 'Bagian PPIC'))} )</div>
+        </div>
+        <div>
+          <div class="font-sm text-muted">Disetujui Oleh (Keuangan),</div>
+          <div style="margin-top: 14px; font-size: 11px; font-weight: 700; color: ${keuanganOk ? '#047857' : (keuanganRejected ? '#b91c1c' : '#b45309')};">
+            ${keuanganOk ? '✓ Disetujui' : (keuanganRejected ? '✕ Ditolak' : '⏳ Menunggu')}
+          </div>
+          <div style="margin-top: 18px; font-weight: bold;">( ${escapeHtml(keuanganOk ? (pr.approvalKeuanganBy || 'Keuangan') : (keuanganRejected ? pr.approvalKeuanganBy : 'Bagian Keuangan'))} )</div>
         </div>
       </div>
     </div>
   `;
 
   openModal('preview-modal');
+  if (window.lucide) lucide.createIcons();
 }
 
 function editPurchasing(prId) {
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr) return;
-  const isApproved = pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved';
-  if (isApproved) {
+  if (isPRDualApproved(pr)) {
     showToast(`⚠️ Request Pengadaan ${pr.id} sudah berstatus Disetujui (Terkunci) sehingga tidak dapat diedit lagi!`, 'warning');
     return;
   }
@@ -2270,6 +2596,7 @@ function duplicateAndReapplyPR(prId) {
   }
 
   const today = new Date().toISOString().split('T')[0];
+  const baseNotes = getPRCleanNotes(pr.notes || '');
   const clonedData = {
     requestor: pr.requestor || '',
     department: pr.department || '',
@@ -2277,8 +2604,15 @@ function duplicateAndReapplyPR(prId) {
     purpose: pr.purpose ? `${pr.purpose} (Salinan dari ${pr.id})` : `Salinan dari ${pr.id}`,
     requestDate: today,
     requiredDate: pr.requiredDate || '',
-    notes: pr.notes ? `${pr.notes} (Diajukan ulang dari ${pr.id})` : `Diajukan ulang dari ${pr.id}`,
+    notes: baseNotes ? `${baseNotes} (Diajukan ulang dari ${pr.id})` : `Diajukan ulang dari ${pr.id}`,
     status: 'Pengajuan',
+    approvalPpic: false,
+    approvalPpicBy: null,
+    approvalPpicDate: null,
+    approvalKeuangan: false,
+    approvalKeuanganBy: null,
+    approvalKeuanganDate: null,
+    rejectionNotes: '',
     isClonedFrom: pr.id,
     items: (pr.items || []).map(it => {
       const unitPrice = parseFloat(it.estimatedPrice !== undefined ? it.estimatedPrice : (it.unitPrice !== undefined ? it.unitPrice : (it.purchasePrice || 0))) || 0;

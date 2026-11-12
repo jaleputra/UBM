@@ -84,11 +84,26 @@ function exportToCSV(resource) {
 
 // Modal Helpers
 function openModal(modalId) {
+  if (modalId === 'preview-modal') {
+    const printBtn = document.getElementById('preview-modal-print-btn');
+    if (printBtn && printBtn.dataset.draftLocked !== '1') {
+      printBtn.style.display = 'inline-flex';
+      printBtn.disabled = false;
+    }
+  }
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.add('open');
 }
 
 function closeModal(modalId) {
+  if (modalId === 'preview-modal') {
+    const printBtn = document.getElementById('preview-modal-print-btn');
+    if (printBtn) {
+      delete printBtn.dataset.draftLocked;
+      printBtn.style.display = 'inline-flex';
+      printBtn.disabled = false;
+    }
+  }
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.remove('open');
 }
@@ -447,10 +462,37 @@ function toCamelCaseKey(str) {
 function convertObjToSnake(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
   const out = {};
+  const nullableDateKeys = new Set([
+    'valid_until', 'due_date', 'expected_date', 'expected_delivery',
+    'end_date', 'handed_over_date', 'disbursement_date', 'date'
+  ]);
+  const requiredDateKeys = new Set([
+    'quotation_date', 'order_date', 'po_date', 'invoice_date',
+    'request_date', 'created_date', 'delivery_date', 'start_date',
+    'bast_date', 'report_date', 'schedule_date', 'ticket_date', 'claim_date'
+  ]);
+  const timestampKeys = new Set([
+    'approval_ketua_ubm_date', 'approval_direktur_date', 'approval_wadir1_date',
+    'approval_ppic_date', 'approval_keuangan_date',
+    'published_at', 'created_at', 'updated_at'
+  ]);
+
   for (const [k, v] of Object.entries(obj)) {
-    if (k === '_syncedNative') continue;
+    if (k.startsWith('_') || v === undefined) continue;
     const sk = toSnakeCaseKey(k);
-    if (sk.endsWith('_date') && (!v || v === '-')) {
+    if (timestampKeys.has(sk)) {
+      if (!v || v === '-') {
+        if (sk === 'created_at' || sk === 'updated_at') {
+          out[sk] = new Date().toISOString();
+        } else {
+          out[sk] = null;
+        }
+      } else {
+        out[sk] = v;
+      }
+    } else if (requiredDateKeys.has(sk)) {
+      out[sk] = (!v || v === '-') ? new Date().toISOString().split('T')[0] : String(v).trim().slice(0, 10);
+    } else if ((nullableDateKeys.has(sk) || sk.endsWith('_date')) && (!v || v === '-')) {
       out[sk] = null;
     } else {
       out[sk] = v;
@@ -472,7 +514,28 @@ async function directSupabaseUpsertNativeRow(resource, item) {
   if (!resource || !item || !item.id) return false;
   try {
     let payload = convertObjToSnake(item);
-    for (let attempt = 0; attempt < 15; attempt++) {
+    if (resource === 'quotations') {
+      const isDraftQuo = payload.status === 'Draft' || Boolean(payload.is_draft);
+      payload.status = isDraftQuo ? 'Draft' : (payload.status || 'Sent');
+      payload.is_draft = isDraftQuo;
+      if (isDraftQuo) {
+        payload.published_at = null;
+        payload.approval_ketua_ubm = false;
+        payload.approval_ketua_ubm_by = null;
+        payload.approval_ketua_ubm_date = null;
+        payload.approval_direktur = false;
+        payload.approval_direktur_by = null;
+        payload.approval_direktur_date = null;
+      }
+      if (!payload.quotation_date) {
+        payload.quotation_date = new Date().toISOString().split('T')[0];
+      }
+      if (payload.customer_name === null || payload.customer_name === undefined) {
+        payload.customer_name = isDraftQuo ? '' : 'Calon Pelanggan (Ditulis Tangan)';
+      }
+    }
+
+    for (let attempt = 0; attempt < 30; attempt++) {
       const res = await fetch(`${UBM_SUPABASE_URL}/rest/v1/${resource}`, {
         method: 'POST',
         headers: {
@@ -497,6 +560,11 @@ async function directSupabaseUpsertNativeRow(resource, item) {
           continue;
         }
       }
+      if (errBody.code === '23502' && msg.includes('customer_name') && !payload.customer_name) {
+        payload.customer_name = 'Calon Pelanggan (Ditulis Tangan)';
+        continue;
+      }
+      console.warn(`⚠️ [Direct Native Upsert] ${resource} (${item.id}):`, errBody.code, msg);
       break;
     }
   } catch (err) {
@@ -554,6 +622,8 @@ function cleanDisplayNotes(notes) {
     .replace(/<!--UBM_PO_DATA:[\s\S]*?-->/g, '')
     .replace(/<!--UBM_BOM_META:[\s\S]*?-->/g, '')
     .replace(/<!--UBM_APPROVAL_DATA:[\s\S]*?-->/g, '')
+    .replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '')
+    .replace(/<!--UBM_PR_APPROVAL:[\s\S]*?-->/g, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .trim();
 }
@@ -689,6 +759,28 @@ function extractQuotationApprovalFromNotes(notes) {
 function ensureQuotationApprovalData(quo) {
   if (!quo || typeof quo !== 'object') return quo;
 
+  // 0. Guard ketat: Quotation berstatus Draft tidak boleh memiliki status approval
+  const isDraftQuo = quo.status === 'Draft' || Boolean(quo.isDraft);
+  if (isDraftQuo) {
+    quo.status = 'Draft';
+    quo.isDraft = true;
+    quo.approvalKetuaUbm = false;
+    quo.approvalKetuaUbmBy = null;
+    quo.approvalKetuaUbmDate = null;
+    quo.approvalDirektur = false;
+    quo.approvalDirekturBy = null;
+    quo.approvalDirekturDate = null;
+    if (typeof quo.notes === 'string' && quo.notes.includes('<!--UBM_QUO_APPROVAL:')) {
+      quo.notes = quo.notes.replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+    }
+    if (typeof quo._rawNotes === 'string' && quo._rawNotes.includes('<!--UBM_QUO_APPROVAL:')) {
+      quo._rawNotes = quo._rawNotes.replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
+    }
+    return quo;
+  }
+
+  quo.isDraft = false;
+
   // 1. Ekstrak dari notes atau _rawNotes
   const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
   if (meta) {
@@ -735,7 +827,7 @@ function ensureQuotationApprovalData(quo) {
       quo.status = 'Accepted';
     }
   } else {
-    // Quotation baru: harus persetujuan asli
+    // Quotation terbit baru: harus persetujuan eksplisit
     quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
     quo.approvalDirektur = Boolean(quo.approvalDirektur);
   }
@@ -749,6 +841,115 @@ function ensureQuotationApprovalData(quo) {
   }
 
   return quo;
+}
+
+// ==================== PURCHASING (PR) DUAL APPROVAL CARRIER HELPERS ====================
+function embedPurchasingApprovalInNotes(notes, approvalData) {
+  const cleanNotes = (notes || '').replace(/<!--UBM_PR_APPROVAL:[\s\S]*?-->/g, '').trim();
+  if (!approvalData || (
+    approvalData.approvalPpic === undefined &&
+    approvalData.approvalKeuangan === undefined &&
+    !approvalData.approvalPpicBy &&
+    !approvalData.approvalKeuanganBy &&
+    !approvalData.rejectionNotes
+  )) {
+    return cleanNotes;
+  }
+  const payload = JSON.stringify({
+    approvalPpic: Boolean(approvalData.approvalPpic),
+    approvalPpicBy: approvalData.approvalPpicBy || '',
+    approvalPpicDate: approvalData.approvalPpicDate || '',
+    approvalKeuangan: Boolean(approvalData.approvalKeuangan),
+    approvalKeuanganBy: approvalData.approvalKeuanganBy || '',
+    approvalKeuanganDate: approvalData.approvalKeuanganDate || '',
+    rejectionNotes: approvalData.rejectionNotes || ''
+  });
+  return cleanNotes ? `${cleanNotes}\n<!--UBM_PR_APPROVAL:${payload}-->` : `<!--UBM_PR_APPROVAL:${payload}-->`;
+}
+
+function extractPurchasingApprovalFromNotes(notes) {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/<!--UBM_PR_APPROVAL:([\s\S]*?)-->/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function ensurePurchasingApprovalData(pr) {
+  if (!pr || typeof pr !== 'object') return pr;
+
+  const meta = extractPurchasingApprovalFromNotes(pr.notes) || extractPurchasingApprovalFromNotes(pr._rawNotes);
+  if (meta) {
+    if (pr.approvalPpic === undefined && meta.approvalPpic !== undefined) {
+      pr.approvalPpic = Boolean(meta.approvalPpic);
+    } else if (meta.approvalPpic === true && pr.approvalPpic !== true && pr.status !== 'Ditolak' && pr.status !== 'Rejected') {
+      pr.approvalPpic = true;
+    }
+    if (!pr.approvalPpicBy && meta.approvalPpicBy) pr.approvalPpicBy = meta.approvalPpicBy;
+    if (!pr.approvalPpicDate && meta.approvalPpicDate) pr.approvalPpicDate = meta.approvalPpicDate;
+
+    if (pr.approvalKeuangan === undefined && meta.approvalKeuangan !== undefined) {
+      pr.approvalKeuangan = Boolean(meta.approvalKeuangan);
+    } else if (meta.approvalKeuangan === true && pr.approvalKeuangan !== true && pr.status !== 'Ditolak' && pr.status !== 'Rejected') {
+      pr.approvalKeuangan = true;
+    }
+    if (!pr.approvalKeuanganBy && meta.approvalKeuanganBy) pr.approvalKeuanganBy = meta.approvalKeuanganBy;
+    if (!pr.approvalKeuanganDate && meta.approvalKeuanganDate) pr.approvalKeuanganDate = meta.approvalKeuanganDate;
+
+    if (!pr.rejectionNotes && meta.rejectionNotes) pr.rejectionNotes = meta.rejectionNotes;
+  }
+
+  const isLegacyApproved = (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved');
+  const isRejected = (pr.status === 'Ditolak' || pr.status === 'Rejected');
+
+  if (isRejected) {
+    pr.approvalPpic = Boolean(pr.approvalPpic);
+    pr.approvalKeuangan = Boolean(pr.approvalKeuangan);
+  } else if (isLegacyApproved) {
+    if (pr.approvalPpic !== true) {
+      pr.approvalPpic = true;
+      pr.approvalPpicBy = pr.approvalPpicBy || (pr.approvedBy && pr.approvedBy !== '-' ? pr.approvedBy : 'PPIC (Auto-Approved)');
+      pr.approvalPpicDate = pr.approvalPpicDate || pr.updatedAt || pr.requestDate || new Date().toISOString();
+    }
+    if (pr.approvalKeuangan !== true) {
+      pr.approvalKeuangan = true;
+      pr.approvalKeuanganBy = pr.approvalKeuanganBy || (pr.approvedBy && pr.approvedBy !== '-' ? pr.approvedBy : 'Keuangan (Auto-Approved)');
+      pr.approvalKeuanganDate = pr.approvalKeuanganDate || pr.updatedAt || pr.requestDate || new Date().toISOString();
+    }
+  } else {
+    pr.approvalPpic = Boolean(pr.approvalPpic);
+    pr.approvalKeuangan = Boolean(pr.approvalKeuangan);
+    if (pr.approvalPpic && pr.approvalKeuangan) {
+      pr.status = 'Disetujui';
+    } else if (!pr.status || pr.status === 'Pending' || pr.status === 'In Review') {
+      pr.status = 'Pengajuan';
+    }
+  }
+
+  if (pr.approvalPpic || pr.approvalKeuangan || pr.approvalPpicBy || pr.approvalKeuanganBy || pr.rejectionNotes) {
+    const targetNotes = pr._rawNotes || pr.notes || '';
+    const embedded = embedPurchasingApprovalInNotes(targetNotes, pr);
+    pr._rawNotes = embedded;
+    pr.notes = embedded;
+  }
+
+  return pr;
+}
+
+function isPurchasingDualApproved(pr) {
+  if (!pr || typeof pr !== 'object') return false;
+  if (pr.status === 'Ditolak' || pr.status === 'Rejected') return false;
+  return Boolean(
+    pr.approvalPpic === true &&
+    pr.approvalKeuangan === true &&
+    (pr.status === 'Disetujui' || pr.status === 'Stock' || pr.status === 'Approved')
+  );
 }
 
 // ==================== BOM PROJECT & ORDER LINKAGE CARRIER HELPERS ====================
@@ -833,102 +1034,6 @@ function ensureOrderPOData(order) {
   return order;
 }
 
-// ==================== QUOTATION DUAL APPROVAL CARRIER HELPERS ====================
-function embedQuotationApprovalInNotes(notes, approvalData) {
-  const cleanNotes = (notes || '').replace(/<!--UBM_QUO_APPROVAL:[\s\S]*?-->/g, '').trim();
-  if (!approvalData || (approvalData.approvalKetuaUbm === undefined && approvalData.approvalDirektur === undefined)) {
-    return cleanNotes;
-  }
-  const payload = JSON.stringify({
-    approvalKetuaUbm: Boolean(approvalData.approvalKetuaUbm),
-    approvalKetuaUbmBy: approvalData.approvalKetuaUbmBy || '',
-    approvalKetuaUbmDate: approvalData.approvalKetuaUbmDate || '',
-    approvalDirektur: Boolean(approvalData.approvalDirektur),
-    approvalDirekturBy: approvalData.approvalDirekturBy || '',
-    approvalDirekturDate: approvalData.approvalDirekturDate || ''
-  });
-  return cleanNotes ? `${cleanNotes}\n<!--UBM_QUO_APPROVAL:${payload}-->` : `<!--UBM_QUO_APPROVAL:${payload}-->`;
-}
-
-function extractQuotationApprovalFromNotes(notes) {
-  if (!notes || typeof notes !== 'string') return null;
-  const match = notes.match(/<!--UBM_QUO_APPROVAL:([\s\S]*?)-->/);
-  if (match && match[1]) {
-    try {
-      const parsed = JSON.parse(match[1]);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    } catch (e) {}
-  }
-  return null;
-}
-
-function ensureQuotationApprovalData(quo) {
-  if (!quo || typeof quo !== 'object') return quo;
-
-  // 1. Ekstrak dari notes atau _rawNotes
-  const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
-  if (meta) {
-    if (quo.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
-      quo.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
-    }
-    if (!quo.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
-      quo.approvalKetuaUbmBy = meta.approvalKetuaUbmBy;
-    }
-    if (!quo.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
-      quo.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
-    }
-    if (quo.approvalDirektur === undefined && meta.approvalDirektur !== undefined) {
-      quo.approvalDirektur = Boolean(meta.approvalDirektur);
-    }
-    if (!quo.approvalDirekturBy && meta.approvalDirekturBy) {
-      quo.approvalDirekturBy = meta.approvalDirekturBy;
-    }
-    if (!quo.approvalDirekturDate && meta.approvalDirekturDate) {
-      quo.approvalDirekturDate = meta.approvalDirekturDate;
-    }
-  }
-
-  // 2. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau status Accepted
-  const ordersList = (window.state && Array.isArray(state.orders)) ? state.orders : [];
-  const isConverted = Boolean(
-    quo.orderId ||
-    ordersList.some(o => o.quotationId === quo.id || (o.notes && o.notes.includes(quo.id))) ||
-    quo.status === 'Accepted'
-  );
-
-  if (isConverted) {
-    if (quo.approvalKetuaUbm !== true) {
-      quo.approvalKetuaUbm = true;
-      quo.approvalKetuaUbmBy = quo.approvalKetuaUbmBy || 'Ketua UBM (Auto-Approved Quotation Berjalan)';
-      quo.approvalKetuaUbmDate = quo.approvalKetuaUbmDate || quo.quotationDate || new Date().toISOString();
-    }
-    if (quo.approvalDirektur !== true) {
-      quo.approvalDirektur = true;
-      quo.approvalDirekturBy = quo.approvalDirekturBy || 'Direktur (Auto-Approved Quotation Berjalan)';
-      quo.approvalDirekturDate = quo.approvalDirekturDate || quo.quotationDate || new Date().toISOString();
-    }
-    if (quo.status === 'Pengajuan' || !quo.status) {
-      quo.status = 'Accepted';
-    }
-  } else {
-    // Quotation baru: harus persetujuan asli
-    quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
-    quo.approvalDirektur = Boolean(quo.approvalDirektur);
-  }
-
-  // Benamkan ke notes agar tidak hilang saat dikirim ke backend / disimpan ke Supabase
-  if (quo.approvalKetuaUbm || quo.approvalDirektur) {
-    const targetNotes = quo._rawNotes || quo.notes || '';
-    const embedded = embedQuotationApprovalInNotes(targetNotes, quo);
-    quo._rawNotes = embedded;
-    quo.notes = embedded;
-  }
-
-  return quo;
-}
-
 function ensureProjectData(project) {
   if (!project || typeof project !== 'object') return project;
   if (!project.poDocument && !project.poFileUrl) {
@@ -975,10 +1080,12 @@ async function directSupabaseFetchResource(resource) {
       if (nativeRes.ok) {
         const nativeRows = await nativeRes.json();
         if (Array.isArray(nativeRows)) {
-          // If resource is orders or bom, also fetch cloud sync to merge rich relational data
+          // If resource is orders, bom, quotations, or purchasing, also fetch cloud sync to merge rich relational data
           let cloudOrdersMap = null;
           let cloudBOMMap = null;
-          if (resource === 'orders' || resource === 'bom') {
+          let cloudQuotationsMap = null;
+          let cloudPurchasingMap = null;
+          if (resource === 'orders' || resource === 'bom' || resource === 'quotations' || resource === 'purchasing') {
             try {
               const syncKey = `__SYS_SYNC_${resource}__`;
               const cRes = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
@@ -995,6 +1102,10 @@ async function directSupabaseFetchResource(resource) {
                     cloudOrdersMap = new Map(cData[0].items.map(o => [o.id, o]));
                   } else if (resource === 'bom') {
                     cloudBOMMap = new Map(cData[0].items.map(b => [b.id, b]));
+                  } else if (resource === 'quotations') {
+                    cloudQuotationsMap = new Map(cData[0].items.map(q => [q.id, q]));
+                  } else if (resource === 'purchasing') {
+                    cloudPurchasingMap = new Map(cData[0].items.map(p => [p.id, p]));
                   }
                 }
               }
@@ -1003,6 +1114,38 @@ async function directSupabaseFetchResource(resource) {
 
           return nativeRows.map(r => {
             const item = convertObjToCamel(r);
+            if (resource === 'quotations') {
+              if (cloudQuotationsMap && cloudQuotationsMap.has(item.id)) {
+                const cQuo = cloudQuotationsMap.get(item.id);
+                if (item.isDraft === undefined && cQuo.isDraft !== undefined) item.isDraft = cQuo.isDraft;
+                if (!item.createdBy && cQuo.createdBy) item.createdBy = cQuo.createdBy;
+                if (!item.publishedAt && cQuo.publishedAt) item.publishedAt = cQuo.publishedAt;
+                if (item.status === 'Rejected' && !item.rejectionNotes && cQuo.rejectionNotes) item.rejectionNotes = cQuo.rejectionNotes;
+                if ((!Array.isArray(item.additionalServices) || item.additionalServices.length === 0) && Array.isArray(cQuo.additionalServices)) {
+                  item.additionalServices = cQuo.additionalServices;
+                }
+                if ((!Array.isArray(item.rabItems) || item.rabItems.length === 0) && Array.isArray(cQuo.rabItems)) {
+                  item.rabItems = cQuo.rabItems;
+                }
+                if (item.status !== 'Draft' && item.status !== 'Rejected') {
+                  if (item.approvalKetuaUbm === undefined && cQuo.approvalKetuaUbm !== undefined) {
+                    item.approvalKetuaUbm = cQuo.approvalKetuaUbm;
+                  }
+                  if (!item.approvalKetuaUbmBy && cQuo.approvalKetuaUbmBy) item.approvalKetuaUbmBy = cQuo.approvalKetuaUbmBy;
+                  if (!item.approvalKetuaUbmDate && cQuo.approvalKetuaUbmDate) item.approvalKetuaUbmDate = cQuo.approvalKetuaUbmDate;
+                  if (item.approvalDirektur === undefined && cQuo.approvalDirektur !== undefined) {
+                    item.approvalDirektur = cQuo.approvalDirektur;
+                  }
+                  if (!item.approvalDirekturBy && cQuo.approvalDirekturBy) item.approvalDirekturBy = cQuo.approvalDirekturBy;
+                  if (!item.approvalDirekturDate && cQuo.approvalDirekturDate) item.approvalDirekturDate = cQuo.approvalDirekturDate;
+                }
+              }
+              item.items = Array.isArray(item.items) ? item.items : [];
+              item.additionalServices = Array.isArray(item.additionalServices) ? item.additionalServices : [];
+              item.rabItems = Array.isArray(item.rabItems) ? item.rabItems : [];
+              item.isDraft = item.status === 'Draft' || Boolean(item.isDraft);
+              ensureQuotationApprovalData(item);
+            }
             if (resource === 'orders') {
               if (cloudOrdersMap && cloudOrdersMap.has(item.id)) {
                 const cOrder = cloudOrdersMap.get(item.id);
@@ -1030,6 +1173,24 @@ async function directSupabaseFetchResource(resource) {
               }
               ensureOrderPOData(item);
               ensureOrderApprovalData(item);
+            }
+            if (resource === 'purchasing') {
+              if (cloudPurchasingMap && cloudPurchasingMap.has(item.id)) {
+                const cPr = cloudPurchasingMap.get(item.id);
+                if (!item.rejectionNotes && cPr.rejectionNotes) item.rejectionNotes = cPr.rejectionNotes;
+                if ((item.approvalPpic === undefined || (item.approvalPpic === false && cPr.approvalPpic === true && item.status !== 'Ditolak' && item.status !== 'Rejected')) && cPr.approvalPpic !== undefined) {
+                  item.approvalPpic = cPr.approvalPpic;
+                }
+                if (!item.approvalPpicBy && cPr.approvalPpicBy) item.approvalPpicBy = cPr.approvalPpicBy;
+                if (!item.approvalPpicDate && cPr.approvalPpicDate) item.approvalPpicDate = cPr.approvalPpicDate;
+                if ((item.approvalKeuangan === undefined || (item.approvalKeuangan === false && cPr.approvalKeuangan === true && item.status !== 'Ditolak' && item.status !== 'Rejected')) && cPr.approvalKeuangan !== undefined) {
+                  item.approvalKeuangan = cPr.approvalKeuangan;
+                }
+                if (!item.approvalKeuanganBy && cPr.approvalKeuanganBy) item.approvalKeuanganBy = cPr.approvalKeuanganBy;
+                if (!item.approvalKeuanganDate && cPr.approvalKeuanganDate) item.approvalKeuanganDate = cPr.approvalKeuanganDate;
+              }
+              item.items = Array.isArray(item.items) ? item.items : [];
+              ensurePurchasingApprovalData(item);
             }
             if (resource === 'bom') {
               if (cloudBOMMap && cloudBOMMap.has(item.id)) {
@@ -1074,6 +1235,9 @@ async function directSupabaseFetchResource(resource) {
           }
           if (resource === 'quotations' && Array.isArray(data[0].items)) {
             return data[0].items.map(q => ensureQuotationApprovalData(q));
+          }
+          if (resource === 'purchasing' && Array.isArray(data[0].items)) {
+            return data[0].items.map(p => ensurePurchasingApprovalData(p));
           }
           if (resource === 'bom' && Array.isArray(data[0].items)) {
             return data[0].items.map(b => ensureBOMProjectData(b));
@@ -1301,4 +1465,8 @@ function isProjectService(p) {
 
 window.isServiceOrder = isServiceOrder;
 window.isProjectService = isProjectService;
+window.embedPurchasingApprovalInNotes = embedPurchasingApprovalInNotes;
+window.extractPurchasingApprovalFromNotes = extractPurchasingApprovalFromNotes;
+window.ensurePurchasingApprovalData = ensurePurchasingApprovalData;
+window.isPurchasingDualApproved = isPurchasingDualApproved;
 

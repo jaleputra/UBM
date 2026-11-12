@@ -2707,7 +2707,9 @@ async function executeSubmitPurchasingFromBOMPage() {
     requestDate: new Date().toISOString().split('T')[0],
     requiredDate: '',
     urgency: 'High',
-    status: 'Pending',
+    status: 'Pengajuan',
+    approvalPpic: false,
+    approvalKeuangan: false,
     purpose: `Pengadaan Bahan Tambahan BOM: ${productName} (Ref Order: ${orderId || '-'})`,
     notes: notes ? `${notes} [Untuk BOM: ${boundBOM?.id || productName}]` : `Kebutuhan komponen tambahan untuk BOM: ${boundBOM?.id || productName}`,
     items: [
@@ -2728,18 +2730,35 @@ async function executeSubmitPurchasingFromBOMPage() {
   };
 
   try {
-    const res = await fetch('/api/purchasing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newPR)
-    });
-    if (!res.ok) throw new Error('Gagal mengirim pengajuan purchasing ke server');
-    const saved = await res.json();
     state.purchasing = state.purchasing || [];
-    state.purchasing.unshift(saved || newPR);
+    state.purchasing.unshift(newPR);
+
+    let apiOk = false;
+    let saved = null;
+    try {
+      const res = await fetch('/api/purchasing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPR)
+      });
+      if (res.ok) {
+        apiOk = true;
+        saved = await res.json().catch(() => null);
+        if (saved && saved.id) state.purchasing[0] = saved;
+      }
+    } catch (e) {}
+
+    let directOk = false;
+    if (typeof directSupabaseUpsertNativeRow === 'function') {
+      directOk = await directSupabaseUpsertNativeRow('purchasing', state.purchasing[0]).catch(() => false);
+    }
+    if (typeof directSupabaseSyncResource === 'function') {
+      await directSupabaseSyncResource('purchasing', state.purchasing).catch(() => {});
+    }
+    if (!apiOk && !directOk) throw new Error('Gagal mengirim pengajuan purchasing ke server maupun Supabase');
 
     closeModal('form-modal');
-    showToast(`📋 Pengajuan Purchasing #${newPrId} berhasil dibuat untuk ${itemName} (${qty} ${unit})! Menunggu proses pembelian & stok masuk.`, 'success');
+    showToast(`📋 Pengajuan Purchasing #${newPrId} berhasil dibuat untuk ${itemName} (${qty} ${unit})! Menunggu persetujuan PPIC & Keuangan.`, 'success');
     if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   } catch (err) {
     console.error('Error submitting purchasing:', err);

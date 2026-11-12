@@ -521,7 +521,8 @@ function renderSettingsView() {
                   <option value="Direktur">3. Direktur (Pimpinan Institusi: Akses Seluruh Modul & Persetujuan Quotation)</option>
                   <option value="Wakil Direktur I">4. Wakil Direktur I (Akses Semua Halaman & Persetujuan / Ubah Status Order Penjualan)</option>
                   <option value="Keuangan">5. Keuangan (Persetujuan Pembelian, Invoice, Keuangan Project, BAST & After Sales)</option>
-                  <option value="Member" selected>6. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
+                  <option value="PPIC">6. PPIC (Perencanaan Produksi, BOM, Inventori & Persetujuan PR Purchasing)</option>
+                  <option value="Member" selected>7. Member (Akses Timeline, Laporan Hasil Task & Project Ter-assign)</option>
                 </select>
               </div>
               <div class="form-group" style="margin: 0;">
@@ -864,6 +865,8 @@ function renderAccountsTabTable() {
       roleBadge = `<span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user-check" style="width: 12px; height: 12px;"></i> Wakil Direktur I</span>`;
     } else if (rLower.includes('ketua')) {
       roleBadge = `<span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="award" style="width: 12px; height: 12px;"></i> Ketua UBM</span>`;
+    } else if (rLower.includes('ppic') || rLower.includes('inventory')) {
+      roleBadge = `<span class="badge" style="background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="package-check" style="width: 12px; height: 12px;"></i> PPIC</span>`;
     } else if (rLower.includes('finance') || rLower.includes('keuangan')) {
       roleBadge = `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="banknote" style="width: 12px; height: 12px;"></i> Keuangan</span>`;
     } else {
@@ -962,6 +965,7 @@ function normalizeImportedRole(rawRole) {
   if ((r.includes('direktur') && !r.includes('wadir') && !r.includes('wakil')) || r === '3') return 'Direktur';
   if (r.includes('wadir') || r.includes('wakil') || r === '4') return 'Wakil Direktur I';
   if (r.includes('ketua') || r.includes('pimpinan') || r === '2') return 'Ketua UBM';
+  if (r.includes('ppic') || r.includes('inventory') || r === '6') return 'PPIC';
   if (r.includes('keuangan') || r.includes('finance') || r.includes('bendahara') || r === '5') return 'Keuangan';
   return 'Member';
 }
@@ -1009,8 +1013,10 @@ function downloadUserExcelTemplate() {
   const guideRows = [
     { 'Pilihan Role / Hak Akses Valid': 'Administrator', 'Keterangan Wewenang': 'Akses penuh seluruh modul sistem, persetujuan, dan manajemen akun pengguna' },
     { 'Pilihan Role / Hak Akses Valid': 'Ketua UBM', 'Keterangan Wewenang': 'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, dan monitoring operasional' },
+    { 'Pilihan Role / Hak Akses Valid': 'Direktur', 'Keterangan Wewenang': 'Pimpinan Institusi: Akses seluruh modul sistem & persetujuan resmi (ACC) pada Quotation' },
     { 'Pilihan Role / Hak Akses Valid': 'Wakil Direktur I', 'Keterangan Wewenang': 'Pimpinan & Pengarah: Akses semua halaman, persetujuan dan perubahan status order penjualan' },
-    { 'Pilihan Role / Hak Akses Valid': 'Keuangan', 'Keterangan Wewenang': 'Persetujuan pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales' },
+    { 'Pilihan Role / Hak Akses Valid': 'Keuangan', 'Keterangan Wewenang': 'Persetujuan pembelian barang (PR) bersama PPIC, penerbitan invoice, keuangan project, BAST & layanan after sales' },
+    { 'Pilihan Role / Hak Akses Valid': 'PPIC', 'Keterangan Wewenang': 'Production Planning & Inventory Control: Pengelolaan BOM, stok master barang, produksi & persetujuan pembelian barang (PR) bersama Keuangan' },
     { 'Pilihan Role / Hak Akses Valid': 'Member', 'Keterangan Wewenang': 'Anggota Tim / Pelaksana Project: Akses timeline, progres task, BOM, PR, dan laporan project' },
     { 'Pilihan Role / Hak Akses Valid': '', 'Keterangan Wewenang': '' },
     { 'Pilihan Role / Hak Akses Valid': 'Pilihan Status Akun Valid', 'Keterangan Wewenang': 'Aktif / Non-Aktif' }
@@ -1309,7 +1315,8 @@ function renderBulkUserImportRows() {
           <option value="Direktur" ${acc.role === 'Direktur' ? 'selected' : ''}>3. Direktur</option>
           <option value="Wakil Direktur I" ${acc.role === 'Wakil Direktur I' ? 'selected' : ''}>4. Wakil Direktur I</option>
           <option value="Keuangan" ${acc.role === 'Keuangan' ? 'selected' : ''}>5. Keuangan</option>
-          <option value="Member" ${(!acc.role || acc.role === 'Member') ? 'selected' : ''}>6. Member</option>
+          <option value="PPIC" ${acc.role === 'PPIC' ? 'selected' : ''}>6. PPIC</option>
+          <option value="Member" ${(!acc.role || acc.role === 'Member') ? 'selected' : ''}>7. Member</option>
         </select>
       </td>
       <td>
@@ -1399,6 +1406,7 @@ async function saveUserAccount(event) {
     'Direktur': 'ROLE-DIREKTUR',
     'Wakil Direktur I': 'ROLE-WADIR1',
     'Keuangan': 'ROLE-KEUANGAN',
+    'PPIC': 'ROLE-PPIC',
     'Member': 'ROLE-MEMBER'
   };
 
@@ -1892,6 +1900,8 @@ function renderMyProfileTab() {
     roleBadge = `<span class="badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="user-check" style="width: 12px; height: 12px;"></i> Wakil Direktur I</span>`;
   } else if (roleName === 'Ketua UBM') {
     roleBadge = `<span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="award" style="width: 12px; height: 12px;"></i> Ketua UBM</span>`;
+  } else if (roleName === 'PPIC') {
+    roleBadge = `<span class="badge" style="background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="package-check" style="width: 12px; height: 12px;"></i> PPIC</span>`;
   } else if (roleName === 'Keuangan') {
     roleBadge = `<span class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="banknote" style="width: 12px; height: 12px;"></i> Keuangan</span>`;
   } else {

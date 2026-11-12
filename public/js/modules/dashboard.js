@@ -124,7 +124,8 @@ async function loadDashboardData() {
     }
 
     // 2. Kalkulasi Metrik DASHBOARD PRODUK MANUFAKTUR
-    const productQuos = (state.quotations || []).filter(q => q.quotationType !== 'jasa');
+    const nonDraftQuos = (state.quotations || []).filter(q => !(q.status === 'Draft' || Boolean(q.isDraft)));
+    const productQuos = nonDraftQuos.filter(q => q.quotationType !== 'jasa');
     const productQuoTotalVal = productQuos.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
 
     const productOrders = (state.orders || []).filter(o => !isServiceOrder(o));
@@ -165,7 +166,7 @@ async function loadDashboardData() {
     if (elProdOrdCountText) elProdOrdCountText.textContent = `${productOrders.length} Pesanan Produk`;
 
     // 3. Kalkulasi Metrik DASHBOARD LAYANAN JASA
-    const serviceQuos = (state.quotations || []).filter(q => q.quotationType === 'jasa');
+    const serviceQuos = nonDraftQuos.filter(q => q.quotationType === 'jasa');
     const serviceQuoTotalVal = serviceQuos.reduce((sum, q) => sum + (Number(q.grandTotal) || 0), 0);
 
     const serviceOrders = (state.orders || []).filter(o => isServiceOrder(o));
@@ -212,8 +213,8 @@ async function loadDashboardData() {
     const summary = state.stats?.summary || {};
     const kpiQuotationsVal = document.getElementById('kpi-quotations-val');
     const kpiQuotationsAmount = document.getElementById('kpi-quotations-amount');
-    if (kpiQuotationsVal) kpiQuotationsVal.textContent = `${summary.totalQuotations || (state.quotations?.length || 0)} Penawaran`;
-    if (kpiQuotationsAmount) kpiQuotationsAmount.textContent = formatRupiah(summary.totalQuotationValue || (productQuoTotalVal + serviceQuoTotalVal));
+    if (kpiQuotationsVal) kpiQuotationsVal.textContent = `${summary.totalQuotations ?? nonDraftQuos.length} Penawaran`;
+    if (kpiQuotationsAmount) kpiQuotationsAmount.textContent = formatRupiah(summary.totalQuotationValue ?? (productQuoTotalVal + serviceQuoTotalVal));
 
     const kpiOrdersVal = document.getElementById('kpi-orders-val');
     const kpiOrdersAmount = document.getElementById('kpi-orders-amount');

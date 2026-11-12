@@ -10,13 +10,13 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ---------------------------------------------------------
--- 1. TABLE: quotations (Surat Penawaran Harga)
+-- 1. TABLE: quotations (Surat Penawaran Harga & Draft)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.quotations (
     id VARCHAR(50) PRIMARY KEY,
     order_id VARCHAR(50),
-    quotation_type VARCHAR(50) DEFAULT 'produk',
-    customer_name VARCHAR(255) NOT NULL,
+    quotation_type VARCHAR(50) NOT NULL DEFAULT 'produk',
+    customer_name VARCHAR(255) DEFAULT 'Calon Pelanggan (Ditulis Tangan)',
     project_name VARCHAR(255),
     customer_phone VARCHAR(100),
     customer_email VARCHAR(255),
@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS public.quotations (
     pic_name VARCHAR(150),
     quotation_date DATE NOT NULL DEFAULT CURRENT_DATE,
     valid_until DATE,
-    status VARCHAR(50) NOT NULL DEFAULT 'Sent',
+    status VARCHAR(50) NOT NULL DEFAULT 'Draft',
+    is_draft BOOLEAN NOT NULL DEFAULT FALSE,
     warranty TEXT,
     lead_time VARCHAR(150),
     payment_terms VARCHAR(255),
@@ -42,12 +43,15 @@ CREATE TABLE IF NOT EXISTS public.quotations (
     tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11,
     tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0,
     grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    approval_ketua_ubm BOOLEAN DEFAULT FALSE,
+    approval_ketua_ubm BOOLEAN NOT NULL DEFAULT FALSE,
     approval_ketua_ubm_by TEXT,
     approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE,
-    approval_direktur BOOLEAN DEFAULT FALSE,
+    approval_direktur BOOLEAN NOT NULL DEFAULT FALSE,
     approval_direktur_by TEXT,
     approval_direktur_date TIMESTAMP WITH TIME ZONE,
+    rejection_notes TEXT,
+    created_by VARCHAR(255),
+    published_at TIMESTAMP WITH TIME ZONE,
     pdf_url TEXT,
     pdf_filename TEXT,
     notes TEXT,
@@ -187,6 +191,13 @@ CREATE TABLE IF NOT EXISTS public.purchasing (
     items JSONB NOT NULL DEFAULT '[]'::jsonb,
     total_estimated NUMERIC(15, 2) NOT NULL DEFAULT 0,
     approved_by VARCHAR(255) DEFAULT '-',
+    approval_ppic BOOLEAN NOT NULL DEFAULT FALSE,
+    approval_ppic_by TEXT,
+    approval_ppic_date TIMESTAMP WITH TIME ZONE,
+    approval_keuangan BOOLEAN NOT NULL DEFAULT FALSE,
+    approval_keuangan_by TEXT,
+    approval_keuangan_date TIMESTAMP WITH TIME ZONE,
+    rejection_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -196,6 +207,13 @@ ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS bom_id VARCHAR(50);
 ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS pic_name VARCHAR(255);
 ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS required_date DATE;
 ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic_by TEXT;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan_by TEXT;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS rejection_notes TEXT;
 
 -- ---------------------------------------------------------
 -- 5B. TABLE: purchasing_process (Tab 2: Proses Pembelian Barang)
@@ -596,6 +614,7 @@ CREATE TABLE IF NOT EXISTS public.roles (
     can_register_members BOOLEAN NOT NULL DEFAULT FALSE,
     can_manage_timeline BOOLEAN NOT NULL DEFAULT FALSE,
     can_manage_bom BOOLEAN NOT NULL DEFAULT FALSE,
+    can_approve_bom BOOLEAN NOT NULL DEFAULT FALSE,
     can_submit_pr BOOLEAN NOT NULL DEFAULT FALSE,
     can_approve_purchasing BOOLEAN NOT NULL DEFAULT FALSE,
     can_manage_invoices BOOLEAN NOT NULL DEFAULT FALSE,
@@ -607,35 +626,55 @@ CREATE TABLE IF NOT EXISTS public.roles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS can_approve_bom BOOLEAN NOT NULL DEFAULT FALSE;
+
 INSERT INTO public.roles (
     id, role_name, label, badge_color, description, allowed_views,
     can_approve_order, can_assign_lead, can_register_members, can_manage_timeline,
-    can_manage_bom, can_submit_pr, can_approve_purchasing, can_manage_invoices,
+    can_manage_bom, can_approve_bom, can_submit_pr, can_approve_purchasing, can_manage_invoices,
     can_manage_finance, can_manage_bast, can_manage_after_sales, can_manage_settings
 ) VALUES
 (
     'ROLE-ADMIN', 'Administrator', 'Administrator', '#9d174d',
     'Akses penuh seluruh modul sistem, persetujuan, dan manajemen akun pengguna',
     '["dashboard","logs","quotations","orders","projects","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
-    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE
+),
+(
+    'ROLE-DIREKTUR', 'Direktur', 'Direktur', '#be185d',
+    'Pimpinan Institusi: Akses penuh seluruh modul sistem seperti administrator dan persetujuan resmi (ACC) pada Surat Penawaran (Quotation)',
+    '["dashboard","logs","quotations","orders","projects","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE
 ),
 (
     'ROLE-KETUA', 'Ketua UBM', 'Ketua UBM', '#1e40af',
-    'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, dan monitoring seluruh operasional',
-    '["dashboard","logs","quotations","orders","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
-    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+    'Pimpinan Unit Bisnis: Persetujuan order/project, penunjukan Lead Project, persetujuan BOM, dan monitoring seluruh operasional',
+    '["dashboard","logs","quotations","orders","projects","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+),
+(
+    'ROLE-WADIR1', 'Wakil Direktur I', 'Wakil Direktur I', '#0284c7',
+    'Pimpinan & Pengarah Akademik / Kerjasama: Akses semua halaman, persetujuan dan perubahan status pada Order Penjualan',
+    '["dashboard","logs","quotations","orders","projects","bom","bom-form","purchasing","project-reports","timeline","invoices","bast","finance","service","maintenance","settings"]'::jsonb,
+    TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE
 ),
 (
     'ROLE-KEUANGAN', 'Keuangan', 'Keuangan', '#166534',
     'Persetujuan pembelian barang (PR), penerbitan invoice, keuangan project, BAST & layanan after sales',
-    '["dashboard","purchasing","invoices","bast","finance","service","maintenance","logs"]'::jsonb,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+    '["dashboard","orders","bom","purchasing","invoices","bast","finance","service","maintenance","settings","logs"]'::jsonb,
+    FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE
+),
+(
+    'ROLE-PPIC', 'PPIC', 'PPIC', '#0f766e',
+    'Production Planning & Inventory Control: Pengelolaan perencanaan produksi, BOM, stok barang, dan persetujuan PR Purchasing bersama Keuangan',
+    '["dashboard","logs","orders","projects","bom","bom-form","purchasing","project-reports","timeline","service","maintenance","settings"]'::jsonb,
+    FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE
 ),
 (
     'ROLE-MEMBER', 'Member', 'Member', '#475569',
     'Anggota Tim / Pelaksana Project: Akses timeline, progres task, dan apabila ditunjuk sebagai Lead Project berwenang menyusun BOM, mengajukan PR, serta mengisi laporan & anggota tim',
-    '["dashboard","orders","bom","bom-form","purchasing","project-reports","timeline","service","maintenance","logs"]'::jsonb,
-    FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+    '["dashboard","orders","projects","bom","bom-form","purchasing","project-reports","timeline","service","maintenance","settings","logs"]'::jsonb,
+    FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
 )
 ON CONFLICT (id) DO UPDATE SET
     role_name = EXCLUDED.role_name,
@@ -648,6 +687,7 @@ ON CONFLICT (id) DO UPDATE SET
     can_register_members = EXCLUDED.can_register_members,
     can_manage_timeline = EXCLUDED.can_manage_timeline,
     can_manage_bom = EXCLUDED.can_manage_bom,
+    can_approve_bom = EXCLUDED.can_approve_bom,
     can_submit_pr = EXCLUDED.can_submit_pr,
     can_approve_purchasing = EXCLUDED.can_approve_purchasing,
     can_manage_invoices = EXCLUDED.can_manage_invoices,
@@ -900,11 +940,94 @@ DROP POLICY IF EXISTS "Allow all access to settings" ON public.settings;
 CREATE POLICY "Allow all access to settings" ON public.settings FOR ALL USING (true) WITH CHECK (true);
 
 -- =========================================================
--- MIGRATION: DUAL APPROVAL QUOTATIONS (KETUA UBM & DIREKTUR)
+-- MIGRATION: TABEL QUOTATIONS LENGKAP, DRAFT & DUAL APPROVAL
 -- =========================================================
+ALTER TABLE public.quotations ALTER COLUMN customer_name DROP NOT NULL;
+ALTER TABLE public.quotations ALTER COLUMN customer_name SET DEFAULT 'Calon Pelanggan (Ditulis Tangan)';
+ALTER TABLE public.quotations ALTER COLUMN status SET DEFAULT 'Draft';
+
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS order_id VARCHAR(50);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS quotation_type VARCHAR(50) NOT NULL DEFAULT 'produk';
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS project_name VARCHAR(255);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(100);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS customer_address TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS pic_name VARCHAR(150);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS quotation_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS valid_until DATE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS is_draft BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS warranty TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS lead_time VARCHAR(150);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS payment_terms VARCHAR(255);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS additional_services JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS rab_items JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS total_modal NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS estimated_profit NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS main_items_total NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS services_total NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS items_total NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS warranty_fee NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS subtotal NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS discount NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(5, 2) NOT NULL DEFAULT 11;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(15, 2) NOT NULL DEFAULT 0;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS grand_total NUMERIC(15, 2) NOT NULL DEFAULT 0;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm_by TEXT;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_ketua_ubm_date TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur_by TEXT;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS approval_direktur_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS rejection_notes TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS created_by VARCHAR(255);
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS pdf_url TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS pdf_filename TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
+ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
+
+UPDATE public.quotations SET is_draft = TRUE WHERE status = 'Draft' AND COALESCE(is_draft, FALSE) = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_quotations_status ON public.quotations(status);
+CREATE INDEX IF NOT EXISTS idx_quotations_is_draft ON public.quotations(is_draft);
+CREATE INDEX IF NOT EXISTS idx_quotations_order_id ON public.quotations(order_id);
+CREATE INDEX IF NOT EXISTS idx_quotations_created_at ON public.quotations(created_at DESC);
+
+DROP TRIGGER IF EXISTS set_quotations_updated_at ON public.quotations;
+CREATE TRIGGER set_quotations_updated_at
+    BEFORE UPDATE ON public.quotations
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
+ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to quotations" ON public.quotations;
+CREATE POLICY "Allow all access to quotations" ON public.quotations FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.quotations TO anon, authenticated, service_role;
+
+-- =========================================================
+-- MIGRATION: DUAL APPROVAL PURCHASING PR (PPIC & KEUANGAN) & ROLE PPIC
+-- =========================================================
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic_by TEXT;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_ppic_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan_by TEXT;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS approval_keuangan_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.purchasing ADD COLUMN IF NOT EXISTS rejection_notes TEXT;
+
+UPDATE public.purchasing
+SET
+    approval_ppic = TRUE,
+    approval_ppic_by = COALESCE(NULLIF(approved_by, '-'), 'PPIC (Auto-Approved)'),
+    approval_ppic_date = COALESCE(updated_at, NOW()),
+    approval_keuangan = TRUE,
+    approval_keuangan_by = COALESCE(NULLIF(approved_by, '-'), 'Keuangan (Auto-Approved)'),
+    approval_keuangan_date = COALESCE(updated_at, NOW())
+WHERE status IN ('Disetujui', 'Stock', 'Approved')
+  AND (COALESCE(approval_ppic, FALSE) = FALSE OR COALESCE(approval_keuangan, FALSE) = FALSE);
+
+CREATE INDEX IF NOT EXISTS idx_purchasing_status ON public.purchasing(status);
+
+NOTIFY pgrst, 'reload schema';

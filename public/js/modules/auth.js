@@ -50,6 +50,7 @@ function getNormalizedRole(user) {
   if (r.includes('direktur') && !r.includes('wadir') && !r.includes('wakil')) return 'Direktur';
   if (r.includes('wadir') || r.includes('wakil')) return 'Wakil Direktur I';
   if (r.includes('ketua')) return 'Ketua UBM';
+  if (r.includes('ppic') || r.includes('inventory')) return 'PPIC';
   if (r.includes('keuangan') || r.includes('finance')) return 'Keuangan';
   if (r.includes('lead')) return 'Member';
   return 'Member';
@@ -139,6 +140,23 @@ const ROLE_PERMISSIONS = {
     canManageFinance: true,
     canManageBAST: true,
     canManageAfterSales: true,
+    canManageSettings: false
+  },
+  'PPIC': {
+    name: 'PPIC',
+    allowedViews: ['dashboard', 'logs', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'settings'],
+    canApproveOrder: false,
+    canAssignLead: false,
+    canRegisterMembers: true,
+    canManageTimeline: true,
+    canManageBOM: true,
+    canApproveBOM: false,
+    canSubmitPR: true,
+    canApprovePurchasing: true,
+    canManageInvoices: false,
+    canManageFinance: false,
+    canManageBAST: false,
+    canManageAfterSales: false,
     canManageSettings: false
   },
   'Member': {
@@ -290,7 +308,7 @@ function canUserCreateMasterBOM(user = null) {
   const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
   if (!u) return false;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : (u.role || 'Member');
-  if (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I') return true;
+  if (roleName === 'Administrator' || roleName === 'Direktur' || roleName === 'Ketua UBM' || roleName === 'Wakil Direktur I' || roleName === 'PPIC') return true;
   if (typeof isUserProjectLead === 'function' && isUserProjectLead(null, u)) return true;
   return false;
 }

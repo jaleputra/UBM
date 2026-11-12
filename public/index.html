@@ -925,8 +925,8 @@
             <div class="filter-group">
               <select id="filter-quotation-status" class="form-control-sm" onchange="filterQuotations()">
                 <option value="ALL">Semua Status Penawaran</option>
-                <option value="Draft">Draft</option>
-                <option value="Sent">Sent (Terkirim)</option>
+                <option value="Draft">Draft (Belum Terbit)</option>
+                <option value="Sent">Sent (Menunggu Approval)</option>
                 <option value="Pengajuan">Pengajuan</option>
                 <option value="Accepted">Accepted (Disetujui)</option>
                 <option value="Rejected">Rejected (Ditolak)</option>
@@ -934,6 +934,7 @@
               </select>
             </div>
             <div class="btn-group">
+              <button class="btn btn-primary" onclick="openQuotationModal()"><i data-lucide="plus"></i> Quotation Baru</button>
               <button class="btn btn-outline" onclick="exportDataToCSV('quotations')"><i data-lucide="download"></i> Export CSV</button>
             </div>
           </div>
@@ -1487,7 +1488,8 @@
                       <th>Urgensi</th>
                       <th>Jumlah Barang</th>
                       <th>Total Estimasi</th>
-                      <th>Status Persetujuan</th>
+                      <th style="text-align: center;">PPIC</th>
+                      <th style="text-align: center;">Keuangan</th>
                       <th class="text-right">Aksi</th>
                     </tr>
                   </thead>
@@ -2620,7 +2622,7 @@
       <div class="modal-header no-print">
         <h3 id="preview-modal-title"><i data-lucide="file-text" style="color: #2563eb;"></i> Dokumen Pratinjau</h3>
         <div class="modal-header-actions">
-          <button type="button" class="btn btn-primary btn-sm" onclick="printCurrentDocument()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 14px; background: #2563eb; color: #ffffff; border-color: #2563eb;">
+          <button type="button" id="preview-modal-print-btn" class="btn btn-primary btn-sm" onclick="printCurrentDocument()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 14px; background: #2563eb; color: #ffffff; border-color: #2563eb;">
             <i data-lucide="printer"></i> Cetak / Simpan PDF
           </button>
           <button type="button" class="btn-close" onclick="closeModal('preview-modal')" title="Tutup"><i data-lucide="x"></i></button>
@@ -4165,15 +4167,15 @@
   </script>
 
   <!-- Application Logic Modular Scripts -->
-  <script src="js/modules/utils.js?v=20261105_6"></script>
-  <script src="js/modules/auth.js?v=20261105_8"></script>
+  <script src="js/modules/utils.js?v=20261112_2"></script>
+  <script src="js/modules/auth.js?v=20261112_1"></script>
   <script src="js/modules/dashboard.js?v=20261102_3"></script>
   <script src="js/modules/logs.js?v=20261029_1"></script>
-  <script src="js/modules/quotations.js?v=20261109_1"></script>
+  <script src="js/modules/quotations.js?v=20261112_2"></script>
   <script src="js/modules/orders.js?v=20261105_5"></script>
   <script src="js/modules/projects.js?v=20261105_6"></script>
-  <script src="js/modules/bom.js?v=20261105_6"></script>
-  <script src="js/modules/purchasing.js?v=20261105_4"></script>
+  <script src="js/modules/bom.js?v=20261112_1"></script>
+  <script src="js/modules/purchasing.js?v=20261112_3"></script>
   <script src="js/modules/po.js?v=20261029_1"></script>
   <script src="js/modules/delivery.js?v=20261029_1"></script>
   <script src="js/modules/invoices.js?v=20261105_2"></script>
@@ -4182,7 +4184,7 @@
   <script src="js/modules/service.js?v=20261103_1"></script>
   <script src="js/modules/maintenance.js?v=20261029_1"></script>
   <script src="js/modules/finance.js?v=20261105_2"></script>
-  <script src="js/modules/settings.js?v=20261105_6"></script>
-  <script src="js/app.js?v=20261105_4"></script>
+  <script src="js/modules/settings.js?v=20261112_1"></script>
+  <script src="js/app.js?v=20261112_1"></script>
 </body>
 </html>
