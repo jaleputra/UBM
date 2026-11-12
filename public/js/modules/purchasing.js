@@ -286,12 +286,14 @@ function renderPurchasingTable() {
         <td style="text-align: center; padding: 6px 4px;" onclick="event.stopPropagation()">${statusKeuanganHtml}</td>
         <td class="text-right">
           <div class="table-actions" style="justify-content: flex-end;">
-            ${isRejected ? `<button class="btn-icon" style="color: #2563eb;" title="Salin & Ajukan Ulang PR yang Ditolak" onclick="event.stopPropagation(); duplicateAndReapplyPR('${pr.id}')"><i data-lucide="copy"></i></button>` : ''}
-            <button class="btn-icon" title="Lihat Dokumen PR" onclick="viewPurchasingDetail('${pr.id}')"><i data-lucide="eye"></i></button>
-            ${isApproved ?
-              `<button class="btn-icon" style="opacity: 0.35; cursor: not-allowed;" title="⚠️ PR sudah Disetujui (Terkunci & Tidak dapat diedit)" onclick="event.stopPropagation(); showToast('⚠️ Request Pengadaan yang sudah Disetujui telah terkunci dan tidak dapat diedit lagi!', 'warning')"><i data-lucide="lock"></i></button>` :
-              `<button class="btn-icon" title="Edit PR" onclick="editPurchasing('${pr.id}')"><i data-lucide="edit-3"></i></button>`}
-            <button class="btn-icon btn-danger-ghost" title="Hapus PR" onclick="deleteResource('purchasing', '${pr.id}')"><i data-lucide="trash-2"></i></button>
+            ${isAdmin && isRejected ? `<button class="btn-icon" style="color: #2563eb;" title="Salin & Ajukan Ulang PR yang Ditolak" onclick="event.stopPropagation(); duplicateAndReapplyPR('${pr.id}')"><i data-lucide="copy"></i></button>` : ''}
+            <button class="btn-icon" title="Lihat Dokumen PR" onclick="event.stopPropagation(); viewPurchasingDetail('${pr.id}')"><i data-lucide="eye"></i></button>
+            ${isAdmin ? `
+              ${isApproved ?
+                `<button class="btn-icon" style="opacity: 0.35; cursor: not-allowed;" title="⚠️ PR sudah Disetujui (Terkunci & Tidak dapat diedit)" onclick="event.stopPropagation(); showToast('⚠️ Request Pengadaan yang sudah Disetujui telah terkunci dan tidak dapat diedit lagi!', 'warning')"><i data-lucide="lock"></i></button>` :
+                `<button class="btn-icon" title="Edit PR" onclick="event.stopPropagation(); editPurchasing('${pr.id}')"><i data-lucide="edit-3"></i></button>`}
+              <button class="btn-icon btn-danger-ghost" title="Hapus PR" onclick="event.stopPropagation(); deleteResource('purchasing', '${pr.id}')"><i data-lucide="trash-2"></i></button>
+            ` : ''}
           </div>
         </td>
       </tr>
@@ -1912,6 +1914,10 @@ function openPurchasingModal(prData = null, isClone = false) {
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  if (isEdit && roleName !== 'Administrator') {
+    showToast('⚠️ Aksi Edit Request Pengadaan (PR) hanya dapat dilakukan oleh Administrator!', 'warning');
+    return;
+  }
   if (roleName === 'Member') {
     const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(prData?.orderId || null, activeUser) : false;
     if (!isLead) {
@@ -2276,6 +2282,10 @@ async function submitPurchasing(e, editId = '') {
   e.preventDefault();
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : 'Member';
+  if (editId && String(editId).trim() && roleName !== 'Administrator') {
+    showToast('⚠️ Aksi Edit Request Pengadaan (PR) hanya dapat dilakukan oleh Administrator!', 'warning');
+    return;
+  }
   if (roleName === 'Member') {
     const isLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(null, activeUser) : false;
     if (!isLead) {
@@ -2578,6 +2588,12 @@ function viewPurchasingDetail(prId) {
 }
 
 function editPurchasing(prId) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+  if (currentRole !== 'Administrator') {
+    showToast('⚠️ Aksi Edit Request Pengadaan (PR) hanya dapat dilakukan oleh Administrator!', 'warning');
+    return;
+  }
   const pr = (state.purchasing || []).find(p => p.id === prId);
   if (!pr) return;
   if (isPRDualApproved(pr)) {

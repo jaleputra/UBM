@@ -13,26 +13,36 @@ function getQuotationDisplayNotes(notes) {
   return String(notes || '').replace(/<!--[\s\S]*?-->/g, '').trim();
 }
 
-// Helper: Mengatur visibilitas Draft Quotation agar tidak terkirim ke Ketua UBM & Direktur
+function isQuotationReadOnlyForUser(user = null) {
+  const activeUser = user || (typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null));
+  const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
+  return currentRole === 'PPIC';
+}
+window.isQuotationReadOnlyForUser = isQuotationReadOnlyForUser;
+
+// Helper: Draft Quotation hanya dapat dilihat oleh pembuat draft itu sendiri dan Administrator
 function isQuotationVisibleToUser(quo, user = null) {
   if (!quo) return false;
   if (!isQuotationDraft(quo)) return true;
 
   const activeUser = user || (typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null));
+  if (!activeUser) return false;
+
   const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   if (currentRole === 'Administrator') return true;
 
-  const isKetuaUbm = currentRole === 'Ketua UBM';
-  const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+  const creator = String(quo.createdBy || '').trim().toLowerCase();
+  if (!creator) return false;
 
-  if (isKetuaUbm || isDirektur) {
-    const creator = (quo.createdBy || '').trim().toLowerCase();
-    const userEmail = (activeUser?.email || '').trim().toLowerCase();
-    const userName = (activeUser?.name || '').trim().toLowerCase();
-    return Boolean(creator && ((userEmail && creator === userEmail) || (userName && creator === userName)));
-  }
+  const userEmail = String(activeUser.email || '').trim().toLowerCase();
+  const userName = String(activeUser.name || '').trim().toLowerCase();
+  const userId = String(activeUser.id || '').trim().toLowerCase();
 
-  return true;
+  return Boolean(
+    (userEmail && creator === userEmail) ||
+    (userName && creator === userName) ||
+    (userId && creator === userId)
+  );
 }
 window.isQuotationVisibleToUser = isQuotationVisibleToUser;
 
@@ -303,8 +313,14 @@ function renderQuotationsTable() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
   const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
   const isKetuaUbm = currentRole === 'Ketua UBM';
   const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
+
+  const createQuoBtn = document.getElementById('btn-quotation-create');
+  if (createQuoBtn) {
+    createQuoBtn.style.display = isPPIC ? 'none' : 'inline-flex';
+  }
 
   const statusFilter = document.getElementById('filter-quotation-status')?.value || 'ALL';
   let list = (state.quotations || []).filter(q => isQuotationVisibleToUser(q, activeUser));
@@ -520,7 +536,7 @@ function renderQuotationsTable() {
         <td>
           <div style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;">
             <span class="font-mono font-sm" style="font-size: 11.5px;">${phone || '-'}</span>
-            ${phone && !isDraft ? `
+            ${phone && !isDraft && !isPPIC ? `
               <button type="button" class="btn-icon" style="color: #25d366; padding: 0; width: 22px; height: 22px;" title="Share WhatsApp (Format PDF)" onclick="event.stopPropagation(); shareQuotationWhatsApp('${quo.id}')">
                 <i data-lucide="message-circle" style="width: 14px; height: 14px;"></i>
               </button>
@@ -545,58 +561,64 @@ function renderQuotationsTable() {
         <td style="text-align: center;">${statusDirekturHtml}</td>
         <td class="text-right" style="padding-right: 8px;">
           <div class="table-actions" style="display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; align-items: center; width: 100%;">
-            ${isDraft ? `
-              <button class="btn-icon" style="color: #94a3b8; opacity: 0.35; cursor: not-allowed; width: 25px; height: 25px; border-radius: 4px;" title="Quotation Draft tidak dapat dicetak. Terbitkan terlebih dahulu." onclick="event.stopPropagation(); showToast('📝 Quotation masih berstatus Draft sehingga belum dapat dicetak. Klik Terbitkan terlebih dahulu!', 'warning')">
-                <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
-              </button>
-              <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Lihat Pratinjau Draft" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
+            ${isPPIC ? `
+              <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Lihat Detail Dokumen Quotation" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
                 <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
-              </button>
-              <button class="btn-icon" style="color: #ffffff; background: #16a34a; width: 25px; height: 25px; border-radius: 4px;" title="Simpan & Terbitkan Draft ke Ketua UBM & Direktur" onclick="event.stopPropagation(); publishDraftQuotation('${quo.id}')">
-                <i data-lucide="send" style="width: 12px; height: 12px;"></i>
-              </button>
-              <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Draft Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
-                <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
-              </button>
-              <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Masih berstatus Draft: Terbitkan & lengkapi persetujuan terlebih dahulu" onclick="event.stopPropagation(); promptQuotationDualApprovalRequired('${quo.id}')">
-                <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
               </button>
             ` : `
-              <button class="btn-icon" style="color: #4338ca; width: 25px; height: 25px; border-radius: 4px;" title="Cetak / Simpan PDF Surat Penawaran" onclick="event.stopPropagation(); printQuotationPDF('${quo.id}')">
-                <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
-              </button>
-              <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Pratinjau Dokumen Quotation" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
-                <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
-              </button>
-              <button class="btn-icon" style="color: #16a34a; width: 25px; height: 25px; border-radius: 4px;" title="Share WhatsApp (Format PDF)" onclick="event.stopPropagation(); shareQuotationWhatsApp('${quo.id}')">
-                <i data-lucide="share-2" style="width: 13px; height: 13px;"></i>
-              </button>
-              ${isConverted ? `
-                <button class="btn-icon" style="color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0; width: 25px; height: 25px; border-radius: 4px; cursor: default;" title="Sudah Dikonversi ke Order Penjualan #${existingOrder.id}" onclick="event.stopPropagation(); showToast('Surat Penawaran ini sudah dikonversi ke Order Penjualan #${existingOrder.id}', 'info')">
-                  <i data-lucide="check-check" style="width: 13px; height: 13px;"></i>
+              ${isDraft ? `
+                <button class="btn-icon" style="color: #94a3b8; opacity: 0.35; cursor: not-allowed; width: 25px; height: 25px; border-radius: 4px;" title="Quotation Draft tidak dapat dicetak. Terbitkan terlebih dahulu." onclick="event.stopPropagation(); showToast('📝 Quotation masih berstatus Draft sehingga belum dapat dicetak. Klik Terbitkan terlebih dahulu!', 'warning')">
+                  <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
                 </button>
-                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Quotation Terkunci (Sudah Dikonversi ke Order Penjualan #${existingOrder.id})" onclick="event.stopPropagation(); showToast('Surat Penawaran #${quo.id} terkunci dan tidak dapat diedit karena sudah dikonversi ke Order Penjualan #${existingOrder.id}!', 'warning')">
-                  <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
+                <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Lihat Pratinjau Draft" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
                 </button>
-              ` : (isDualApproved ? `
-                <button class="btn-icon" style="color: #4f46e5; width: 25px; height: 25px; border-radius: 4px;" title="Konversi ke Order Penjualan (Telah Disetujui Lengkap)" onclick="event.stopPropagation(); convertQuotationToOrder('${quo.id}')">
-                  <i data-lucide="arrow-right-circle" style="width: 13px; height: 13px;"></i>
+                <button class="btn-icon" style="color: #ffffff; background: #16a34a; width: 25px; height: 25px; border-radius: 4px;" title="Simpan & Terbitkan Draft ke Ketua UBM & Direktur" onclick="event.stopPropagation(); publishDraftQuotation('${quo.id}')">
+                  <i data-lucide="send" style="width: 12px; height: 12px;"></i>
                 </button>
-                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
+                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Draft Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
                   <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+                </button>
+                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Masih berstatus Draft: Terbitkan & lengkapi persetujuan terlebih dahulu" onclick="event.stopPropagation(); promptQuotationDualApprovalRequired('${quo.id}')">
+                  <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
                 </button>
               ` : `
-                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Konversi Terkunci: Menunggu persetujuan Ketua UBM dan Direktur" onclick="event.stopPropagation(); promptQuotationDualApprovalRequired('${quo.id}')">
-                  <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
+                <button class="btn-icon" style="color: #4338ca; width: 25px; height: 25px; border-radius: 4px;" title="Cetak / Simpan PDF Surat Penawaran" onclick="event.stopPropagation(); printQuotationPDF('${quo.id}')">
+                  <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
                 </button>
-                <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
-                  <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+                <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Pratinjau Dokumen Quotation" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
                 </button>
-              `)}
+                <button class="btn-icon" style="color: #16a34a; width: 25px; height: 25px; border-radius: 4px;" title="Share WhatsApp (Format PDF)" onclick="event.stopPropagation(); shareQuotationWhatsApp('${quo.id}')">
+                  <i data-lucide="share-2" style="width: 13px; height: 13px;"></i>
+                </button>
+                ${isConverted ? `
+                  <button class="btn-icon" style="color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0; width: 25px; height: 25px; border-radius: 4px; cursor: default;" title="Sudah Dikonversi ke Order Penjualan #${existingOrder.id}" onclick="event.stopPropagation(); showToast('Surat Penawaran ini sudah dikonversi ke Order Penjualan #${existingOrder.id}', 'info')">
+                    <i data-lucide="check-check" style="width: 13px; height: 13px;"></i>
+                  </button>
+                  <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Quotation Terkunci (Sudah Dikonversi ke Order Penjualan #${existingOrder.id})" onclick="event.stopPropagation(); showToast('Surat Penawaran #${quo.id} terkunci dan tidak dapat diedit karena sudah dikonversi ke Order Penjualan #${existingOrder.id}!', 'warning')">
+                    <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
+                  </button>
+                ` : (isDualApproved ? `
+                  <button class="btn-icon" style="color: #4f46e5; width: 25px; height: 25px; border-radius: 4px;" title="Konversi ke Order Penjualan (Telah Disetujui Lengkap)" onclick="event.stopPropagation(); convertQuotationToOrder('${quo.id}')">
+                    <i data-lucide="arrow-right-circle" style="width: 13px; height: 13px;"></i>
+                  </button>
+                  <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
+                    <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+                  </button>
+                ` : `
+                  <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px; color: #94a3b8; background: #f8fafc; cursor: not-allowed; border: 1px solid #e2e8f0;" title="Konversi Terkunci: Menunggu persetujuan Ketua UBM dan Direktur" onclick="event.stopPropagation(); promptQuotationDualApprovalRequired('${quo.id}')">
+                    <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i>
+                  </button>
+                  <button class="btn-icon" style="width: 25px; height: 25px; border-radius: 4px;" title="Edit Quotation" onclick="event.stopPropagation(); editQuotation('${quo.id}')">
+                    <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
+                  </button>
+                `)}
+              `}
+              <button class="btn-icon btn-danger-ghost" style="width: 25px; height: 25px; border-radius: 4px;" title="${isConverted ? 'Quotation sudah dikonversi ke order' : 'Hapus Quotation'}" onclick="event.stopPropagation(); ${isConverted ? `showToast('Surat Penawaran #${quo.id} tidak dapat dihapus karena sudah dikonversikan ke Order Penjualan #${existingOrder.id}!', 'warning')` : `deleteResource('quotations', '${quo.id}')`}">
+                <i data-lucide="trash-2" style="width: 13px; height: 13px; ${isConverted ? 'opacity: 0.4;' : ''}"></i>
+              </button>
             `}
-            <button class="btn-icon btn-danger-ghost" style="width: 25px; height: 25px; border-radius: 4px;" title="${isConverted ? 'Quotation sudah dikonversi ke order' : 'Hapus Quotation'}" onclick="event.stopPropagation(); ${isConverted ? `showToast('Surat Penawaran #${quo.id} tidak dapat dihapus karena sudah dikonversikan ke Order Penjualan #${existingOrder.id}!', 'warning')` : `deleteResource('quotations', '${quo.id}')`}">
-              <i data-lucide="trash-2" style="width: 13px; height: 13px; ${isConverted ? 'opacity: 0.4;' : ''}"></i>
-            </button>
           </div>
         </td>
       </tr>
@@ -740,6 +762,14 @@ function toggleQuotationTypeUI(type) {
 // FORMULIR QUOTATION (MODAL CREATE & EDIT)
 // -------------------------------------------------------------
 function openQuotationModal(quotationData = null) {
+  if (isQuotationReadOnlyForUser()) {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation.', 'warning');
+    return;
+  }
+  if (quotationData && isQuotationDraft(quotationData) && !isQuotationVisibleToUser(quotationData)) {
+    showToast('🔒 Draft Quotation ini hanya dapat diakses oleh pembuat draft atau Administrator.', 'warning');
+    return;
+  }
   if (quotationData && quotationData.id) {
     const existingOrder = (state.orders || []).find(o => o.quotationId === quotationData.id || (o.notes && o.notes.includes(quotationData.id)));
     if (existingOrder) {
@@ -1438,6 +1468,11 @@ async function submitQuotation(event, id, saveMode = 'publish') {
     event.preventDefault();
   }
 
+  if (isQuotationReadOnlyForUser()) {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation.', 'warning');
+    return;
+  }
+
   const form = (event && event.target && event.target.tagName === 'FORM')
     ? event.target
     : (event?.target?.closest?.('form') || document.getElementById('quotation-form'));
@@ -1451,6 +1486,10 @@ async function submitQuotation(event, id, saveMode = 'publish') {
   const existingQuo = isEdit ? (state.quotations || []).find(q => q.id === id) : null;
 
   if (isEdit) {
+    if (existingQuo && isQuotationDraft(existingQuo) && !isQuotationVisibleToUser(existingQuo)) {
+      showToast('🔒 Draft Quotation ini hanya dapat diubah oleh pembuat draft atau Administrator.', 'warning');
+      return;
+    }
     const existingOrder = (state.orders || []).find(o => o.quotationId === id || (o.notes && o.notes.includes(id)));
     if (existingOrder) {
       showToast(`⚠️ Surat Penawaran #${id} tidak dapat diedit/disimpan karena sudah dikonversikan ke Order Penjualan #${existingOrder.id}!`, 'error');
@@ -1559,7 +1598,7 @@ async function submitQuotation(event, id, saveMode = 'publish') {
     validUntil: form.validUntil ? form.validUntil.value : '',
     status: nextStatus,
     isDraft: isDraftSave,
-    createdBy: existingQuo?.createdBy || activeUser?.email || activeUser?.name || '',
+    createdBy: existingQuo?.createdBy || activeUser?.email || activeUser?.name || activeUser?.id || '',
     publishedAt: isDraftSave
       ? null
       : (wasDraftOrRejected ? nowIso : (existingQuo?.publishedAt || existingQuo?.createdAt || nowIso)),
@@ -1647,9 +1686,18 @@ async function submitQuotation(event, id, saveMode = 'publish') {
 }
 
 async function publishDraftQuotation(id) {
+  if (isQuotationReadOnlyForUser()) {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation.', 'warning');
+    return;
+  }
   const quo = (state.quotations || []).find(q => q.id === id);
   if (!quo) {
     showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  if (isQuotationDraft(quo) && !isQuotationVisibleToUser(quo)) {
+    showToast('🔒 Hanya pembuat draft atau Administrator yang dapat menerbitkan Draft Quotation ini.', 'warning');
     return;
   }
 
@@ -1727,9 +1775,17 @@ async function publishDraftQuotation(id) {
 window.publishDraftQuotation = publishDraftQuotation;
 
 function editQuotation(id) {
+  if (isQuotationReadOnlyForUser()) {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat dan tidak dapat mengedit Quotation.', 'warning');
+    return;
+  }
   const quotation = (state.quotations || []).find(q => q.id === id);
   if (!quotation) {
     showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+  if (isQuotationDraft(quotation) && !isQuotationVisibleToUser(quotation)) {
+    showToast('🔒 Draft Quotation ini hanya dapat diakses oleh pembuat draft atau Administrator.', 'warning');
     return;
   }
   const existingOrder = (state.orders || []).find(o => o.quotationId === quotation.id || (o.notes && o.notes.includes(quotation.id)));
@@ -2068,6 +2124,10 @@ function viewQuotationDetail(id) {
     showToast('Data penawaran tidak ditemukan!', 'error');
     return;
   }
+  if (isQuotationDraft(quo) && !isQuotationVisibleToUser(quo)) {
+    showToast('🔒 Draft Quotation ini bersifat privat dan hanya dapat dilihat oleh pembuat draft atau Administrator.', 'warning');
+    return;
+  }
 
   if (typeof ensureQuotationApprovalData === 'function') {
     ensureQuotationApprovalData(quo);
@@ -2102,6 +2162,7 @@ function viewQuotationDetail(id) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : (typeof getLoggedInUser === 'function' ? getLoggedInUser() : null);
   const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || '');
   const isAdmin = currentRole === 'Administrator';
+  const isPPIC = currentRole === 'PPIC';
   const isKetuaUbm = currentRole === 'Ketua UBM';
   const isDirektur = currentRole === 'Direktur' || (currentRole.toLowerCase().includes('direktur') && !currentRole.toLowerCase().includes('wakil'));
 
@@ -2165,7 +2226,9 @@ function viewQuotationDetail(id) {
             <i data-lucide="x" style="width: 12px; height: 12px;"></i> Tolak
           </button>
         ` : ''}
-        ${isDraft ? `
+        ${isPPIC ? `
+          <span class="badge" style="font-size: 11px; padding: 4px 9px; background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; font-weight: 700;">Mode Lihat (PPIC)</span>
+        ` : (isDraft ? `
           <button type="button" class="btn btn-sm btn-primary" style="background: #16a34a; border-color: #16a34a; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="publishDraftQuotation('${quo.id}')" title="Terbitkan Draft ke Ketua UBM dan Direktur untuk persetujuan">
             <i data-lucide="send"></i> Terbitkan ke Pimpinan
           </button>
@@ -2201,7 +2264,7 @@ function viewQuotationDetail(id) {
               <i data-lucide="lock" style="width: 13px; height: 13px; color: #94a3b8;"></i> Menunggu Persetujuan Lengkap
             </button>
           `)}
-        `}
+        `)}
       </div>
     </div>
 
@@ -2234,6 +2297,10 @@ function printQuotationPDF(id) {
     showToast('Data penawaran tidak ditemukan!', 'error');
     return;
   }
+  if (isQuotationDraft(quo) && !isQuotationVisibleToUser(quo)) {
+    showToast('🔒 Draft Quotation ini bersifat privat dan hanya dapat diakses oleh pembuat draft atau Administrator.', 'warning');
+    return;
+  }
   if (isQuotationDraft(quo)) {
     showToast(`📝 Quotation #${quo.id} masih berstatus Draft sehingga belum dapat dicetak. Klik Terbitkan terlebih dahulu!`, 'warning');
     return;
@@ -2261,6 +2328,10 @@ async function shareQuotationWhatsApp(id) {
   const quo = (state.quotations || []).find(q => q.id === id);
   if (!quo) {
     showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+  if (isQuotationDraft(quo) && !isQuotationVisibleToUser(quo)) {
+    showToast('🔒 Draft Quotation ini bersifat privat dan hanya dapat diakses oleh pembuat draft atau Administrator.', 'warning');
     return;
   }
 
@@ -2601,9 +2672,17 @@ async function copyQuotationImageToClipboard() {
 // KONVERSI QUOTATION KE ORDER PENJUALAN
 // -------------------------------------------------------------
 function convertQuotationToOrder(id) {
+  if (isQuotationReadOnlyForUser()) {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation.', 'warning');
+    return;
+  }
   const quo = (state.quotations || []).find(q => q.id === id);
   if (!quo) {
     showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+  if (isQuotationDraft(quo) && !isQuotationVisibleToUser(quo)) {
+    showToast('🔒 Draft Quotation ini hanya dapat diakses oleh pembuat draft atau Administrator.', 'warning');
     return;
   }
 

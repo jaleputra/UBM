@@ -242,7 +242,7 @@ const DEFAULT_ROLES = [
     canApproveOrder: false,
     canAssignLead: false,
     canRegisterMembers: true,
-    canManageTimeline: true,
+    canManageTimeline: false,
     canManageBOM: true,
     canApproveBOM: false,
     canSubmitPR: true,

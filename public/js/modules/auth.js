@@ -144,11 +144,11 @@ const ROLE_PERMISSIONS = {
   },
   'PPIC': {
     name: 'PPIC',
-    allowedViews: ['dashboard', 'logs', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'settings'],
+    allowedViews: ['dashboard', 'logs', 'quotations', 'orders', 'projects', 'bom', 'bom-form', 'purchasing', 'project-reports', 'timeline', 'service', 'maintenance', 'settings'],
     canApproveOrder: false,
     canAssignLead: false,
     canRegisterMembers: true,
-    canManageTimeline: true,
+    canManageTimeline: false,
     canManageBOM: true,
     canApproveBOM: false,
     canSubmitPR: true,

@@ -242,7 +242,9 @@ function navigateTo(viewName) {
   const btnEl = document.getElementById('quick-create-label');
   const quickBtn = document.getElementById('btn-quick-create');
   if (quickBtn) {
-    if (info.btn) {
+    const activeUserNav = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const activeRoleNav = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUserNav) : 'Member';
+    if (info.btn && !(activeRoleNav === 'PPIC' && viewName === 'quotations')) {
       quickBtn.style.display = 'inline-flex';
       if (btnEl) btnEl.textContent = info.btn;
     } else {
@@ -258,6 +260,16 @@ function navigateTo(viewName) {
 }
 
 function handleQuickCreate() {
+  const activeUserQc = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const activeRoleQc = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUserQc) : 'Member';
+  if (activeRoleQc === 'PPIC' && state.currentView === 'quotations') {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation.', 'warning');
+    return;
+  }
+  if (activeRoleQc === 'PPIC' && state.currentView === 'projects') {
+    showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Project Management & Timeline.', 'warning');
+    return;
+  }
   switch (state.currentView) {
     case 'logs': if (typeof focusLogForm === 'function') focusLogForm(); break;
     case 'quotations': openQuotationModal(); break;
@@ -651,6 +663,32 @@ function renderCurrentView() {
 
 // Global Delete Resource Helper
 async function deleteResource(resource, id) {
+  if (resource === 'quotations') {
+    const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+    if (currentRole === 'PPIC') {
+      showToast('⚠️ Role PPIC hanya memiliki akses melihat pada halaman Quotation dan tidak dapat menghapus data!', 'warning');
+      return;
+    }
+    const targetQuo = (state.quotations || []).find(q => q.id === id);
+    if (targetQuo && typeof isQuotationDraft === 'function' && isQuotationDraft(targetQuo) && typeof isQuotationVisibleToUser === 'function' && !isQuotationVisibleToUser(targetQuo, activeUser)) {
+      showToast('🔒 Draft Quotation ini hanya dapat dihapus oleh pembuat draft atau Administrator!', 'warning');
+      return;
+    }
+  }
+
+  if (resource === 'purchasing' || resource === 'orders' || resource === 'projects') {
+    const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const currentRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
+    if (currentRole !== 'Administrator') {
+      const resourceLabel = resource === 'purchasing'
+        ? 'Dokumen PR'
+        : (resource === 'orders' ? 'Order Penjualan' : 'Project Management');
+      showToast(`⚠️ Aksi Hapus ${resourceLabel} hanya dapat dilakukan oleh Administrator!`, 'warning');
+      return;
+    }
+  }
+
   if (!confirm(`Apakah Anda yakin ingin menghapus data ${resource.toUpperCase()} dengan ID: ${id}?`)) {
     return;
   }

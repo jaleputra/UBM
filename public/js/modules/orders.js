@@ -38,6 +38,55 @@ function isOrderDualApproved(order) {
   return Boolean(order.approvalKetuaUbm && order.approvalWadir1);
 }
 
+// Helper: Cek secara ketat apakah user merupakan Project Lead yang ditugaskan pada project untuk order ini
+function isStrictProjectLeadForOrder(order, user = null) {
+  if (!order) return false;
+  const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
+  if (!u) return false;
+  const uName = (u.name || '').trim().toLowerCase();
+  const uEmail = (u.email || '').trim().toLowerCase();
+  if (!uName && !uEmail) return false;
+
+  const projects = (typeof state !== 'undefined' && Array.isArray(state.projects)) ? state.projects : [];
+  const linkedProject = projects.find(p => p.orderId === order.id || p.id === order.id);
+  const rawLead = (linkedProject?.projectLead || order.projectLead || '').trim().toLowerCase();
+  if (!rawLead || rawLead === 'belum diassign') return false;
+
+  return Boolean(
+    rawLead === uName ||
+    rawLead === uEmail ||
+    (uName && uName.length > 2 && rawLead.includes(uName)) ||
+    (uName && rawLead.length > 2 && uName.includes(rawLead)) ||
+    (uEmail && rawLead.includes(uEmail))
+  );
+}
+
+// Helper: Cek apakah user berhak mengedit Order Penjualan
+// - Jika sudah disetujui lengkap oleh Ketua UBM & Wakil Direktur I: tidak dapat diedit oleh role apapun
+// - Jika belum disetujui lengkap: hanya Administrator dan Project Lead pada project tersebut
+function canUserEditOrderRecord(order, user = null) {
+  if (!order) return { allowed: false, reason: 'not_found', message: 'Data Order Penjualan tidak ditemukan.' };
+  if (isOrderDualApproved(order)) {
+    return {
+      allowed: false,
+      reason: 'dual_approved',
+      message: '🔒 Order Penjualan ini sudah disetujui lengkap oleh Ketua UBM dan Wakil Direktur I sehingga tidak dapat diedit oleh role apapun!'
+    };
+  }
+  const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(u) : (u?.role || 'Member');
+  if (roleName === 'Administrator' || isStrictProjectLeadForOrder(order, u)) {
+    return { allowed: true };
+  }
+  return {
+    allowed: false,
+    reason: 'unauthorized',
+    message: '⚠️ Tombol Edit Order Penjualan hanya dapat diakses oleh Administrator dan Project Lead pada project tersebut!'
+  };
+}
+window.isStrictProjectLeadForOrder = isStrictProjectLeadForOrder;
+window.canUserEditOrderRecord = canUserEditOrderRecord;
+
 function promptDualApprovalRequired(orderId) {
   const order = (state.orders || []).find(o => o.id === orderId);
   const ketuaOk = Boolean(order?.approvalKetuaUbm);
@@ -212,8 +261,14 @@ function renderOrdersTable() {
     } else {
       const hasValidBOM = hasBOM && !isBOMDitolak;
       const isProjectActiveAllowed = isPOAndAccepted && hasProjectLead && hasValidBOM;
+      const canEditTimelineOrder = typeof canUserEditProjectTimeline === 'function'
+        ? canUserEditProjectTimeline(project || order.id, activeUser)
+        : (roleName === 'Administrator' || isStrictProjectLeadForOrder(order, activeUser));
+      const projectBtnTitle = canEditTimelineOrder
+        ? 'Project Management (Timeline & Milestone)'
+        : 'Project Management - Timeline & Milestone (Mode Lihat)';
       btnProject = isProjectActiveAllowed ?
-        `<button class="btn-icon" style="color: #8b5cf6;" title="Project Management (Timeline & Milestone)" onclick="event.stopPropagation(); openProjectTimelinePage('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
+        `<button class="btn-icon" style="color: #8b5cf6;" title="${projectBtnTitle}" onclick="event.stopPropagation(); openProjectTimelinePage('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
         (isPOAndAccepted ?
           `<button class="btn-icon" style="color: #a855f7; opacity: 0.75;" title="${!hasProjectLead ? 'Tentukan Project Leader terlebih dahulu (Klik untuk membuka Penugasan Tim)' : 'Isi dan simpan BOM terlebih dahulu'}" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>` :
           `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Wajib upload PO Pelanggan terlebih dahulu" onclick="event.stopPropagation(); promptProjectManagementDisabled('${order.id}')"><i data-lucide="folder-kanban"></i></button>`);
@@ -223,13 +278,21 @@ function renderOrdersTable() {
     const btnSuratTugas = hasProjectLead ?
       `<button class="btn-icon" style="color: #4338ca;" title="Cetak / Preview Surat Tugas Resmi" onclick="event.stopPropagation(); if (typeof exportTeamAssignmentLetterPDF === 'function') exportTeamAssignmentLetterPDF('${order.id}');"><i data-lucide="printer"></i></button>` : '';
 
-    // Tombol 4: Edit Order
-    const btnEdit = `<button class="btn-icon" title="Edit Order Penjualan" onclick="event.stopPropagation(); editOrder('${order.id}')"><i data-lucide="edit-2"></i></button>`;
+    // Tombol 4: Edit Order (Hanya Administrator & Project Lead pada project terkait, serta TERKUNCI TOTAL jika sudah disetujui Ketua UBM & Wadir I)
+    const editAccess = canUserEditOrderRecord(order, activeUser);
+    const btnEdit = isDualApproved
+      ? `<button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="🔒 Terkunci: Order sudah disetujui oleh Ketua UBM & Wadir I (Tidak dapat diedit oleh role apapun)" onclick="event.stopPropagation(); showToast('🔒 Order Penjualan ini sudah disetujui lengkap oleh Ketua UBM dan Wakil Direktur I sehingga tidak dapat diedit oleh role apapun!', 'warning')"><i data-lucide="edit-2"></i></button>`
+      : (editAccess.allowed
+        ? `<button class="btn-icon" title="Edit Order Penjualan" onclick="event.stopPropagation(); editOrder('${order.id}')"><i data-lucide="edit-2"></i></button>`
+        : '');
 
-    // Tombol 5: Hapus Order (Tetap aktif untuk Administrator)
-    const btnDelete = `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>`;
+    // Tombol 5: Hapus Order (Hanya dapat diakses oleh Administrator)
+    const isStrictAdmin = roleName === 'Administrator';
+    const btnDelete = isStrictAdmin
+      ? `<button class="btn-icon btn-danger-ghost" title="Hapus Order" onclick="event.stopPropagation(); deleteResource('orders', '${order.id}')"><i data-lucide="trash-2"></i></button>`
+      : '';
 
-    // Action Buttons: Jika BELUM disetujui keduanya, seluruh tombol pengerjaan TERKUNCI!
+    // Action Buttons: Jika BELUM disetujui keduanya, tombol pengerjaan terkunci; namun tombol Edit aktif bagi Administrator & Project Lead terkait
     let actionsHtml = '';
     if (!isDualApproved) {
       actionsHtml = `
@@ -238,7 +301,7 @@ function renderOrdersTable() {
           <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="printer"></i></button>
           <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="boxes"></i></button>
           <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="${isService ? 'car' : 'folder-kanban'}"></i></button>
-          <button class="btn-icon" style="color: #94a3b8; cursor: not-allowed; opacity: 0.35;" title="⚠️ Menunggu persetujuan lengkap Ketua UBM & Wadir I" onclick="event.stopPropagation(); promptDualApprovalRequired('${order.id}')"><i data-lucide="edit-2"></i></button>
+          ${btnEdit}
           ${btnDelete}
         </div>
       `;
@@ -770,18 +833,28 @@ function promptBOMDisabled(orderId) {
 }
 
 function promptProjectManagementDisabled(orderId) {
+  const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const roleName = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
   const order = (state.orders || []).find(o => o.id === orderId);
   const isService = isServiceOrder(order);
   const hasPO = Boolean(order?.poDocument?.url || order?.poFileUrl || order?.poDocument?.name || order?.poFileName);
   const isAccepted = order?.status === 'Accepted' || ['Confirmed', 'In Production', 'Delivered'].includes(order?.status);
+  const project = (state.projects || []).find(p => p.orderId === orderId);
+  const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
+
+  if (roleName === 'PPIC') {
+    if (project && typeof openProjectTimelinePage === 'function') {
+      openProjectTimelinePage(orderId);
+      return;
+    }
+    showToast('⚠️ Timeline Project Management belum tersedia (PO Pelanggan, Project Leader, atau BOM belum lengkap). Role PPIC hanya dapat melihat apabila Timeline telah tersedia.', 'warning');
+    return;
+  }
 
   if (!hasPO || !isAccepted) {
     promptPenugasanDisabled(orderId);
     return;
   }
-
-  const project = (state.projects || []).find(p => p.orderId === orderId);
-  const hasProjectLead = Boolean(project?.projectLead && project.projectLead.trim() !== '' && project.projectLead !== 'Belum diassign');
 
   if (!hasProjectLead) {
     showToast('⚠️ Tentukan Project Leader terlebih dahulu pada menu Penugasan Tim!', 'warning');
@@ -963,6 +1036,13 @@ function autoFillOrderFromQuotation(quoId) {
 
 function openOrderModal(orderData = null) {
   const isEdit = !!(orderData && orderData.id && orderData.id !== 'undefined');
+  if (isEdit) {
+    const editAccess = canUserEditOrderRecord(orderData);
+    if (!editAccess.allowed) {
+      showToast(editAccess.message, 'warning');
+      return;
+    }
+  }
   const quotationId = orderData?.quotationId || (orderData?.notes && (orderData.notes.match(/QUO-[\w-]+/i) || [])[0]) || '';
   const isService = isServiceOrder(orderData);
   const canApprove = (typeof hasRolePermission === 'function') ? hasRolePermission('canApproveOrder') : true;
@@ -1592,6 +1672,17 @@ async function submitOrder(e, editId = '') {
     editId = '';
   }
 
+  if (editId) {
+    const existingForGuard = (state.orders || []).find(o => o.id === editId);
+    if (existingForGuard) {
+      const editAccess = canUserEditOrderRecord(existingForGuard);
+      if (!editAccess.allowed) {
+        showToast(editAccess.message, 'warning');
+        return;
+      }
+    }
+  }
+
   const form = e.target;
   const submitBtn = document.getElementById('order-form-submit-btn') || form.querySelector('button[type="submit"]');
   const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
@@ -1953,12 +2044,18 @@ function viewOrderDetail(orderId) {
        </button>`;
   } else {
     const hasValidBOM = hasBOM && !isBOMDitolak;
+    const activeUserOrderModal = typeof getAuthUser === 'function' ? getAuthUser() : null;
+    const roleNameOrderModal = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUserOrderModal) : (activeUserOrderModal?.role || 'Member');
+    const canEditTimelineModal = typeof canUserEditProjectTimeline === 'function'
+      ? canUserEditProjectTimeline(order.id, activeUserOrderModal)
+      : (roleNameOrderModal === 'Administrator' || isStrictProjectLeadForOrder(order, activeUserOrderModal));
+    const timelineBtnLabel = canEditTimelineModal ? 'Timeline & Milestone' : 'Lihat Timeline & Milestone';
     timelineBtnModal = (isPOAndAccepted && hasProjectLead && hasValidBOM) ?
       `<button type="button" class="btn btn-sm btn-primary" style="background: #4f46e5; border-color: #4f46e5; font-size: 11.5px;" onclick="closeModal('preview-modal'); openProjectTimelinePage('${order.id}')">
-         <i data-lucide="folder-kanban"></i> Timeline & Milestone
+         <i data-lucide="folder-kanban"></i> ${timelineBtnLabel}
        </button>` :
       `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="${!isDualApproved ? `promptDualApprovalRequired('${order.id}')` : `promptProjectManagementDisabled('${order.id}')`}" title="${!isDualApproved ? '⚠️ Menunggu persetujuan Ketua UBM & Wadir I' : isBOMDitolak ? '⚠️ Formula BOM Ditolak' : '⚠️ Wajib isi BOM terlebih dahulu'}">
-         <i data-lucide="folder-kanban"></i> Timeline & Milestone
+         <i data-lucide="folder-kanban"></i> ${timelineBtnLabel}
        </button>`;
 
     const projForOrder = (state.projects || []).find(p => p.orderId === order.id);
@@ -1974,13 +2071,15 @@ function viewOrderDetail(orderId) {
        </button>`;
   }
 
-  const editBtnModal = isDualApproved ?
+  const modalEditAccess = canUserEditOrderRecord(order);
+  const editBtnModal = modalEditAccess.allowed ?
     `<button type="button" class="btn btn-sm btn-outline" style="font-size: 11.5px;" onclick="closeModal('preview-modal'); editOrder('${order.id}')">
        <i data-lucide="edit-2"></i> Edit Order
      </button>` :
-    `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="promptDualApprovalRequired('${order.id}')" title="⚠️ Menunggu persetujuan Ketua UBM & Wadir I">
-       <i data-lucide="edit-2"></i> Edit Order
-     </button>`;
+    (isDualApproved ?
+      `<button type="button" class="btn btn-sm btn-outline" style="color: #94a3b8; border-color: #e2e8f0; opacity: 0.5; font-size: 11.5px; cursor: not-allowed;" onclick="showToast('🔒 Order Penjualan ini sudah disetujui lengkap oleh Ketua UBM dan Wakil Direktur I sehingga tidak dapat diedit oleh role apapun!', 'warning')" title="🔒 Terkunci: Sudah disetujui Ketua UBM & Wadir I">
+         <i data-lucide="lock"></i> Edit Terkunci
+       </button>` : '');
 
   const suratTugasBtnModal = (isDualApproved && hasProjectLead) ?
     `<button type="button" class="btn btn-sm btn-outline" style="color: #4338ca; border-color: #c7d2fe; font-size: 11.5px;" onclick="closeModal('preview-modal'); if (typeof exportTeamAssignmentLetterPDF === 'function') exportTeamAssignmentLetterPDF('${order.id}');" title="Cetak / Preview Surat Tugas Resmi">
@@ -2296,8 +2395,14 @@ function viewOrderDetail(orderId) {
 }
 
 function editOrder(orderId) {
-  const order = state.orders.find(o => o.id === orderId);
-  if (order) openOrderModal(order);
+  const order = (state.orders || []).find(o => o.id === orderId);
+  if (!order) return;
+  const editAccess = canUserEditOrderRecord(order);
+  if (!editAccess.allowed) {
+    showToast(editAccess.message, 'warning');
+    return;
+  }
+  openOrderModal(order);
 }
 
 // Global Window Exports
