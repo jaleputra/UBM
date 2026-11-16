@@ -4,6 +4,10 @@
 
 function isQuotationDraft(quo) {
   if (!quo) return false;
+  if (quo.status && quo.status !== 'Draft') {
+    quo.isDraft = false;
+    return false;
+  }
   return quo.status === 'Draft' || Boolean(quo.isDraft);
 }
 window.isQuotationDraft = isQuotationDraft;
@@ -570,6 +574,9 @@ function renderQuotationsTable() {
                 <button class="btn-icon" style="color: #94a3b8; opacity: 0.35; cursor: not-allowed; width: 25px; height: 25px; border-radius: 4px;" title="Quotation Draft tidak dapat dicetak. Terbitkan terlebih dahulu." onclick="event.stopPropagation(); showToast('📝 Quotation masih berstatus Draft sehingga belum dapat dicetak. Klik Terbitkan terlebih dahulu!', 'warning')">
                   <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
                 </button>
+                <button class="btn-icon" style="color: #0d9488; width: 25px; height: 25px; border-radius: 4px;" title="Copy Pesan Body Email Penawaran" onclick="event.stopPropagation(); copyQuotationEmailMessage('${quo.id}')">
+                  <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
+                </button>
                 <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Lihat Pratinjau Draft" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
                   <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
                 </button>
@@ -585,6 +592,9 @@ function renderQuotationsTable() {
               ` : `
                 <button class="btn-icon" style="color: #4338ca; width: 25px; height: 25px; border-radius: 4px;" title="Cetak / Simpan PDF Surat Penawaran" onclick="event.stopPropagation(); printQuotationPDF('${quo.id}')">
                   <i data-lucide="printer" style="width: 13px; height: 13px;"></i>
+                </button>
+                <button class="btn-icon" style="color: #0d9488; width: 25px; height: 25px; border-radius: 4px;" title="Copy Pesan Body Email Penawaran" onclick="event.stopPropagation(); copyQuotationEmailMessage('${quo.id}')">
+                  <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
                 </button>
                 <button class="btn-icon" style="color: #0284c7; width: 25px; height: 25px; border-radius: 4px;" title="Pratinjau Dokumen Quotation" onclick="event.stopPropagation(); viewQuotationDetail('${quo.id}')">
                   <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
@@ -1833,55 +1843,55 @@ function buildQuotationPrintableHtml(quo) {
   return `
     <div class="doc-preview" style="background: #ffffff; color: #0f172a; width: 100%; max-width: 100%; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       <!-- HEADER KOP SURAT UBM -->
-      <div class="doc-header" style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <div class="doc-header" style="border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-          <div style="font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">${escapeHtml(compSettings.companyName.toUpperCase())}</div>
-          <div style="font-size: 13px; font-weight: 700; color: #2563eb;">${escapeHtml(compSettings.parentInstitution.toUpperCase())}</div>
-          <div class="text-muted font-sm" style="margin-top: 4px; line-height: 1.4; font-size: 11px;">
+          <div style="font-size: 16px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">${escapeHtml(compSettings.companyName.toUpperCase())}</div>
+          <div style="font-size: 12px; font-weight: 700; color: #2563eb;">${escapeHtml(compSettings.parentInstitution.toUpperCase())}</div>
+          <div class="text-muted font-sm" style="margin-top: 2px; line-height: 1.35; font-size: 10px;">
             ${escapeHtml(compSettings.address)}<br>
             Telp: ${escapeHtml(compSettings.phone)} &bull; Email: ${escapeHtml(compSettings.email)} &bull; Web: ${escapeHtml(compSettings.website)}
           </div>
         </div>
         <div class="text-right" style="text-align: right;">
-          <h2 style="font-size: 17px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase;">SURAT PENAWARAN HARGA</h2>
-          <div class="font-mono font-bold text-primary" style="font-size: 13.5px; margin-top: 4px;">${quo.id}</div>
+          <h2 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase;">SURAT PENAWARAN HARGA</h2>
+          <div class="font-mono font-bold text-primary" style="font-size: 12.5px; margin-top: 2px;">${quo.id}</div>
           <div style="margin-top: 2px; display: flex; justify-content: flex-end; gap: 4px; flex-wrap: wrap;">
             ${isDraft ? `
-              <span class="badge" style="font-size: 9.5px; padding: 2px 6px; background: #e2e8f0; color: #334155; font-weight: 700;">
+              <span class="badge" style="font-size: 9px; padding: 1px 5px; background: #e2e8f0; color: #334155; font-weight: 700;">
                 📝 DRAFT (BELUM TERBIT)
               </span>
             ` : ''}
-            <span class="badge ${isJasa ? 'badge-info' : 'badge-outline'}" style="font-size: 9.5px; padding: 2px 6px;">
+            <span class="badge ${isJasa ? 'badge-info' : 'badge-outline'}" style="font-size: 9px; padding: 1px 5px;">
               ${isJasa ? '🛠️ Penawaran Jasa & Layanan' : '📦 Penawaran Produk Manufaktur'}
             </span>
           </div>
-          <div class="font-sm text-muted" style="margin-top: 2px; font-size: 11.5px;">Tanggal: <strong>${quo.quotationDate || '-'}</strong></div>
-          <div class="font-sm" style="color: #e11d48; margin-top: 2px; font-size: 11.5px;">Berlaku s/d: <strong>${quo.validUntil || '-'}</strong></div>
+          <div class="font-sm text-muted" style="margin-top: 2px; font-size: 10.5px;">Tanggal: <strong>${quo.quotationDate || '-'}</strong></div>
+          <div class="font-sm" style="color: #e11d48; margin-top: 2px; font-size: 10.5px;">Berlaku s/d: <strong>${quo.validUntil || '-'}</strong></div>
         </div>
       </div>
 
       <!-- KEPADA YTH & INFORMASI PELANGGAN -->
-      <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 18px; padding: 12px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #cbd5e1;">
+      <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-bottom: 8px; padding: 6px 10px; background: #f8fafc; border-radius: 6px; border: 1px solid #cbd5e1;">
         <div>
-          <div class="font-sm font-bold text-muted" style="margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">KEPADA YTH (CALON CUSTOMER):</div>
-          ${customerDisplayName ? `<div class="font-bold text-main" style="font-size: 14px; margin-bottom: 2px;">${escapeHtml(customerDisplayName)}</div>` : (!picDisplayName ? `<div class="font-bold text-main" style="font-size: 14px; margin-bottom: 2px;">-</div>` : '')}
-          ${picDisplayName ? `<div class="font-sm font-bold text-primary" style="font-size: 12px; margin-top: 2px;">UP / PIC (Kontak Person): ${escapeHtml(picDisplayName)}</div>` : ''}
-          ${quo.projectName ? `<div class="font-sm font-bold" style="font-size: 12px; color: #1e40af; margin-top: 4px;">Project: ${escapeHtml(quo.projectName)}</div>` : ''}
-          ${quo.customerAddress && quo.customerAddress !== 'Alamat tidak dicantumkan' ? `<div class="font-sm text-muted" style="margin-top: 2px; font-size: 11px;">${escapeHtml(quo.customerAddress)}</div>` : ''}
-          ${quo.customerPhone ? `<div class="font-sm" style="margin-top: 4px; font-size: 11px;">Telp / WA: <strong>${escapeHtml(quo.customerPhone)}</strong></div>` : ''}
+          <div class="font-sm font-bold text-muted" style="margin-bottom: 3px; font-size: 10px; text-transform: uppercase;">KEPADA YTH (CALON CUSTOMER):</div>
+          ${customerDisplayName ? `<div class="font-bold text-main" style="font-size: 13px; margin-bottom: 2px;">${escapeHtml(customerDisplayName)}</div>` : (!picDisplayName ? `<div class="font-bold text-main" style="font-size: 13px; margin-bottom: 2px;">-</div>` : '')}
+          ${picDisplayName ? `<div class="font-sm font-bold text-primary" style="font-size: 11px; margin-top: 2px;">UP / PIC (Kontak Person): ${escapeHtml(picDisplayName)}</div>` : ''}
+          ${quo.projectName ? `<div class="font-sm font-bold" style="font-size: 11px; color: #1e40af; margin-top: 2px;">Project: ${escapeHtml(quo.projectName)}</div>` : ''}
+          ${quo.customerAddress && quo.customerAddress !== 'Alamat tidak dicantumkan' ? `<div class="font-sm text-muted" style="margin-top: 2px; font-size: 10px;">${escapeHtml(quo.customerAddress)}</div>` : ''}
+          ${quo.customerPhone ? `<div class="font-sm" style="margin-top: 2px; font-size: 10px;">Telp / WA: <strong>${escapeHtml(quo.customerPhone)}</strong></div>` : ''}
         </div>
-        <div style="border-left: 1px dashed #cbd5e1; padding-left: 14px;">
-          <div class="font-sm font-bold text-muted" style="margin-bottom: 4px; font-size: 10.5px; text-transform: uppercase;">INFORMASI PENAWARAN:</div>
-          <div class="font-sm" style="font-size: 11.5px;">No. Referensi: <strong class="font-mono">${quo.id}</strong></div>
-          <div class="font-sm mt-1" style="font-size: 11.5px;">Tipe: <strong>${isJasa ? 'Jasa / Layanan' : 'Produk Manufaktur'}</strong></div>
-          <div class="font-sm mt-1" style="font-size: 11.5px;">Tanggal Terbit: <strong>${quo.quotationDate || '-'}</strong></div>
-          <div class="font-sm mt-1" style="font-size: 11.5px;">Masa Berlaku: <strong>${quo.validUntil || '-'}</strong></div>
-          <div class="font-sm mt-1" style="font-size: 11.5px;">Estimasi Lead Time: <strong>${quo.leadTime || (isJasa ? '7-14 hari kerja' : '14 hari kerja')}</strong></div>
+        <div style="border-left: 1px dashed #cbd5e1; padding-left: 10px;">
+          <div class="font-sm font-bold text-muted" style="margin-bottom: 3px; font-size: 10px; text-transform: uppercase;">INFORMASI PENAWARAN:</div>
+          <div class="font-sm" style="font-size: 10.5px;">No. Referensi: <strong class="font-mono">${quo.id}</strong></div>
+          <div class="font-sm mt-1" style="font-size: 10.5px;">Tipe: <strong>${isJasa ? 'Jasa / Layanan' : 'Produk Manufaktur'}</strong></div>
+          <div class="font-sm mt-1" style="font-size: 10.5px;">Tanggal Terbit: <strong>${quo.quotationDate || '-'}</strong></div>
+          <div class="font-sm mt-1" style="font-size: 10.5px;">Masa Berlaku: <strong>${quo.validUntil || '-'}</strong></div>
+          <div class="font-sm mt-1" style="font-size: 10.5px;">Estimasi Lead Time: <strong>${quo.leadTime || (isJasa ? '7-14 hari kerja' : '14 hari kerja')}</strong></div>
         </div>
       </div>
 
       <!-- TABEL DAFTAR BARANG / JASA (STRICTLY NO HORIZONTAL SCROLL) -->
-      <table class="doc-table" style="width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; margin-bottom: 16px;">
+      <table class="doc-table" style="width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; margin-bottom: 8px;">
         <colgroup>
           ${isJasa ? `
             <col style="width: 6%;">
@@ -1901,56 +1911,56 @@ function buildQuotationPrintableHtml(quo) {
         </colgroup>
         <thead>
           <tr style="background: #f1f5f9;">
-            <th style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">No</th>
-            <th style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;">${isJasa ? 'Uraian Pekerjaan / Layanan Jasa' : 'Deskripsi Produk / Layanan Teknik'}</th>
-            ${!isJasa ? `<th style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Garansi</th>` : ''}
-            <th style="text-align: center; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">Qty</th>
-            ${!isJasa ? `<th style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">Satuan</th>` : ''}
-            <th style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${isJasa ? 'Tarif / Biaya' : 'Harga Satuan'}</th>
-            <th style="text-align: right; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;">Total (Rp)</th>
+            <th style="text-align: center; font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">No</th>
+            <th style="font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">${isJasa ? 'Uraian Pekerjaan / Layanan Jasa' : 'Deskripsi Produk / Layanan Teknik'}</th>
+            ${!isJasa ? `<th style="font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">Garansi</th>` : ''}
+            <th style="text-align: center; font-size: 10.5px; padding: 5px 4px; border: 1px solid #cbd5e1;">Qty</th>
+            ${!isJasa ? `<th style="text-align: center; font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">Satuan</th>` : ''}
+            <th style="text-align: right; font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">${isJasa ? 'Tarif / Biaya' : 'Harga Satuan'}</th>
+            <th style="text-align: right; font-size: 10.5px; padding: 5px 6px; border: 1px solid #cbd5e1;">Total (Rp)</th>
           </tr>
         </thead>
         <tbody>
           ${(quo.items || []).map((it, idx) => `
             <tr>
-              <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${idx + 1}</td>
-              <td style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; word-break: break-word;">
+              <td style="text-align: center; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;">${idx + 1}</td>
+              <td style="font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1; word-break: break-word;">
                 <div class="font-bold">${escapeHtml(it.itemName)}</div>
-                ${it.sku ? `<div class="font-sm text-muted font-mono font-xs" style="font-size: 10px;">${isJasa ? 'Kode' : 'SKU'}: ${escapeHtml(it.sku)}</div>` : ''}
+                ${it.sku ? `<div class="font-sm text-muted font-mono font-xs" style="font-size: 9.5px;">${isJasa ? 'Kode' : 'SKU'}: ${escapeHtml(it.sku)}</div>` : ''}
               </td>
               ${!isJasa ? `
-                <td style="font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1; word-break: break-word;">
-                  <span class="badge badge-secondary font-xs" style="font-size: 9.5px; padding: 2px 4px;">${escapeHtml(
+                <td style="font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1; word-break: break-word;">
+                  <span class="badge badge-secondary font-xs" style="font-size: 9px; padding: 1px 4px;">${escapeHtml(
                     (it.warrantyMonths === 0 || it.warranty === '0' || it.warranty === '0 Bulan' || String(it.warranty).toLowerCase() === 'tidak ada garansi')
                       ? 'Tidak Ada Garansi'
                       : (it.warrantyMonths > 0 ? `${it.warrantyMonths} Bulan` : (it.warranty || quo.warranty || '12 Bulan'))
                   )}</span>
                 </td>
               ` : ''}
-              <td style="text-align: center; font-weight: 700; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">${it.qty}</td>
+              <td style="text-align: center; font-weight: 700; font-size: 10.5px; padding: 4px 4px; border: 1px solid #cbd5e1;">${it.qty}</td>
               ${!isJasa ? `
-                <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(it.unit || 'Unit')}</td>
+                <td style="text-align: center; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;">${escapeHtml(it.unit || 'Unit')}</td>
               ` : ''}
-              <td style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.unitPrice)}</td>
-              <td style="text-align: right; font-weight: 700; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.total || (it.qty * it.unitPrice))}</td>
+              <td style="text-align: right; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.unitPrice)}</td>
+              <td style="text-align: right; font-weight: 700; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(it.total || (it.qty * it.unitPrice))}</td>
             </tr>
           `).join('')}
           ${(quo.additionalServices && quo.additionalServices.length > 0) ? `
             <tr style="background: #f8fafc;">
-              <td colspan="${isJasa ? '5' : '7'}" style="padding: 6px 8px; font-weight: 700; font-size: 10.5px; color: #4338ca; border: 1px solid #cbd5e1; text-transform: uppercase;">
+              <td colspan="${isJasa ? '5' : '7'}" style="padding: 4px 6px; font-weight: 700; font-size: 10px; color: #4338ca; border: 1px solid #cbd5e1; text-transform: uppercase;">
                 Rincian Jasa, Instalasi & Layanan Tambahan (Keterangan Non-BOM)
               </td>
             </tr>
             ${quo.additionalServices.map((svc, sIdx) => `
               <tr>
-                <td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${(quo.items?.length || 0) + sIdx + 1}</td>
-                <td style="font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; color: #4338ca; word-break: break-word;">
+                <td style="text-align: center; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;">${(quo.items?.length || 0) + sIdx + 1}</td>
+                <td style="font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1; color: #4338ca; word-break: break-word;">
                   <div class="font-bold">${escapeHtml(svc.serviceName)}</div>
                 </td>
-                <td style="text-align: center; font-weight: 700; font-size: 11px; padding: 7px 4px; border: 1px solid #cbd5e1;">${svc.qty}</td>
-                ${!isJasa ? `<td style="text-align: center; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;">${escapeHtml(svc.unit || 'Lot')}</td>` : ''}
-                <td style="text-align: right; font-size: 11px; padding: 7px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(svc.unitPrice)}</td>
-                <td style="text-align: right; font-weight: 700; font-size: 11px; padding: 7px 8px; border: 1px solid #cbd5e1; color: #4338ca;" class="font-mono">${formatRupiah(svc.total || (svc.qty * svc.unitPrice))}</td>
+                <td style="text-align: center; font-weight: 700; font-size: 10.5px; padding: 4px 4px; border: 1px solid #cbd5e1;">${svc.qty}</td>
+                ${!isJasa ? `<td style="text-align: center; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;">${escapeHtml(svc.unit || 'Lot')}</td>` : ''}
+                <td style="text-align: right; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1;" class="font-mono">${formatRupiah(svc.unitPrice)}</td>
+                <td style="text-align: right; font-weight: 700; font-size: 10.5px; padding: 4px 6px; border: 1px solid #cbd5e1; color: #4338ca;" class="font-mono">${formatRupiah(svc.total || (svc.qty * svc.unitPrice))}</td>
               </tr>
             `).join('')}
           ` : ''}
@@ -1958,38 +1968,38 @@ function buildQuotationPrintableHtml(quo) {
       </table>
 
       <!-- KALKULASI FINANSIAL -->
-      <div class="doc-totals" style="margin-bottom: 20px;">
-        <div class="calc-summary" style="margin-left: auto; width: 340px;">
+      <div class="doc-totals" style="margin-bottom: 8px; page-break-inside: avoid !important; break-inside: avoid !important;">
+        <div class="calc-summary" style="margin-left: auto; width: 320px;">
           ${mainItemsTotalVal > 0 && servicesTotalVal > 0 ? `
-            <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0;">
+            <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0;">
               <span class="text-muted">${isJasa ? 'Total Jasa Utama:' : 'Total Produk Utama:'}</span>
               <span class="font-mono">${formatRupiah(mainItemsTotalVal)}</span>
             </div>
-            <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; color: #4338ca;">
+            <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0; color: #4338ca;">
               <span>Subtotal Jasa & Instalasi:</span>
               <span class="font-mono">+${formatRupiah(servicesTotalVal)}</span>
             </div>
           ` : ''}
-          <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; font-weight: 600;">
+          <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0; font-weight: 600;">
             <span>${isJasa ? 'Total Jasa:' : 'Total Produk & Jasa:'}</span>
             <span class="font-mono">${formatRupiah(itemsTotalVal)}</span>
           </div>
           ${warrantyFeeVal > 0 ? `
-            <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; color: #16a34a; font-weight: 600;">
+            <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0; color: #16a34a; font-weight: 600;">
               <span>+ Biaya Garansi (5%):</span>
               <span class="font-mono">+${formatRupiah(warrantyFeeVal)}</span>
             </div>
           ` : ''}
-          <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0; font-weight: 700; border-top: 1px dashed #cbd5e1;">
+          <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0; font-weight: 700; border-top: 1px dashed #cbd5e1;">
             <span>${isJasa || warrantyFeeVal <= 0 ? 'Subtotal:' : 'Subtotal (Item + Garansi):'}</span>
             <span class="font-mono">${formatRupiah(quo.subtotal)}</span>
           </div>
           ${discountRow}
-          <div class="calc-row" style="font-size: 11.5px; display: flex; justify-content: space-between; padding: 3px 0;">
+          <div class="calc-row" style="font-size: 11px; display: flex; justify-content: space-between; padding: 2px 0;">
             <span>PPN (${quo.taxRate || 11}%):</span>
             <span class="font-mono">${formatRupiah(quo.taxAmount)}</span>
           </div>
-          <div class="calc-row total" style="border-top: 2px solid #0f172a; padding-top: 6px; font-size: 13.5px; display: flex; justify-content: space-between; font-weight: 700;">
+          <div class="calc-row total" style="border-top: 2px solid #0f172a; padding-top: 4px; font-size: 12.5px; display: flex; justify-content: space-between; font-weight: 700;">
             <span>Grand Total:</span>
             <span class="font-mono text-primary">${formatRupiah(quo.grandTotal)}</span>
           </div>
@@ -1997,9 +2007,9 @@ function buildQuotationPrintableHtml(quo) {
       </div>
 
       <!-- KETENTUAN DAN GARANSI -->
-      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 14px; margin-bottom: 24px; font-size: 11px; line-height: 1.55;">
-        <div class="font-bold text-main" style="margin-bottom: 5px; font-size: 11.5px;">Syarat & Ketentuan Penawaran (Terms & Conditions):</div>
-        <ol style="margin: 0; padding-left: 18px;">
+      <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 10px; line-height: 1.4; page-break-inside: avoid !important; break-inside: avoid !important;">
+        <div class="font-bold text-main" style="margin-bottom: 3px; font-size: 10.5px;">Syarat & Ketentuan Penawaran (Terms & Conditions):</div>
+        <ol style="margin: 0; padding-left: 16px;">
           ${!isJasa && quo.warranty && quo.warranty !== '-' ? `<li><strong>Garansi Produk:</strong> ${escapeHtml(quo.warranty)}</li>` : ''}
           <li><strong>Waktu Penyerahan (Lead Time):</strong> ${escapeHtml(quo.leadTime || (isJasa ? 'Sesuai kesepakatan target milestone.' : 'Sesuai kesepakatan setelah PO diterima.'))}</li>
           <li><strong>Ketentuan Pembayaran:</strong> ${escapeHtml(quo.paymentTerms || 'DP 50%, Pelunasan sebelum barang diserahterimakan.')}</li>
@@ -2030,12 +2040,12 @@ function buildQuotationPrintableHtml(quo) {
             : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(leaderVerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
           ketuaSigHtml = `
-            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
+            <div style="height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 4px auto; text-align: center;">
               <a href="${leaderVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(leaderCleanName)}">
-                <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
+                <div style="width: 56px; height: 56px; max-width: 56px; max-height: 56px; box-sizing: border-box; overflow: hidden; padding: 2px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
                   ${qrSvg}
                 </div>
-                <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
+                <div style="font-size: 7px; color: #047857; font-weight: 700; margin-top: 2px; letter-spacing: 0.2px; text-transform: uppercase; text-align: center;">
                   ✓ TERVERIFIKASI DIGITAL
                 </div>
               </a>
@@ -2043,10 +2053,10 @@ function buildQuotationPrintableHtml(quo) {
           `;
         } else {
           ketuaSigHtml = `
-            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
-              <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
+            <div style="height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 10px; margin: 4px auto; text-align: center;">
+              <div style="border-bottom: 1px dashed #cbd5e1; width: 110px; margin-bottom: 4px;"></div>
               <span>(Tanda Tangan & Cap UBM)</span>
-              <span style="font-size: 8.5px; color: ${isDraft ? '#64748b' : '#b45309'}; margin-top: 2px;">${isDraft ? '(Draft - Belum Diajukan)' : '(Menunggu Persetujuan Ketua UBM)'}</span>
+              <span style="font-size: 8px; color: ${isDraft ? '#64748b' : '#b45309'}; margin-top: 2px;">${isDraft ? '(Draft - Belum Diajukan)' : '(Menunggu Persetujuan Ketua UBM)'}</span>
             </div>
           `;
         }
@@ -2058,12 +2068,12 @@ function buildQuotationPrintableHtml(quo) {
             : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(directorVerifyUrl)}" style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: 0 auto;" alt="QR Code" />`;
 
           directorSigHtml = `
-            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
+            <div style="height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 4px auto; text-align: center;">
               <a href="${directorVerifyUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin: 0 auto;" title="Klik untuk membuka verifikasi tanda tangan: Approved by ${escapeAttr(directorCleanName)}">
-                <div style="width: 72px; height: 72px; max-width: 72px; max-height: 72px; box-sizing: border-box; overflow: hidden; padding: 4px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
+                <div style="width: 56px; height: 56px; max-width: 56px; max-height: 56px; box-sizing: border-box; overflow: hidden; padding: 2px; background: #ffffff; border: 1.5px solid #0f172a; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: pointer;">
                   ${qrSvg}
                 </div>
-                <div style="font-size: 7.5px; color: #047857; font-weight: 700; margin-top: 4px; letter-spacing: 0.25px; text-transform: uppercase; text-align: center;">
+                <div style="font-size: 7px; color: #047857; font-weight: 700; margin-top: 2px; letter-spacing: 0.2px; text-transform: uppercase; text-align: center;">
                   ✓ TERVERIFIKASI DIGITAL
                 </div>
               </a>
@@ -2071,56 +2081,304 @@ function buildQuotationPrintableHtml(quo) {
           `;
         } else {
           directorSigHtml = `
-            <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 11px; margin: 8px auto; text-align: center;">
-              <div style="border-bottom: 1px dashed #cbd5e1; width: 130px; margin-bottom: 6px;"></div>
+            <div style="height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #64748b; font-size: 10px; margin: 4px auto; text-align: center;">
+              <div style="border-bottom: 1px dashed #cbd5e1; width: 110px; margin-bottom: 4px;"></div>
               <span>(Tanda Tangan & Cap Institusi)</span>
-              <span style="font-size: 8.5px; color: ${isDraft ? '#64748b' : '#b45309'}; margin-top: 2px;">${isDraft ? '(Draft - Belum Diajukan)' : '(Menunggu Persetujuan Direktur)'}</span>
+              <span style="font-size: 8px; color: ${isDraft ? '#64748b' : '#b45309'}; margin-top: 2px;">${isDraft ? '(Draft - Belum Diajukan)' : '(Menunggu Persetujuan Direktur)'}</span>
             </div>
           `;
         }
 
         return `
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 22px; padding-top: 14px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px;">
+          <div class="doc-signatures" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 10.5px; page-break-inside: avoid !important; break-inside: avoid !important;">
             <!-- 1. CALON PELANGGAN (KIRI) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Disetujui Oleh (Calon Pelanggan),</div>
-              <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; margin-bottom: 2px; min-height: 18px; letter-spacing: 1.5px;">.........................................</div>
-              <div style="height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 8px auto; text-align: center;">
-                <div style="border-bottom: 1px dashed #94a3b8; width: 130px; margin-bottom: 6px;"></div>
-                <span style="font-style: italic; color: #94a3b8; font-size: 9.5px;">(Tanda Tangan & Cap Perusahaan)</span>
+              <div style="font-weight: 700; color: #475569; font-size: 9.5px; text-transform: uppercase;">Disetujui Oleh (Calon Pelanggan),</div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 2px; margin-bottom: 2px; min-height: 16px; letter-spacing: 1px;">.........................................</div>
+              <div style="height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 4px auto; text-align: center;">
+                <div style="border-bottom: 1px dashed #94a3b8; width: 110px; margin-bottom: 4px;"></div>
+                <span style="font-style: italic; color: #94a3b8; font-size: 8.5px;">(Tanda Tangan & Cap Perusahaan)</span>
               </div>
-              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; ${picDisplayName ? 'text-decoration: underline;' : ''}">
+              <div style="font-weight: bold; margin-top: 2px; font-size: 10.5px; ${picDisplayName ? 'text-decoration: underline;' : ''}">
                 ${picDisplayName ? escapeHtml(picDisplayName) : '( ..................................... )'}
               </div>
-              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">${picDisplayName ? 'PIC / Kontak Person Pelanggan' : 'Tanda Tangan & Cap Perusahaan'}</div>
+              <div class="text-muted" style="font-size: 8.5px; margin-top: 2px;">${picDisplayName ? 'PIC / Kontak Person Pelanggan' : 'Tanda Tangan & Cap Perusahaan'}</div>
             </div>
 
             <!-- 2. KETUA UNIT BISNIS MANDIRI (TENGAH) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Hormat Kami,</div>
-              <div style="font-weight: 700; font-size: 11px; color: #1e40af; margin-top: 2px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
+              <div style="font-weight: 700; color: #475569; font-size: 9.5px; text-transform: uppercase;">Hormat Kami,</div>
+              <div style="font-weight: 700; font-size: 10.5px; color: #1e40af; margin-top: 2px; margin-bottom: 2px; min-height: 16px;">${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}</div>
               ${ketuaSigHtml}
-              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; text-decoration: underline;">
+              <div style="font-weight: bold; margin-top: 2px; font-size: 10.5px; text-decoration: underline;">
                 ${escapeHtml(leaderDisplayName)}
               </div>
-              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.leaderNip || '-')}</div>
+              <div class="text-muted" style="font-size: 8.5px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.leaderNip || '-')}</div>
             </div>
 
             <!-- 3. DIREKTUR POLITEKNIK TAKUMI (KANAN) -->
             <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-              <div style="font-weight: 700; color: #475569; font-size: 10px; text-transform: uppercase;">Mengetahui & Menyetujui,</div>
-              <div style="font-weight: 700; font-size: 11px; color: #9d174d; margin-top: 2px; margin-bottom: 2px; min-height: 18px;">${escapeHtml(compSettings.directorRole || 'Direktur Politeknik Takumi')}</div>
+              <div style="font-weight: 700; color: #475569; font-size: 9.5px; text-transform: uppercase;">Mengetahui & Menyetujui,</div>
+              <div style="font-weight: 700; font-size: 10.5px; color: #9d174d; margin-top: 2px; margin-bottom: 2px; min-height: 16px;">${escapeHtml(compSettings.directorRole || 'Direktur Politeknik Takumi')}</div>
               ${directorSigHtml}
-              <div style="font-weight: bold; margin-top: 2px; font-size: 11px; text-decoration: underline;">
+              <div style="font-weight: bold; margin-top: 2px; font-size: 10.5px; text-decoration: underline;">
                 ${escapeHtml(directorDisplayName)}
               </div>
-              <div class="text-muted" style="font-size: 9px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.directorNip || '-')}</div>
+              <div class="text-muted" style="font-size: 8.5px; margin-top: 2px;">NIP. ${escapeHtml(compSettings.directorNip || '-')}</div>
             </div>
           </div>
         `;
       })()}
     </div>
   `;
+}
+
+// -------------------------------------------------------------
+// GENERATOR & CLIPBOARD COPY UNTUK BODY EMAIL SURAT PENAWARAN
+// -------------------------------------------------------------
+function generateQuotationEmailData(quo) {
+  if (!quo) return { plainText: '', htmlText: '' };
+  const isJasa = quo.quotationType === 'jasa';
+  const compSettings = (typeof getCompanySettings === 'function') ? getCompanySettings() : {
+    companyName: 'Unit Bisnis Mandiri (UBM)',
+    parentInstitution: 'Politeknik Takumi',
+    leaderName: 'Rizaldi Putra, M.Kom.',
+    leaderRole: 'Ketua Unit Bisnis Mandiri (UBM)',
+    email: 'unitbisnis@takumi.ac.id'
+  };
+
+  const rawPic = String(quo.picName || '').trim();
+  const customerName = String(quo.customerName || '').trim();
+  const projectName = String(quo.projectName || quo.customerName || 'Proyek').trim();
+
+  let salutation = 'Yth. Bapak/Ibu,';
+  if (rawPic) {
+    if (/^(bapak|ibu|pak|dr|ir|prof|mr|ms|mrs)\b/i.test(rawPic)) {
+      salutation = `Yth. ${rawPic}`;
+    } else {
+      salutation = `Yth. Bapak/Ibu ${rawPic}`;
+    }
+  } else if (customerName) {
+    salutation = `Yth. Pimpinan / Tim ${customerName}`;
+  }
+
+  const recipientLines = [salutation];
+  if (customerName && (!rawPic || !customerName.toLowerCase().includes(rawPic.toLowerCase()))) {
+    recipientLines.push(customerName);
+  }
+
+  // Ambil rincian item & jasa secara adaptif terhadap proyek
+  const items = [];
+  (quo.items || []).forEach(it => {
+    const name = String(it.itemName || '').trim();
+    if (!name || /^Item Draft(\s+\d+)?$/i.test(name)) return;
+    const desc = String(it.specs || it.description || '').trim();
+    const qtyText = (!isJasa && it.qty) ? ` (Jumlah: ${it.qty} ${it.unit || 'Unit'})` : '';
+    items.push({ name, desc, qtyText });
+  });
+
+  (quo.additionalServices || []).forEach(svc => {
+    const name = String(svc.serviceName || '').trim();
+    if (!name) return;
+    const desc = String(svc.description || '').trim();
+    items.push({ name: `Layanan Tambahan: ${name}`, desc, qtyText: '' });
+  });
+
+  const formattedTotal = 'Rp' + Number(quo.grandTotal || 0).toLocaleString('id-ID');
+  const totalWords = (typeof terbilang === 'function' ? terbilang(quo.grandTotal) : '') + ' Rupiah';
+
+  let notesExtra = '';
+  const rawNotes = String(quo.notes || '').trim();
+  if (rawNotes && !rawNotes.startsWith('1.') && rawNotes.length <= 150) {
+    notesExtra = ' ' + rawNotes.replace(/\n+/g, ' ');
+  }
+
+  const partnerName = customerName ? customerName.replace(/^(PT|CV|Bpk|Ibu|Bapak|CTO\/COO)\s+/i, '') : 'Bapak/Ibu';
+  const projectScope = isJasa ? 'pengembangan dan optimalisasi digital' : 'pengadaan dan manufaktur perangkat/produk teknik';
+  const itemCategoryName = isJasa ? 'layanan' : 'item pekerjaan/produk';
+
+  const leadTimeSnippet = (quo.leadTime && quo.leadTime !== '-' && quo.leadTime !== '14 hari kerja') ? `dengan estimasi waktu pengerjaan ${quo.leadTime}, serta ` : '';
+  const paymentSnippet = (quo.paymentTerms && quo.paymentTerms !== '-')
+    ? `ketentuan pembayaran sebagaimana tercantum dalam dokumen quotation terlampir (${quo.paymentTerms})`
+    : 'ketentuan pembayaran sebagaimana tercantum dalam dokumen quotation terlampir';
+
+  // 1. Plain Text Version (Format poin rapi, spasi enter antar-bagian terstruktur)
+  const plainPoints = items.length > 0
+    ? items.map(it => `• ${it.name}${it.desc ? ` – ${it.desc}` : ''}${it.qtyText}`).join('\n\n')
+    : (isJasa ? '• Layanan dan implementasi sistem sesuai ruang lingkup yang disepakati.' : '• Pengadaan produk manufaktur sesuai spesifikasi teknik.');
+
+  const plainText = `${recipientLines.join('\n')}
+
+Dengan hormat,
+
+Melalui email ini, kami dari Unit Bisnis Mandiri (UBM) Politeknik Takumi bermaksud menyampaikan penawaran ${projectScope} untuk proyek ${projectName}.
+
+Sebagai bahan pertimbangan, bersama email ini kami lampirkan dokumen penawaran harga (Quotation) dengan nomor ${quo.id}, yang mencakup beberapa ${itemCategoryName} berikut:
+
+${plainPoints}
+
+Adapun total nilai penawaran untuk keseluruhan ${isJasa ? 'layanan' : 'pekerjaan'} tersebut adalah ${formattedTotal} (${totalWords})${notesExtra} ${leadTimeSnippet}${paymentSnippet}.
+
+Besar harapan kami agar penawaran ini dapat menjadi kerja sama yang baik antara ${partnerName} dan Politeknik Takumi. Kami terbuka untuk berdiskusi lebih lanjut apabila terdapat hal-hal yang perlu diklarifikasi atau disesuaikan terkait ruang lingkup pekerjaan maupun implementasi layanan.
+
+Demikian penawaran ini kami sampaikan. Atas perhatian dan kesempatan yang diberikan, kami mengucapkan terima kasih.
+
+Hormat kami,
+
+${compSettings.leaderName || 'Rizaldi Putra, M.Kom.'}
+${compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)'}
+${compSettings.parentInstitution || 'Politeknik Takumi'}
+Email: ${compSettings.email || 'unitbisnis@takumi.ac.id'}`;
+
+  // 2. Rich HTML Version (Format Rata Kanan-Kiri / Justified untuk Email Client & Modal)
+  const htmlPoints = items.length > 0
+    ? items.map(it => `<li style="margin-bottom: 8px; text-align: justify; text-justify: inter-word; line-height: 1.65;"><strong>${escapeHtml(it.name)}</strong>${it.desc ? ` – ${escapeHtml(it.desc)}` : ''}${escapeHtml(it.qtyText)}</li>`).join('')
+    : `<li style="text-align: justify; text-justify: inter-word;">${isJasa ? 'Layanan dan implementasi sistem sesuai ruang lingkup yang disepakati.' : 'Pengadaan produk manufaktur sesuai spesifikasi teknik.'}</li>`;
+
+  const htmlText = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.65; color: #1e293b; max-width: 680px;">
+  <p style="margin: 0 0 16px 0; text-align: left; line-height: 1.5;">
+    ${recipientLines.map(l => `<strong>${escapeHtml(l)}</strong>`).join('<br>')}
+  </p>
+
+  <p style="margin: 0 0 16px 0; text-align: left;">Dengan hormat,</p>
+
+  <p style="margin: 0 0 16px 0; text-align: justify; text-justify: inter-word; line-height: 1.65;">
+    Melalui email ini, kami dari Unit Bisnis Mandiri (UBM) Politeknik Takumi bermaksud menyampaikan penawaran ${escapeHtml(projectScope)} untuk proyek <strong>${escapeHtml(projectName)}</strong>.
+  </p>
+
+  <p style="margin: 0 0 10px 0; text-align: justify; text-justify: inter-word; line-height: 1.65;">
+    Sebagai bahan pertimbangan, bersama email ini kami lampirkan dokumen penawaran harga (Quotation) dengan nomor <strong>${escapeHtml(quo.id)}</strong>, yang mencakup beberapa ${escapeHtml(itemCategoryName)} berikut:
+  </p>
+
+  <ul style="margin: 8px 0 16px 20px; padding-left: 10px; line-height: 1.65;">
+    ${htmlPoints}
+  </ul>
+
+  <p style="margin: 0 0 16px 0; text-align: justify; text-justify: inter-word; line-height: 1.65;">
+    Adapun total nilai penawaran untuk keseluruhan ${isJasa ? 'layanan' : 'pekerjaan'} tersebut adalah <strong>${formattedTotal} (${totalWords})</strong>${notesExtra ? escapeHtml(notesExtra) : ''} ${leadTimeSnippet ? escapeHtml(leadTimeSnippet) : ''}${escapeHtml(paymentSnippet)}.
+  </p>
+
+  <p style="margin: 0 0 16px 0; text-align: justify; text-justify: inter-word; line-height: 1.65;">
+    Besar harapan kami agar penawaran ini dapat menjadi kerja sama yang baik antara <strong>${escapeHtml(partnerName)}</strong> dan Politeknik Takumi. Kami terbuka untuk berdiskusi lebih lanjut apabila terdapat hal-hal yang perlu diklarifikasi atau disesuaikan terkait ruang lingkup pekerjaan maupun implementasi layanan.
+  </p>
+
+  <p style="margin: 0 0 20px 0; text-align: justify; text-justify: inter-word; line-height: 1.65;">
+    Demikian penawaran ini kami sampaikan. Atas perhatian dan kesempatan yang diberikan, kami mengucapkan terima kasih.
+  </p>
+
+  <p style="margin: 0; text-align: left; line-height: 1.45;">
+    Hormat kami,<br><br>
+    <strong>${escapeHtml(compSettings.leaderName || 'Rizaldi Putra, M.Kom.')}</strong><br>
+    ${escapeHtml(compSettings.leaderRole || 'Ketua Unit Bisnis Mandiri (UBM)')}<br>
+    ${escapeHtml(compSettings.parentInstitution || 'Politeknik Takumi')}<br>
+    Email: <a href="mailto:${escapeAttr(compSettings.email || 'unitbisnis@takumi.ac.id')}" style="color: #2563eb; text-decoration: none;">${escapeHtml(compSettings.email || 'unitbisnis@takumi.ac.id')}</a>
+  </p>
+</div>`;
+
+  return { plainText, htmlText };
+}
+
+function generateQuotationEmailBody(quo) {
+  const data = generateQuotationEmailData(quo);
+  return data ? data.plainText : '';
+}
+
+async function copyQuotationEmailMessage(quoId) {
+  let quo = null;
+  if (quoId) {
+    quo = (state.quotations || []).find(q => q.id === quoId);
+  }
+  if (!quo) {
+    const modalQuoId = document.getElementById('preview-modal-copy-email-btn')?.dataset?.quoId ||
+                       document.getElementById('quotation-email-modal-copy-btn')?.dataset?.quoId;
+    if (modalQuoId) {
+      quo = (state.quotations || []).find(q => q.id === modalQuoId);
+    }
+  }
+  if (!quo) {
+    showToast('Data penawaran tidak ditemukan untuk disalin!', 'error');
+    return;
+  }
+
+  const { plainText, htmlText } = generateQuotationEmailData(quo);
+  if (!plainText) {
+    showToast('Gagal memformat pesan email penawaran', 'error');
+    return;
+  }
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+      const textBlob = new Blob([plainText], { type: 'text/plain' });
+      const htmlBlob = new Blob([htmlText], { type: 'text/html' });
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': textBlob,
+          'text/html': htmlBlob
+        })
+      ]);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(plainText);
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = plainText;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      textArea.remove();
+    }
+    showToast('✅ Body email penawaran berhasil disalin! (Rata kanan-kiri & tersusun rapi dengan poin)', 'success');
+  } catch (err) {
+    console.warn('Clipboard write HTML fallback:', err);
+    try {
+      await navigator.clipboard.writeText(plainText);
+      showToast('✅ Body email penawaran berhasil disalin ke clipboard!', 'success');
+    } catch (fallbackErr) {
+      console.error('Clipboard error:', fallbackErr);
+      showToast('Gagal menyalin pesan email ke clipboard', 'error');
+    }
+  }
+}
+
+function openQuotationEmailModal(quoId) {
+  let quo = null;
+  if (quoId) {
+    quo = (state.quotations || []).find(q => q.id === quoId);
+  }
+  if (!quo) {
+    const copyBtn = document.getElementById('preview-modal-copy-email-btn');
+    const modalQuoId = copyBtn?.dataset?.quoId;
+    if (modalQuoId) {
+      quo = (state.quotations || []).find(q => q.id === modalQuoId);
+    }
+  }
+  if (!quo) {
+    showToast('Data penawaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  const { htmlText } = generateQuotationEmailData(quo);
+  const container = document.getElementById('quotation-email-preview-content');
+  if (container) {
+    container.innerHTML = htmlText;
+  }
+
+  const copyBtn = document.getElementById('quotation-email-modal-copy-btn');
+  if (copyBtn) {
+    copyBtn.dataset.quoId = quo.id;
+  }
+
+  openModal('quotation-email-modal');
+  if (window.lucide) lucide.createIcons();
+}
+
+if (typeof window !== 'undefined') {
+  window.generateQuotationEmailData = generateQuotationEmailData;
+  window.generateQuotationEmailBody = generateQuotationEmailBody;
+  window.copyQuotationEmailMessage = copyQuotationEmailMessage;
+  window.openQuotationEmailModal = openQuotationEmailModal;
 }
 
 function viewQuotationDetail(id) {
@@ -2240,10 +2498,16 @@ function viewQuotationDetail(id) {
           <button type="button" class="btn btn-sm btn-outline" onclick="closeModal('preview-modal'); editQuotation('${quo.id}')">
             <i data-lucide="edit-3"></i> Edit Draft
           </button>
+          <button type="button" class="btn btn-sm btn-outline" style="color: #0d9488; border-color: #5eead4; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="openQuotationEmailModal('${quo.id}')" title="Lihat & Salin Body Email Penawaran (Format Rata Kanan-Kiri & Poin Rapi)">
+            <i data-lucide="mail"></i> Body Email Penawaran
+          </button>
           <button type="button" class="btn btn-sm" style="background: #e2e8f0; color: #64748b; border: 1px solid #cbd5e1; cursor: not-allowed; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" onclick="promptQuotationDualApprovalRequired('${quo.id}')" title="Quotation masih berstatus Draft">
             <i data-lucide="lock" style="width: 13px; height: 13px; color: #64748b;"></i> Draft Belum Terbit
           </button>
         ` : `
+          <button type="button" class="btn btn-sm btn-outline" style="color: #0d9488; border-color: #5eead4; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="openQuotationEmailModal('${quo.id}')" title="Lihat & Salin Body Email Penawaran (Format Rata Kanan-Kiri & Poin Rapi)">
+            <i data-lucide="mail"></i> Body Email Penawaran
+          </button>
           <button type="button" class="btn btn-sm btn-outline" style="color: #16a34a; border-color: #86efac; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;" onclick="shareQuotationWhatsApp('${quo.id}')">
             <i data-lucide="message-circle"></i> Share WhatsApp (PDF)
           </button>
@@ -2290,6 +2554,12 @@ function viewQuotationDetail(id) {
       modalPrintBtn.style.display = 'inline-flex';
       modalPrintBtn.disabled = false;
     }
+  }
+
+  const modalCopyEmailBtn = document.getElementById('preview-modal-copy-email-btn');
+  if (modalCopyEmailBtn) {
+    modalCopyEmailBtn.dataset.quoId = quo.id;
+    modalCopyEmailBtn.style.display = 'inline-flex';
   }
 
   openModal('preview-modal');

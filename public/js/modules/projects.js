@@ -56,8 +56,9 @@ function isProjectService(p) {
 
 window.isProjectService = isProjectService;
 
-// Helper ketat: HANYA Administrator atau Lead Project yang ditunjuk pada project terkait
-// yang boleh mengedit Timeline & Milestone (role lain seperti PPIC hanya bisa melihat).
+// Helper: Administrator, Lead Project, Anggota Tim (team), serta anggota yang di-tag pada task project
+// berwenang mengedit timeline & task (menambah task, mengedit task, menghapus task, serta menambah & mengedit sub-task).
+// Role monitoring seperti PPIC dan Keuangan hanya berwenang melihat (mode lihat).
 function canUserEditProjectTimeline(projectOrOrderId = null, user = null) {
   const u = user || (typeof getAuthUser === 'function' ? getAuthUser() : null);
   if (!u) return false;
@@ -68,7 +69,7 @@ function canUserEditProjectTimeline(projectOrOrderId = null, user = null) {
   const projects = (typeof state !== 'undefined' && Array.isArray(state.projects)) ? state.projects : [];
   let proj = null;
   if (typeof projectOrOrderId === 'object' && projectOrOrderId !== null) {
-    if (projectOrOrderId.projectLead !== undefined || projectOrOrderId.leadEmail !== undefined) {
+    if (projectOrOrderId.projectLead !== undefined || projectOrOrderId.leadEmail !== undefined || projectOrOrderId.team !== undefined) {
       proj = projectOrOrderId;
     } else if (projectOrOrderId.id || projectOrOrderId.orderId) {
       proj = projects.find(item => item.id === projectOrOrderId.id || item.orderId === projectOrOrderId.id || item.orderId === projectOrOrderId.orderId);
@@ -85,23 +86,54 @@ function canUserEditProjectTimeline(projectOrOrderId = null, user = null) {
 
   if (!proj) return false;
 
-  const rawLead = (proj.projectLead || '').trim().toLowerCase();
-  const rawLeadEmail = (proj.leadEmail || '').trim().toLowerCase();
-  if ((!rawLead || rawLead === 'belum diassign') && !rawLeadEmail) return false;
+  // 1. Cek lewat helper resmi isUserAssignedToProject (Lead, Team, atau Task PIC)
+  if (typeof isUserAssignedToProject === 'function' && isUserAssignedToProject(proj, u)) {
+    return true;
+  }
 
   const uName = (u.name || '').trim().toLowerCase();
   const uEmail = (u.email || '').trim().toLowerCase();
+  const uId = u.id ? String(u.id) : '';
 
+  // 2. Cek Leader
+  const rawLead = (proj.projectLead || '').trim().toLowerCase();
+  const rawLeadEmail = (proj.leadEmail || '').trim().toLowerCase();
   if (uEmail && rawLeadEmail && uEmail === rawLeadEmail) return true;
   if (uEmail && rawLead && (rawLead === uEmail || rawLead.includes(uEmail))) return true;
-  if (!uName) return false;
-  return Boolean(
-    rawLead && (
-      rawLead === uName ||
-      (uName.length > 2 && rawLead.includes(uName)) ||
-      (rawLead.length > 2 && uName.includes(rawLead))
-    )
-  );
+  if (uName && rawLead && (rawLead === uName || (uName.length > 2 && rawLead.includes(uName)) || (rawLead.length > 2 && uName.includes(rawLead)))) {
+    return true;
+  }
+
+  // 3. Cek Anggota Tim (team)
+  if (Array.isArray(proj.team)) {
+    const inTeam = proj.team.some(m => {
+      if (!m) return false;
+      const mName = (typeof m === 'string' ? m : (m.name || '')).trim().toLowerCase();
+      const mEmail = (typeof m === 'object' && m.email ? m.email : '').trim().toLowerCase();
+      const mId = (typeof m === 'object' && (m.id || m.userId) ? String(m.id || m.userId) : '');
+      if (uId && mId && uId === mId) return true;
+      if (uEmail && mEmail && uEmail === mEmail) return true;
+      if (uName && mName && (uName === mName || (uName.length > 2 && mName.includes(uName)) || (mName.length > 2 && uName.includes(mName)))) return true;
+      if (uEmail && mName && (mName === uEmail || mName.includes(uEmail))) return true;
+      return false;
+    });
+    if (inTeam) return true;
+  }
+
+  // 4. Cek apakah user di-tag di salah satu task project
+  const allTasks = Array.isArray(proj.milestones || proj.tasks) ? (proj.milestones || proj.tasks) : [];
+  const inTasks = allTasks.some(ms => {
+    if (!ms) return false;
+    if (typeof isUserTaggedInMilestone === 'function' && isUserTaggedInMilestone(ms, u)) return true;
+    const pics = Array.isArray(ms.pics) && ms.pics.length > 0 ? ms.pics : (ms.pic ? String(ms.pic).split(',').map(s => s.trim()) : []);
+    return pics.some(p => {
+      const pLow = String(p).toLowerCase().trim();
+      return pLow === uName || pLow === uEmail || (uName && pLow.includes(uName));
+    });
+  });
+  if (inTasks) return true;
+
+  return false;
 }
 window.canUserEditProjectTimeline = canUserEditProjectTimeline;
 
@@ -1507,6 +1539,41 @@ const MILESTONE_THEMES = [
   }
 ];
 
+// Helper: check if a user is tagged as PIC in a task/milestone
+function isUserTaggedInMilestone(ms, user) {
+  if (!ms || !user) return false;
+  const uName = (user.name || '').toLowerCase().trim();
+  const uEmail = (user.email || '').toLowerCase().trim();
+  const uUsername = (user.username || '').toLowerCase().trim();
+
+  // 1. Check ms.pic string (single or comma-separated)
+  if (ms.pic && typeof ms.pic === 'string') {
+    const parts = ms.pic.split(',').map(s => s.trim().toLowerCase());
+    if (parts.some(p => p && (p === uName || p === uEmail || p === uUsername))) return true;
+  }
+
+  // 2. Check ms.pics array (strings or objects)
+  if (Array.isArray(ms.pics) && ms.pics.length > 0) {
+    const found = ms.pics.some(p => {
+      const pStr = (typeof p === 'string' ? p : (p?.name || p?.email || '')).trim().toLowerCase();
+      return pStr && (pStr === uName || pStr === uEmail || pStr === uUsername);
+    });
+    if (found) return true;
+  }
+
+  // 3. Check subtasks
+  if (Array.isArray(ms.subtasks)) {
+    const foundSubtask = ms.subtasks.some(st => {
+      const stPic = (st.pic || st.assignedTo || '').toLowerCase().trim();
+      return stPic && (stPic === uName || stPic === uEmail || stPic === uUsername);
+    });
+    if (foundSubtask) return true;
+  }
+
+  return false;
+}
+window.isUserTaggedInMilestone = isUserTaggedInMilestone;
+
 function renderMilestoneCalendarBlocks(project) {
   const container = document.getElementById('timeline-calendar-blocks');
   if (!container) return;
@@ -1517,19 +1584,10 @@ function renderMilestoneCalendarBlocks(project) {
 
   let milestones = project?.milestones || [];
 
-  // Role Member (non-Lead) hanya melihat task yang diberikan oleh lead project padanya.
-  // PPIC, Administrator, Lead Project, dan role monitoring lainnya melihat seluruh milestone (mode lihat/edit).
+  // Role Member (non-Lead) hanya melihat task yang diberikan oleh lead project padanya (ditag).
+  // PPIC, Administrator, Lead Project, dan role monitoring lainnya melihat seluruh task (mode lihat/edit).
   if (roleName === 'Member' && !canEdit && activeUser?.name) {
-    const uName = activeUser.name.toLowerCase().trim();
-    const uEmail = (activeUser.email || '').toLowerCase().trim();
-    milestones = milestones.filter(ms => {
-      const isPic = (ms.pic || '').toLowerCase().trim() === uName || (ms.pic || '').toLowerCase().trim() === uEmail;
-      const isSubtaskPic = Array.isArray(ms.subtasks) && ms.subtasks.some(st => {
-        const stPic = (st.pic || st.assignedTo || '').toLowerCase().trim();
-        return stPic === uName || stPic === uEmail;
-      });
-      return isPic || isSubtaskPic;
-    });
+    milestones = milestones.filter(ms => isUserTaggedInMilestone(ms, activeUser));
   }
 
   // Update badge jumlah tahapan pada switcher tab
@@ -1549,8 +1607,8 @@ function renderMilestoneCalendarBlocks(project) {
       container.innerHTML = `
         <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 16px; text-align: center; color: #64748b;">
           <i data-lucide="calendar" style="width: 22px; height: 22px; margin-bottom: 4px; color: #94a3b8;"></i>
-          <div style="font-weight: 600; font-size: 12.5px;">Belum ada tahapan kerja atau milestone terdaftar.</div>
-          ${canEdit ? `<div style="font-size: 11px; margin-top: 2px;">Klik tombol <strong>"+ Tambah Milestone"</strong> di atas untuk membuat tahapan kerja baru.</div>` : ''}
+          <div style="font-weight: 600; font-size: 12.5px;">Belum ada tahapan kerja atau task terdaftar.</div>
+          ${canEdit ? `<div style="font-size: 11px; margin-top: 2px;">Klik tombol <strong>"+ Tambah Task"</strong> di atas untuk membuat tahapan kerja baru.</div>` : ''}
         </div>
       `;
     }
@@ -1607,9 +1665,9 @@ function renderMilestoneCalendarBlocks(project) {
           </span>
 
           <!-- PIC -->
-          <span style="font-size: 11px; color: #334155; display: inline-flex; align-items: center; gap: 3px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="PIC: ${escapeAttr(ms.pic || 'Belum ada PIC')}">
+          <span style="font-size: 11px; color: #334155; display: inline-flex; align-items: center; gap: 3px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="PIC: ${escapeAttr((Array.isArray(ms.pics) && ms.pics.length > 0) ? ms.pics.join(', ') : (ms.pic || 'Belum ada PIC'))}">
             <i data-lucide="user" style="width: 12px; height: 12px; color: ${theme.primary};"></i>
-            <strong>${escapeHtml(ms.pic || '-')}</strong>
+            <strong>${escapeHtml((Array.isArray(ms.pics) && ms.pics.length > 0) ? ms.pics.join(', ') : (ms.pic || '-'))}</strong>
           </span>
 
           <!-- Subtask Count -->
@@ -1726,16 +1784,7 @@ function renderTimelineMonthCalendar(project) {
   const canEdit = canUserEditProjectTimeline(project || currentActiveProjectData || currentActiveProjectOrderId, activeUser);
   let milestones = project?.milestones || [];
   if (roleName === 'Member' && !canEdit && activeUser?.name) {
-    const uName = activeUser.name.toLowerCase().trim();
-    const uEmail = (activeUser.email || '').toLowerCase().trim();
-    milestones = milestones.filter(ms => {
-      const isPic = (ms.pic || '').toLowerCase().trim() === uName || (ms.pic || '').toLowerCase().trim() === uEmail;
-      const isSubtaskPic = Array.isArray(ms.subtasks) && ms.subtasks.some(st => {
-        const stPic = (st.pic || st.assignedTo || '').toLowerCase().trim();
-        return stPic === uName || stPic === uEmail;
-      });
-      return isPic || isSubtaskPic;
-    });
+    milestones = milestones.filter(ms => isUserTaggedInMilestone(ms, activeUser));
   }
 
   // Determine active year and month
@@ -1929,9 +1978,59 @@ function getProjectPICOfficialOptions(project, selectedPic = '') {
 }
 
 // -------------------------------------------------------------
-// INTERACTIVE MODAL DETAIL MILESTONE
+// INTERACTIVE MODAL DETAIL TASK
 // -------------------------------------------------------------
 let currentEditingMilestoneId = null;
+
+// Multi-PIC tagging helpers for modal
+function renderModalPicTags(pics, canEdit) {
+  const container = document.getElementById('modal-ms-pics-container');
+  if (!container) return;
+  if (!pics || pics.length === 0) {
+    container.innerHTML = '<span class="text-muted font-xs" style="font-size: 11px; font-style: italic; line-height: 24px;">Belum ada PIC ditag.</span>';
+    return;
+  }
+  container.innerHTML = pics.map((p, idx) => `
+    <span class="badge" style="background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; font-size: 11px; padding: 3px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 5px; font-weight: 600;">
+      <i data-lucide="user" style="width: 11px; height: 11px;"></i>
+      <span>${escapeHtml(p)}</span>
+      ${canEdit ? `<button type="button" onclick="handleRemovePicTag(${idx})" style="background: none; border: none; cursor: pointer; color: #4338ca; font-size: 13px; line-height: 1; padding: 0 2px; font-weight: 700; margin-left: 2px;" title="Hapus tag">&times;</button>` : ''}
+    </span>
+  `).join('');
+  if (window.lucide) lucide.createIcons();
+}
+window.renderModalPicTags = renderModalPicTags;
+
+function handleAddPicTagFromSelect(selectEl) {
+  const val = selectEl?.value?.trim();
+  if (!val) return;
+  const jsonInput = document.getElementById('modal-ms-pics-json');
+  let pics = [];
+  try { pics = JSON.parse(jsonInput?.value || '[]'); } catch (e) { pics = []; }
+  if (!pics.some(p => p.toLowerCase() === val.toLowerCase())) {
+    pics.push(val);
+    if (jsonInput) jsonInput.value = JSON.stringify(pics);
+    const hiddenPic = document.getElementById('modal-ms-pic');
+    if (hiddenPic) hiddenPic.value = pics.join(', ');
+    renderModalPicTags(pics, true);
+  }
+  selectEl.value = '';
+}
+window.handleAddPicTagFromSelect = handleAddPicTagFromSelect;
+
+function handleRemovePicTag(idx) {
+  const jsonInput = document.getElementById('modal-ms-pics-json');
+  let pics = [];
+  try { pics = JSON.parse(jsonInput?.value || '[]'); } catch (e) { pics = []; }
+  if (idx >= 0 && idx < pics.length) {
+    pics.splice(idx, 1);
+    if (jsonInput) jsonInput.value = JSON.stringify(pics);
+    const hiddenPic = document.getElementById('modal-ms-pic');
+    if (hiddenPic) hiddenPic.value = pics.join(', ');
+    renderModalPicTags(pics, true);
+  }
+}
+window.handleRemovePicTag = handleRemovePicTag;
 
 function openMilestoneDetailModal(msId) {
   if (!currentActiveProjectData) return;
@@ -1949,15 +2048,9 @@ function openMilestoneDetailModal(msId) {
   }
   const titleEl = document.getElementById('milestone-modal-title');
   if (titleEl) {
-    titleEl.textContent = `Tahap ${idx + 1}: ${ms.title || 'Milestone'}`;
+    titleEl.textContent = `Tahap ${idx + 1}: ${ms.title || 'Task'}`;
   }
   const subEl = document.getElementById('milestone-modal-subtitle');
-  if (subEl) {
-    subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${ms.pic || 'Belum ada PIC'}`;
-  }
-
-  const body = document.getElementById('milestone-modal-body');
-  if (!body) return;
 
   const subtasks = ms.subtasks || [];
   const report = ms.report || { description: '', reportUrl: '', images: [] };
@@ -1969,32 +2062,65 @@ function openMilestoneDetailModal(msId) {
   const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : (ms.status === 'Completed' ? 100 : 0);
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const canEdit = canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
-  const disabledStyle = canEdit ? '' : 'background: #f1f5f9; cursor: not-allowed;';
-  const disabledAttr = canEdit ? '' : 'disabled';
-  const readonlyAttr = canEdit ? '' : 'disabled readonly';
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+  const isProjectMember = Boolean((typeof isUserAssignedToProject === 'function' && isUserAssignedToProject(targetProj, activeUser)) || canEdit || isTaskPic);
+  const canInputReport = Boolean(canEdit || isTaskPic);
 
-  if (subEl && !canEdit) {
-    subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${ms.pic || 'Belum ada PIC'} • 👁️ Mode Lihat`;
+  // Normalize multi-PIC tags
+  let currentPics = [];
+  if (Array.isArray(ms.pics) && ms.pics.length > 0) {
+    currentPics = ms.pics.map(p => typeof p === 'string' ? p.trim() : (p?.name || '')).filter(Boolean);
+  } else if (ms.pic && typeof ms.pic === 'string') {
+    currentPics = ms.pic.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  const seenPics = new Set();
+  currentPics = currentPics.filter(p => {
+    const k = p.toLowerCase();
+    if (seenPics.has(k)) return false;
+    seenPics.add(k);
+    return true;
+  });
+
+  const picDisplay = currentPics.length > 0 ? currentPics.join(', ') : (ms.pic || 'Belum ada PIC');
+  if (subEl) {
+    if (canEdit) {
+      subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${picDisplay}`;
+    } else if (isTaskPic) {
+      subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${picDisplay} • 🛠️ Mode PIC (Input Laporan & Checklist)`;
+    } else if (isProjectMember) {
+      subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${picDisplay} • 💬 Mode Tim (Diskusi & Catatan)`;
+    } else {
+      subEl.textContent = `📅 ${ms.startDate || '-'} s/d ${ms.dueDate || '-'} • PIC: ${picDisplay} • 👁️ Mode Lihat`;
+    }
   }
 
-  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const disabledStyle = canEdit ? '' : 'background: #f1f5f9; cursor: not-allowed;';
+  const readonlyAttr = canEdit ? '' : 'disabled readonly';
+
+  const reportDisabledStyle = canInputReport ? '' : 'background: #f1f5f9; cursor: not-allowed;';
+  const reportReadonlyAttr = canInputReport ? '' : 'disabled readonly';
+  const reportDisabledAttr = canInputReport ? '' : 'disabled';
+
   const picList = getProjectPICOfficialOptions(targetProj, ms.pic);
   let picOptionsHtml = picList.length > 0
-    ? '<option value="">-- Pilih Penanggung Jawab (Leader / Anggota Project) --</option>'
+    ? '<option value="">+ Pilih & Tag PIC (Lead / Member)...</option>'
     : '<option value="">-- Belum ada Leader / Tim pada project ini --</option>';
   picList.forEach(opt => {
-    const isSel = ms.pic && ms.pic.trim().toLowerCase() === opt.name.toLowerCase();
-    picOptionsHtml += `<option value="${escapeAttr(opt.name)}" ${isSel ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`;
+    picOptionsHtml += `<option value="${escapeAttr(opt.name)}">${escapeHtml(opt.label)}</option>`;
   });
+
+  const body = document.getElementById('milestone-modal-body');
+  if (!body) return;
 
   body.innerHTML = `
     <form id="milestone-detail-form" onsubmit="event.preventDefault(); saveMilestoneDetailModal('${msId}');">
       <!-- 1. INFORMASI UTAMA & STATUS -->
       <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 18px;">
-        <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr 1.2fr; gap: 12px; margin-bottom: 10px;">
+        <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr 1.2fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-group" style="margin: 0;">
-            <label class="form-label font-bold" style="font-size: 11px;">Nama Tahapan Milestone *</label>
+            <label class="form-label font-bold" style="font-size: 11px;">Nama Tahapan Task *</label>
             <input type="text" id="modal-ms-title" class="form-control form-control-sm" required value="${escapeAttr(ms.title || '')}" style="font-weight: 700; ${disabledStyle}" ${readonlyAttr}>
           </div>
           <div class="form-group" style="margin: 0;">
@@ -2007,20 +2133,34 @@ function openMilestoneDetailModal(msId) {
           </div>
           <div class="form-group" style="margin: 0;">
             <label class="form-label font-bold" style="font-size: 11px;">Status Tahapan</label>
-            <select id="modal-ms-status" class="form-control form-control-sm" style="font-weight: 700; ${disabledStyle}" ${disabledAttr}>
+            <select id="modal-ms-status" class="form-control form-control-sm" style="font-weight: 700; ${reportDisabledStyle}" ${reportDisabledAttr}>
               <option value="Pending" ${ms.status === 'Pending' ? 'selected' : ''}>⚪ Pending (Belum Mulai)</option>
               <option value="In Progress" ${ms.status === 'In Progress' ? 'selected' : ''}>🟡 In Progress (Pengerjaan)</option>
               <option value="Completed" ${ms.status === 'Completed' ? 'selected' : ''}>🟢 Completed (Selesai)</option>
             </select>
           </div>
         </div>
-        <div class="form-group" style="margin: 0; max-width: 380px;">
-          <label class="form-label font-bold" style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
-            <i data-lucide="user-check" style="width: 13px; height: 13px; color: #4f46e5;"></i> Penanggung Jawab (PIC Tahap)
+
+        <!-- TAG PIC PENANGGUNG JAWAB (BISA LEBIH DARI 1 ORANG) -->
+        <div class="form-group" style="margin: 0;">
+          <label class="form-label font-bold" style="font-size: 11px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <span style="display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="users" style="width: 13px; height: 13px; color: #4f46e5;"></i> Penanggung Jawab / PIC Task (Tag Akun)
+            </span>
+            <span style="font-size: 10px; color: #64748b; font-weight: 500;">Bisa memilih lebih dari 1 PIC (Lead & Member)</span>
           </label>
-          <select id="modal-ms-pic" class="form-control form-control-sm" style="font-weight: 600; background: ${canEdit ? '#ffffff' : '#f1f5f9'}; cursor: ${canEdit ? 'pointer' : 'not-allowed'};" ${disabledAttr}>
-            ${picOptionsHtml}
-          </select>
+          <div id="modal-ms-pics-container" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px; background: ${canEdit ? '#ffffff' : '#f1f5f9'}; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px;">
+            <!-- Render PIC tags -->
+          </div>
+          ${canEdit ? `
+          <div style="display: flex; gap: 6px; max-width: 420px;">
+            <select id="modal-ms-pic-select" class="form-control form-control-sm" onchange="handleAddPicTagFromSelect(this)" style="font-size: 11px; font-weight: 600;">
+              ${picOptionsHtml}
+            </select>
+          </div>
+          ` : ''}
+          <input type="hidden" id="modal-ms-pics-json" value="${escapeAttr(JSON.stringify(currentPics))}">
+          <input type="hidden" id="modal-ms-pic" value="${escapeAttr(currentPics.join(', '))}">
         </div>
       </div>
 
@@ -2051,9 +2191,9 @@ function openMilestoneDetailModal(msId) {
           <div id="modal-subtasks-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto;">
             <!-- Render subtasks -->
           </div>
-          ${canEdit ? `
+          ${canInputReport ? `
           <p style="font-size: 10.5px; color: var(--text-muted); margin: 8px 0 0 0;">
-            💡 <em>Centang subtask saat pekerjaan selesai untuk otomatis mengupdate progres milestone.</em>
+            💡 <em>Centang subtask saat pekerjaan selesai untuk otomatis mengupdate progres task.</em>
           </p>
           ` : ''}
         </div>
@@ -2066,7 +2206,7 @@ function openMilestoneDetailModal(msId) {
             <label class="form-label font-bold" style="font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
               <i data-lucide="file-text" style="width: 14px; height: 14px; color: ${theme.primary};"></i> Laporan Hasil Pengerjaan / Progress
             </label>
-            <textarea id="modal-ms-report-desc" class="form-control" rows="3" placeholder="Tuliskan ringkasan hasil pekerjaan, kendala teknis, atau catatan pengujian..." style="font-size: 12px; ${disabledStyle}" ${readonlyAttr}>${escapeHtml(report.description || '')}</textarea>
+            <textarea id="modal-ms-report-desc" class="form-control" rows="3" placeholder="Tuliskan ringkasan hasil pekerjaan, kendala teknis, atau catatan pengujian..." style="font-size: 12px; ${reportDisabledStyle}" ${reportReadonlyAttr}>${escapeHtml(report.description || '')}</textarea>
           </div>
 
           <!-- TAUTAN / LINK DOKUMEN -->
@@ -2075,7 +2215,7 @@ function openMilestoneDetailModal(msId) {
               <i data-lucide="external-link" style="width: 14px; height: 14px; color: ${theme.primary};"></i> Tautan / Link Hasil Pengerjaan (CAD / Drive / GitHub)
             </label>
             <div style="display: flex; gap: 8px;">
-              <input type="url" id="modal-ms-report-url" class="form-control form-control-sm" placeholder="https://drive.google.com/... atau link dokumen" value="${escapeAttr(report.reportUrl || '')}" style="font-size: 11.5px; flex: 1; ${disabledStyle}" ${readonlyAttr}>
+              <input type="url" id="modal-ms-report-url" class="form-control form-control-sm" placeholder="https://drive.google.com/... atau link dokumen" value="${escapeAttr(report.reportUrl || '')}" style="font-size: 11.5px; flex: 1; ${reportDisabledStyle}" ${reportReadonlyAttr}>
               <button type="button" class="btn btn-sm btn-outline" style="color: #0369a1; border-color: #bae6fd; font-weight: 700; white-space: nowrap;" onclick="openModalReportUrl()">
                 Buka Link ↗
               </button>
@@ -2093,7 +2233,7 @@ function openMilestoneDetailModal(msId) {
             <div style="font-weight: 700; font-size: 12px; display: flex; align-items: center; gap: 6px;">
               <i data-lucide="image" style="width: 14px; height: 14px; color: #9333ea;"></i> Foto Dokumentasi Pengerjaan
             </div>
-            ${canEdit ? `<button type="button" class="btn btn-xs btn-outline" onclick="addModalImageAttachment()">+ Tambah Foto</button>` : ''}
+            ${canInputReport ? `<button type="button" class="btn btn-xs btn-outline" onclick="addModalImageAttachment()">+ Tambah Foto</button>` : ''}
           </div>
           <div id="modal-images-container" style="display: flex; gap: 8px; flex-wrap: wrap; max-height: 120px; overflow-y: auto;">
             <!-- Render images -->
@@ -2108,12 +2248,12 @@ function openMilestoneDetailModal(msId) {
           <div id="modal-comments-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; margin-bottom: 8px;">
             <!-- Render comments -->
           </div>
-          ${canEdit ? `
+          ${isProjectMember ? `
           <div style="display: flex; gap: 6px;">
-            <input type="text" id="modal-new-comment-input" class="form-control form-control-sm" placeholder="Tulis komentar atau instruksi tim..." style="font-size: 11px;">
+            <input type="text" id="modal-new-comment-input" class="form-control form-control-sm" placeholder="Tulis komentar atau instruksi tim..." style="font-size: 11px;" onkeydown="if(event.key==='Enter'){ event.preventDefault(); addModalCommentAction(); }">
             <button type="button" class="btn btn-sm btn-primary" style="background: #0f766e; border-color: #0f766e; font-size: 11px; padding: 4px 12px;" onclick="addModalCommentAction()">Kirim</button>
           </div>
-          ` : ''}
+          ` : '<span class="text-muted font-xs">Hanya tim project yang dapat berpartisipasi dalam diskusi.</span>'}
         </div>
       </div>
 
@@ -2153,16 +2293,18 @@ function openMilestoneDetailModal(msId) {
 
       <!-- 5. FOOTER ACTIONS -->
       <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color);">
+        <div>
         ${canEdit ? `
           <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteCurrentMilestoneModal('${msId}')" style="color: #ef4444;">
-            <i data-lucide="trash-2"></i> Hapus Tahapan Ini
+            <i data-lucide="trash-2"></i> Hapus Task Ini
           </button>
-        ` : '<span class="badge" style="background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; font-size: 11px;">👁️ Mode Lihat (Hanya Lead Project & Administrator yang dapat mengedit)</span>'}
+        ` : (isTaskPic ? '<span class="badge" style="background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; font-size: 11px;">🛠️ PIC Task (Dapat menginput laporan & memperbarui checklist)</span>' : '<span class="badge" style="background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; font-size: 11px;">👁️ Mode Lihat</span>')}
+        </div>
         <div style="display: flex; gap: 8px;">
           <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('milestone-detail-modal')">Tutup</button>
-          ${canEdit ? `
+          ${canInputReport ? `
           <button type="submit" class="btn btn-primary btn-sm" style="background: ${theme.primary}; border-color: ${theme.primary}; font-weight: 700; padding: 6px 20px;">
-            <i data-lucide="save"></i> Simpan Perubahan Milestone
+            <i data-lucide="save"></i> ${canEdit ? 'Simpan Perubahan Task' : 'Simpan Laporan & Status Task'}
           </button>
           ` : ''}
         </div>
@@ -2170,18 +2312,21 @@ function openMilestoneDetailModal(msId) {
     </form>
   `;
 
+  // Render PIC Tags
+  renderModalPicTags(currentPics, canEdit);
+
   // Render Subtasks
   const subtasksContainer = document.getElementById('modal-subtasks-container');
   if (subtasks.length > 0) {
-    subtasks.forEach(st => addModalSubtaskRow(st, canEdit));
+    subtasks.forEach(st => addModalSubtaskRow(st, canEdit, canInputReport));
   } else if (canEdit) {
-    addModalSubtaskRow(null, true);
+    addModalSubtaskRow(null, true, true);
   } else if (subtasksContainer) {
     subtasksContainer.innerHTML = '<span class="text-muted font-xs" style="font-size: 11px;">Belum ada sub-task.</span>';
   }
 
   // Render Images
-  renderModalImages(images, canEdit);
+  renderModalImages(images, canInputReport);
 
   // Render Comments
   renderModalComments(comments);
@@ -2190,11 +2335,16 @@ function openMilestoneDetailModal(msId) {
   if (window.lucide) lucide.createIcons();
 }
 
-function addModalSubtaskRow(st = null, canEditOverride = null) {
+function addModalSubtaskRow(st = null, canEditOverride = null, canInputReportOverride = null) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const canEdit = canEditOverride !== null ? Boolean(canEditOverride) : canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const ms = currentActiveProjectData?.milestones?.find(m => m.id === currentEditingMilestoneId);
+  const canEdit = canEditOverride !== null ? Boolean(canEditOverride) : canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+  const canInputReport = canInputReportOverride !== null ? Boolean(canInputReportOverride) : Boolean(canEdit || isTaskPic);
+
   if (!st && !canEdit) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project & Administrator yang dapat menambah sub-task.', 'warning');
+    showToast('⚠️ Hanya Lead Project & Administrator yang dapat menambah sub-task baru.', 'warning');
     return;
   }
 
@@ -2210,7 +2360,7 @@ function addModalSubtaskRow(st = null, canEditOverride = null) {
   row.style = 'display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; transition: all 0.2s ease;';
 
   row.innerHTML = `
-    <input type="checkbox" class="modal-st-check" ${isDone ? 'checked' : ''} ${canEdit ? '' : 'disabled'} onchange="handleModalSubtaskToggle(this)" style="width: 16px; height: 16px; cursor: ${canEdit ? 'pointer' : 'not-allowed'}; accent-color: #10b981;">
+    <input type="checkbox" class="modal-st-check" ${isDone ? 'checked' : ''} ${canInputReport ? '' : 'disabled'} onchange="handleModalSubtaskToggle(this)" style="width: 16px; height: 16px; cursor: ${canInputReport ? 'pointer' : 'not-allowed'}; accent-color: #10b981;">
     <input type="text" class="modal-st-title form-control form-control-sm" placeholder="Nama sub-task..." value="${escapeAttr(st?.title || '')}" ${canEdit ? '' : 'disabled readonly'} style="border: none; background: transparent; font-size: 11.5px; flex: 1; text-decoration: ${isDone ? 'line-through' : 'none'}; color: ${isDone ? '#64748b' : '#0f172a'};" oninput="calculateModalSubtaskStats()">
     ${canEdit ? `
     <button type="button" class="btn-icon btn-danger-ghost btn-xs" onclick="document.getElementById('modal-st-${stId}').remove(); calculateModalSubtaskStats();" title="Hapus sub-task">
@@ -2280,7 +2430,9 @@ function renderModalImages(images, canEditOverride = null) {
     return;
   }
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const canEdit = canEditOverride !== null ? Boolean(canEditOverride) : canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const ms = currentActiveProjectData?.milestones?.find(m => m.id === currentEditingMilestoneId);
+  const canEdit = canEditOverride !== null ? Boolean(canEditOverride) : Boolean(canUserEditProjectTimeline(targetProj, activeUser) || isUserTaggedInMilestone(ms, activeUser));
   container.innerHTML = images.map((img, i) => `
     <div style="position: relative; width: 50px; height: 50px; border-radius: 6px; overflow: hidden; border: 1px solid #cbd5e1;">
       <img src="${escapeAttr(img.url || img)}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;" onclick="window.open('${escapeAttr(img.url || img)}', '_blank')">
@@ -2291,15 +2443,18 @@ function renderModalImages(images, canEditOverride = null) {
 
 function addModalImageAttachment() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  if (!canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser)) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project & Administrator yang dapat menambahkan foto.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const ms = currentActiveProjectData?.milestones?.find(m => m.id === currentEditingMilestoneId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+  if (!canEdit && !isTaskPic) {
+    showToast('⚠️ Hanya Lead Project, Administrator, atau PIC Tahap yang dapat menambahkan foto.', 'warning');
     return;
   }
   const url = prompt('Masukkan URL gambar dokumentasi (contoh: /uploads/... atau https://...):');
   if (!url) return;
   if (!currentActiveProjectData || !currentEditingMilestoneId) return;
 
-  const ms = currentActiveProjectData.milestones?.find(m => m.id === currentEditingMilestoneId);
   if (!ms) return;
   if (!ms.report) ms.report = { description: '', reportUrl: '', images: [] };
   if (!ms.report.images) ms.report.images = [];
@@ -2309,12 +2464,15 @@ function addModalImageAttachment() {
 
 function removeModalImage(index) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  if (!canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser)) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project & Administrator yang dapat menghapus foto.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const ms = currentActiveProjectData?.milestones?.find(m => m.id === currentEditingMilestoneId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+  if (!canEdit && !isTaskPic) {
+    showToast('⚠️ Hanya Lead Project, Administrator, atau PIC Tahap yang dapat menghapus foto.', 'warning');
     return;
   }
   if (!currentActiveProjectData || !currentEditingMilestoneId) return;
-  const ms = currentActiveProjectData.milestones?.find(m => m.id === currentEditingMilestoneId);
   if (!ms || !ms.report?.images) return;
   ms.report.images.splice(index, 1);
   renderModalImages(ms.report.images, true);
@@ -2338,34 +2496,45 @@ function renderModalComments(comments) {
   `).join('');
 }
 
-function addModalCommentAction() {
+async function addModalCommentAction() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  if (!canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser)) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project & Administrator yang dapat mengirim komentar edit.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const ms = currentActiveProjectData?.milestones?.find(m => m.id === currentEditingMilestoneId);
+  if (!ms) return;
+
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+  const isProjectMember = Boolean((typeof isUserAssignedToProject === 'function' && isUserAssignedToProject(targetProj, activeUser)) || canEdit || isTaskPic);
+
+  if (!isProjectMember) {
+    showToast('⚠️ Hanya anggota tim, PIC, dan lead project yang dapat mengirim komentar diskusi.', 'warning');
     return;
   }
   const input = document.getElementById('modal-new-comment-input');
   const text = input?.value?.trim();
   if (!text) return;
-  if (!currentActiveProjectData || !currentEditingMilestoneId) return;
 
-  const ms = currentActiveProjectData.milestones?.find(m => m.id === currentEditingMilestoneId);
-  if (!ms) return;
   if (!ms.comments) ms.comments = [];
 
   const now = new Date();
   const timeStr = now.toLocaleDateString('id-ID') + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const senderName = activeUser?.name || 'Anggota Tim';
+  const senderRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : (activeUser?.role || 'Member');
 
   ms.comments.push({
     id: 'cm-' + Date.now(),
-    sender: 'Lead / Tim Pelaksana',
-    role: 'Technical Team',
+    sender: senderName,
+    role: senderRole,
     text: text,
     timestamp: timeStr
   });
 
   input.value = '';
   renderModalComments(ms.comments);
+
+  // Auto-save timeline data without reloading page
+  await saveProjectTimelineData(false, true);
+  showToast('Komentar diskusi tim berhasil disimpan!', 'success');
 }
 
 async function deleteCurrentMilestoneModal(msId) {
@@ -2375,7 +2544,7 @@ async function deleteCurrentMilestoneModal(msId) {
     showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang berwenang menghapus tahapan kerja.', 'warning');
     return;
   }
-  if (!confirm('Apakah Anda yakin ingin menghapus tahapan milestone ini?')) return;
+  if (!confirm('Apakah Anda yakin ingin menghapus tahapan task ini?')) return;
   if (!currentActiveProjectData) return;
 
   currentActiveProjectData.milestones = (currentActiveProjectData.milestones || []).filter(m => m.id !== msId);
@@ -2385,26 +2554,39 @@ async function deleteCurrentMilestoneModal(msId) {
   syncTimelineMilestonesHiddenList(currentActiveProjectData);
   calculateTimelineProgress();
   await saveProjectTimelineData(false);
-  showToast('Tahapan milestone berhasil dihapus & disimpan ke Supabase', 'info');
+  showToast('Tahapan task berhasil dihapus & disimpan ke Supabase', 'info');
 }
 
-function saveMilestoneDetailModal(msId) {
+async function saveMilestoneDetailModal(msId) {
   if (!currentActiveProjectData) return;
   const ms = (currentActiveProjectData.milestones || []).find(m => m.id === msId);
   if (!ms) return;
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const canEdit = canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
-  if (!canEdit) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang dapat mengedit & menyimpan milestone.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isTaskPic = isUserTaggedInMilestone(ms, activeUser);
+
+  if (!canEdit && !isTaskPic) {
+    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan, Administrator, atau PIC Tahap yang dapat mengedit & menyimpan task.', 'warning');
     return;
   }
 
-  ms.title = document.getElementById('modal-ms-title')?.value?.trim() || ms.title;
-  ms.startDate = document.getElementById('modal-ms-start')?.value || '';
-  ms.dueDate = document.getElementById('modal-ms-due')?.value || '';
-  ms.pic = document.getElementById('modal-ms-pic')?.value?.trim() || '';
-  ms.status = document.getElementById('modal-ms-status')?.value || 'Pending';
+  if (canEdit) {
+    ms.title = document.getElementById('modal-ms-title')?.value?.trim() || ms.title;
+    ms.startDate = document.getElementById('modal-ms-start')?.value || '';
+    ms.dueDate = document.getElementById('modal-ms-due')?.value || '';
+
+    // Multi-PIC tags
+    const jsonInput = document.getElementById('modal-ms-pics-json');
+    let pics = [];
+    try { pics = JSON.parse(jsonInput?.value || '[]'); } catch (e) { pics = []; }
+    ms.pics = pics;
+    ms.pic = pics.join(', ') || document.getElementById('modal-ms-pic')?.value?.trim() || '';
+  }
+
+  // Both canEdit and isTaskPic can update status, subtasks, report, and link:
+  ms.status = document.getElementById('modal-ms-status')?.value || ms.status || 'Pending';
 
   // Collect subtasks
   const subtasks = [];
@@ -2419,7 +2601,9 @@ function saveMilestoneDetailModal(msId) {
       });
     }
   });
-  ms.subtasks = subtasks;
+  if (subtasks.length > 0 || canEdit) {
+    ms.subtasks = subtasks;
+  }
 
   // Collect report & link
   if (!ms.report) ms.report = { description: '', reportUrl: '', images: [] };
@@ -2435,15 +2619,15 @@ function saveMilestoneDetailModal(msId) {
   calculateTimelineProgress();
 
   // Auto-sync with server
-  saveProjectTimelineData(false);
-  showToast(`✅ Tahapan "${ms.title}" berhasil diperbarui!`, 'success');
+  await saveProjectTimelineData(false, true);
+  showToast(`✅ Task "${ms.title || 'Tahapan'}" berhasil diperbarui!`, 'success');
 }
 
 function addNewMilestoneInteractive() {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
   const canEdit = canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
   if (!canEdit) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang berwenang menambahkan tahapan milestone baru.', 'warning');
+    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang berwenang menambahkan task baru.', 'warning');
     return;
   }
   if (!currentActiveProjectData) {
@@ -2452,13 +2636,14 @@ function addNewMilestoneInteractive() {
   }
   if (!currentActiveProjectData.milestones) currentActiveProjectData.milestones = [];
 
-  const newIdx = currentActiveProjectData.milestones.length + 1;
+  const initialPic = currentActiveProjectData.projectLead || '';
   const newMs = {
     id: 'ms-' + Date.now(),
     title: '',
     startDate: currentActiveProjectData.startDate || '',
     dueDate: currentActiveProjectData.dueDate || '',
-    pic: currentActiveProjectData.projectLead || '',
+    pic: initialPic,
+    pics: initialPic ? [initialPic] : [],
     status: 'Pending',
     subtasks: [],
     report: { description: '', reportUrl: '', images: [] },
@@ -2502,7 +2687,7 @@ function addTimelineMilestoneRow(ms = null) {
           <i data-lucide="chevron-down" id="chevron-${msId}" style="transition: transform 0.2s ease; transform: rotate(-90deg);"></i>
         </button>
         <div style="flex: 1;" onclick="event.stopPropagation();">
-          <input type="text" class="form-control form-control-sm tm-ms-title" placeholder="Nama Tahapan / Milestone Project *" required value="${escapeAttr(ms?.title || '')}" style="font-weight: 700; font-size: 13.5px; background: #ffffff;">
+          <input type="text" class="form-control form-control-sm tm-ms-title" placeholder="Nama Tahapan / Task Project *" required value="${escapeAttr(ms?.title || '')}" style="font-weight: 700; font-size: 13.5px; background: #ffffff;">
         </div>
       </div>
 
@@ -2536,7 +2721,7 @@ function addTimelineMilestoneRow(ms = null) {
             <option value="Completed" ${status === 'Completed' ? 'selected' : ''}>🟢 Completed</option>
           </select>
         </div>
-        <button type="button" class="btn-icon btn-danger-ghost" title="Hapus Milestone Ini" onclick="event.stopPropagation(); document.getElementById('milestone-card-${msId}').remove(); calculateTimelineProgress();">
+        <button type="button" class="btn-icon btn-danger-ghost" title="Hapus Task Ini" onclick="event.stopPropagation(); document.getElementById('milestone-card-${msId}').remove(); calculateTimelineProgress();">
           <i data-lucide="trash-2"></i>
         </button>
       </div>
@@ -2554,7 +2739,7 @@ function addTimelineMilestoneRow(ms = null) {
         <i data-lucide="image" style="width: 12px; height: 12px;"></i> <span id="ms-image-count-${msId}">${images.length}</span> Foto Dokumentasi
       </span>
       <button type="button" class="btn btn-xs btn-outline" id="btn-toggle-text-${msId}" onclick="event.stopPropagation(); toggleMilestoneAccordion('${msId}')" style="margin-left: auto; font-size: 11px; font-weight: 600; color: #4f46e5; border-color: #c7d2fe;">
-        <i data-lucide="chevron-down" style="width: 12px; height: 12px;"></i> Buka Detail Milestone
+        <i data-lucide="chevron-down" style="width: 12px; height: 12px;"></i> Buka Detail Task
       </button>
     </div>
 
@@ -2896,8 +3081,11 @@ function openMilestoneReportLink(btn) {
 // -------------------------------------------------------------
 function addMilestoneComment(msId) {
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  if (!canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser)) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project & Administrator yang dapat mengirim komentar.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isAssigned = typeof isUserAssignedToProject === 'function' ? isUserAssignedToProject(targetProj, activeUser) : false;
+  if (!canEdit && !isAssigned) {
+    showToast('⚠️ Hanya tim project, PIC, dan lead yang dapat mengirim komentar.', 'warning');
     return;
   }
   const authorInput = document.getElementById(`ms-comment-author-${msId}`);
@@ -3024,25 +3212,28 @@ function updateTimelineHeaderBadge() {
 }
 
 // -------------------------------------------------------------
-// SAVE ALL TIMELINE & MILESTONE (SUBTASKS, REPORTS, IMAGES, COMMENTS)
+// SAVE ALL TIMELINE & TASKS (SUBTASKS, REPORTS, IMAGES, COMMENTS)
 // -------------------------------------------------------------
-async function saveProjectTimelineData(redirect = true) {
+async function saveProjectTimelineData(redirect = true, isPicOrMemberUpdate = false) {
   if (!currentActiveProjectOrderId) {
     showToast('Pilih order atau project terlebih dahulu', 'warning');
     return;
   }
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
-  const canEdit = canUserEditProjectTimeline(currentActiveProjectData || currentActiveProjectOrderId, activeUser);
-  if (!canEdit) {
-    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mengubah timeline & milestone project.', 'warning');
+  const targetProj = currentActiveProjectData || (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
+  const canEdit = canUserEditProjectTimeline(targetProj, activeUser);
+  const isAssigned = (typeof isUserAssignedToProject === 'function') ? isUserAssignedToProject(targetProj, activeUser) : false;
+
+  if (!canEdit && !(isPicOrMemberUpdate && isAssigned)) {
+    showToast('⚠️ Mode Lihat: Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mengubah timeline & task project.', 'warning');
     return;
   }
 
   const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
   const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
 
-  // Extract all rich milestones data
+  // Extract all rich milestones/tasks data
   let milestones = [];
   if (currentActiveProjectData?.milestones && currentActiveProjectData.milestones.length > 0) {
     milestones = currentActiveProjectData.milestones;
@@ -3111,6 +3302,19 @@ async function saveProjectTimelineData(redirect = true) {
     });
   }
 
+  // Ensure pics array is always maintained on each task/milestone
+  milestones = milestones.map(m => {
+    let pics = Array.isArray(m.pics) ? m.pics : [];
+    if (pics.length === 0 && m.pic) {
+      pics = m.pic.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return {
+      ...m,
+      pics: pics,
+      pic: pics.join(', ') || m.pic || ''
+    };
+  });
+
   const status = document.getElementById('timeline-status-select')?.value || 'Planning';
   const startDate = document.getElementById('timeline-start-date')?.value || '';
   const dueDate = document.getElementById('timeline-due-date')?.value || '';
@@ -3142,7 +3346,8 @@ async function saveProjectTimelineData(redirect = true) {
     poFileName: poFileName || undefined,
     poFileUrl: poFileUrl || undefined,
     progressPercent: progressPercent,
-    milestones: milestones
+    milestones: milestones,
+    tasks: milestones
   };
 
   try {
@@ -4899,3 +5104,17 @@ async function executeSubmitPurchasingForComponent() {
   }
 }
 window.executeSubmitPurchasingForComponent = executeSubmitPurchasingForComponent;
+window.openMilestoneDetailModal = openMilestoneDetailModal;
+window.saveMilestoneDetailModal = saveMilestoneDetailModal;
+window.addNewMilestoneInteractive = addNewMilestoneInteractive;
+window.deleteCurrentMilestoneModal = deleteCurrentMilestoneModal;
+window.addModalSubtaskRow = addModalSubtaskRow;
+window.handleModalSubtaskToggle = handleModalSubtaskToggle;
+window.calculateModalSubtaskStats = calculateModalSubtaskStats;
+window.openModalReportUrl = openModalReportUrl;
+window.renderModalImages = renderModalImages;
+window.addModalImageAttachment = addModalImageAttachment;
+window.removeModalImage = removeModalImage;
+window.renderModalComments = renderModalComments;
+window.addModalCommentAction = addModalCommentAction;
+window.saveProjectTimelineData = saveProjectTimelineData;

@@ -139,12 +139,53 @@ CREATE TABLE IF NOT EXISTS public.projects (
     is_service BOOLEAN DEFAULT FALSE,
     service_expense_approved BOOLEAN DEFAULT FALSE,
     milestones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    tasks JSONB NOT NULL DEFAULT '[]'::jsonb,
     team JSONB NOT NULL DEFAULT '[]'::jsonb,
     modal_cost JSONB,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS tasks JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- ---------------------------------------------------------
+-- 3.1 TABLE: project_tasks (Task & Tahapan Pengerjaan Project)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.project_tasks (
+    id VARCHAR(100) PRIMARY KEY,
+    project_id VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    start_date DATE,
+    due_date DATE,
+    status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+    pic TEXT,
+    pics JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtasks JSONB NOT NULL DEFAULT '[]'::jsonb,
+    report JSONB NOT NULL DEFAULT '{"description": "", "reportUrl": "", "images": []}'::jsonb,
+    comments JSONB NOT NULL DEFAULT '[]'::jsonb,
+    additional_components JSONB NOT NULL DEFAULT '[]'::jsonb,
+    notes TEXT,
+    order_index INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Index performa pencarian task
+CREATE INDEX IF NOT EXISTS idx_project_tasks_project_id ON public.project_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_tasks_status ON public.project_tasks(status);
+
+-- Alias / View tasks untuk kompatibilitas nama tabel
+CREATE OR REPLACE VIEW public.tasks AS SELECT * FROM public.project_tasks;
+
+-- RLS & Policies untuk project_tasks
+ALTER TABLE public.project_tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for authenticated on project_tasks" ON public.project_tasks;
+CREATE POLICY "Allow all for authenticated on project_tasks" ON public.project_tasks
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow anon select on project_tasks" ON public.project_tasks;
+CREATE POLICY "Allow anon select on project_tasks" ON public.project_tasks
+    FOR ALL TO anon USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------
 -- 4. TABLE: bom (Bill of Materials & Product Formulas)

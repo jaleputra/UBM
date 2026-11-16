@@ -8,6 +8,25 @@ function formatRupiah(amount) {
   return 'Rp ' + Number(amount).toLocaleString('id-ID');
 }
 
+// Indonesian Number to Words Formatter (Terbilang)
+function terbilang(n) {
+  const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+  n = Math.floor(Math.abs(Number(n) || 0));
+  if (n === 0) return 'Nol';
+  if (n < 12) return bilangan[n];
+  if (n < 20) return terbilang(n - 10) + ' Belas';
+  if (n < 100) return terbilang(Math.floor(n / 10)) + ' Puluh' + (n % 10 !== 0 ? ' ' + terbilang(n % 10) : '');
+  if (n < 200) return 'Seratus' + (n - 100 !== 0 ? ' ' + terbilang(n - 100) : '');
+  if (n < 1000) return terbilang(Math.floor(n / 100)) + ' Ratus' + (n % 100 !== 0 ? ' ' + terbilang(n % 100) : '');
+  if (n < 2000) return 'Seribu' + (n - 1000 !== 0 ? ' ' + terbilang(n - 1000) : '');
+  if (n < 1000000) return terbilang(Math.floor(n / 1000)) + ' Ribu' + (n % 1000 !== 0 ? ' ' + terbilang(n % 1000) : '');
+  if (n < 1000000000) return terbilang(Math.floor(n / 1000000)) + ' Juta' + (n % 1000000 !== 0 ? ' ' + terbilang(n % 1000000) : '');
+  if (n < 1000000000000) return terbilang(Math.floor(n / 1000000000)) + ' Miliar' + (n % 1000000000 !== 0 ? ' ' + terbilang(n % 1000000000) : '');
+  if (n < 1000000000000000) return terbilang(Math.floor(n / 1000000000000)) + ' Triliun' + (n % 1000000000000 !== 0 ? ' ' + terbilang(n % 1000000000000) : '');
+  return String(n);
+}
+if (typeof window !== 'undefined') window.terbilang = terbilang;
+
 // Toast Notification Helper
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
@@ -103,6 +122,11 @@ function closeModal(modalId) {
       printBtn.style.display = 'inline-flex';
       printBtn.disabled = false;
     }
+    const copyEmailBtn = document.getElementById('preview-modal-copy-email-btn');
+    if (copyEmailBtn) {
+      delete copyEmailBtn.dataset.quoId;
+      copyEmailBtn.style.display = 'none';
+    }
   }
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.remove('open');
@@ -137,24 +161,27 @@ function printCurrentDocument() {
         <title>Dokumen UBM Politeknik Takumi</title>
         <link rel="stylesheet" href="css/style.css">
         <style>
-          @page { size: A4 portrait; margin: 15mm; }
+          @page { size: A4 portrait; margin: 10mm 12mm; }
           *, *:before, *:after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body { background: #ffffff !important; color: #0f172a !important; padding: 20px; font-family: 'Inter', -apple-system, sans-serif; }
+          body { background: #ffffff !important; color: #0f172a !important; padding: 0 !important; margin: 0 !important; font-family: 'Inter', -apple-system, sans-serif; font-size: 11px; }
           .no-print { display: none !important; }
           .doc-preview { width: 100% !important; max-width: 100% !important; margin: 0 auto; }
-          .doc-table { width: 100%; border-collapse: collapse; margin-top: 14px; margin-bottom: 14px; }
-          .doc-table th, .doc-table td { padding: 8px 10px; border: 1px solid #cbd5e1; font-size: 12px; }
+          .doc-table { width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 8px; }
+          .doc-table th, .doc-table td { padding: 4px 6px; border: 1px solid #cbd5e1; font-size: 10.5px; }
           .doc-table th { background: #f1f5f9; font-weight: 700; color: #1e293b; }
-          .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid #cbd5e1; }
+          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; }
           .badge-success { background: #dcfce7; color: #15803d; border-color: #86efac; }
           .badge-info, .badge-blue { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
           .badge-purple { background: #f3e8ff; color: #7e22ce; border-color: #d8b4fe; }
           .badge-amber, .badge-warning { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
           .badge-danger { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
           .badge-secondary { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
-          .calc-summary { margin-left: auto; width: 280px; margin-top: 10px; }
-          .calc-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
-          .calc-row.total { font-weight: bold; font-size: 14px; border-top: 2px solid #0f172a; padding-top: 6px; margin-top: 4px; }
+          .calc-summary { margin-left: auto; width: 320px; margin-top: 6px; }
+          .calc-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+          .calc-row.total { font-weight: bold; font-size: 12.5px; border-top: 2px solid #0f172a; padding-top: 4px; margin-top: 4px; }
+          .doc-signatures { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .doc-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .doc-totals { page-break-inside: avoid !important; break-inside: avoid !important; }
         </style>
       </head>
       <body>
@@ -184,6 +211,7 @@ window.addEventListener('keydown', (e) => {
     closeModal('preview-modal');
     closeModal('pr-picker-modal');
     closeModal('gantt-detail-modal');
+    closeModal('quotation-email-modal');
   }
 });
 
@@ -759,9 +787,12 @@ function extractQuotationApprovalFromNotes(notes) {
 function ensureQuotationApprovalData(quo) {
   if (!quo || typeof quo !== 'object') return quo;
 
-  // 0. Guard ketat: Quotation berstatus Draft tidak boleh memiliki status approval
-  const isDraftQuo = quo.status === 'Draft' || Boolean(quo.isDraft);
-  if (isDraftQuo) {
+  // 0. Guard ketat: Hanya Quotation berstatus Draft murni yang tidak boleh memiliki status approval
+  if (quo.status && quo.status !== 'Draft') {
+    quo.isDraft = false;
+  }
+  const isDraftQuo = quo.status === 'Draft' || (Boolean(quo.isDraft) && (!quo.status || quo.status === 'Draft'));
+  if (isDraftQuo && quo.status !== 'Sent' && quo.status !== 'Accepted' && quo.status !== 'Pengajuan' && quo.status !== 'Rejected') {
     quo.status = 'Draft';
     quo.isDraft = true;
     quo.approvalKetuaUbm = false;
@@ -781,10 +812,10 @@ function ensureQuotationApprovalData(quo) {
 
   quo.isDraft = false;
 
-  // 1. Ekstrak dari notes atau _rawNotes
+  // 1. Ekstrak dari notes atau _rawNotes jika ada
   const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
   if (meta) {
-    if (quo.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
+    if ((quo.approvalKetuaUbm === undefined || quo.approvalKetuaUbm === null || (quo.approvalKetuaUbm === false && meta.approvalKetuaUbm === true)) && meta.approvalKetuaUbm !== undefined) {
       quo.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
     }
     if (!quo.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
@@ -793,7 +824,7 @@ function ensureQuotationApprovalData(quo) {
     if (!quo.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
       quo.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
     }
-    if (quo.approvalDirektur === undefined && meta.approvalDirektur !== undefined) {
+    if ((quo.approvalDirektur === undefined || quo.approvalDirektur === null || (quo.approvalDirektur === false && meta.approvalDirektur === true)) && meta.approvalDirektur !== undefined) {
       quo.approvalDirektur = Boolean(meta.approvalDirektur);
     }
     if (!quo.approvalDirekturBy && meta.approvalDirekturBy) {
@@ -804,7 +835,15 @@ function ensureQuotationApprovalData(quo) {
     }
   }
 
-  // 2. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau status Accepted
+  // 2. Jika ada nama penyetuju dan bukan berstatus ditolak, maka flag approval HARUS TRUE
+  if (quo.approvalKetuaUbmBy && !String(quo.approvalKetuaUbmBy).startsWith('Ditolak') && quo.status !== 'Rejected') {
+    quo.approvalKetuaUbm = true;
+  }
+  if (quo.approvalDirekturBy && !String(quo.approvalDirekturBy).startsWith('Ditolak') && quo.status !== 'Rejected') {
+    quo.approvalDirektur = true;
+  }
+
+  // 3. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau status Accepted
   const ordersList = (window.state && Array.isArray(state.orders)) ? state.orders : [];
   const isConverted = Boolean(
     quo.orderId ||
@@ -830,6 +869,9 @@ function ensureQuotationApprovalData(quo) {
     // Quotation terbit baru: harus persetujuan eksplisit
     quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
     quo.approvalDirektur = Boolean(quo.approvalDirektur);
+    if (quo.approvalKetuaUbm && quo.approvalDirektur && (quo.status === 'Sent' || quo.status === 'Pengajuan' || !quo.status)) {
+      quo.status = 'Accepted';
+    }
   }
 
   // Benamkan ke notes agar tidak hilang saat dikirim ke backend / disimpan ke Supabase
@@ -1127,23 +1169,37 @@ async function directSupabaseFetchResource(resource) {
                 if ((!Array.isArray(item.rabItems) || item.rabItems.length === 0) && Array.isArray(cQuo.rabItems)) {
                   item.rabItems = cQuo.rabItems;
                 }
+                if (cQuo._rawNotes && !item._rawNotes) item._rawNotes = cQuo._rawNotes;
                 if (item.status !== 'Draft' && item.status !== 'Rejected') {
-                  if (item.approvalKetuaUbm === undefined && cQuo.approvalKetuaUbm !== undefined) {
+                  if (cQuo.approvalKetuaUbm !== undefined && (item.approvalKetuaUbm === undefined || item.approvalKetuaUbm === null || (item.approvalKetuaUbm === false && cQuo.approvalKetuaUbm === true))) {
                     item.approvalKetuaUbm = cQuo.approvalKetuaUbm;
                   }
                   if (!item.approvalKetuaUbmBy && cQuo.approvalKetuaUbmBy) item.approvalKetuaUbmBy = cQuo.approvalKetuaUbmBy;
                   if (!item.approvalKetuaUbmDate && cQuo.approvalKetuaUbmDate) item.approvalKetuaUbmDate = cQuo.approvalKetuaUbmDate;
-                  if (item.approvalDirektur === undefined && cQuo.approvalDirektur !== undefined) {
+                  if (cQuo.approvalDirektur !== undefined && (item.approvalDirektur === undefined || item.approvalDirektur === null || (item.approvalDirektur === false && cQuo.approvalDirektur === true))) {
                     item.approvalDirektur = cQuo.approvalDirektur;
                   }
                   if (!item.approvalDirekturBy && cQuo.approvalDirekturBy) item.approvalDirekturBy = cQuo.approvalDirekturBy;
                   if (!item.approvalDirekturDate && cQuo.approvalDirekturDate) item.approvalDirekturDate = cQuo.approvalDirekturDate;
+                  if (cQuo.status === 'Accepted' && (item.status === 'Sent' || item.status === 'Pengajuan' || !item.status)) {
+                    item.status = 'Accepted';
+                  }
                 }
+              }
+              if (item.approvalKetuaUbmBy && !String(item.approvalKetuaUbmBy).startsWith('Ditolak') && item.status !== 'Rejected' && item.status !== 'Draft') {
+                item.approvalKetuaUbm = true;
+              }
+              if (item.approvalDirekturBy && !String(item.approvalDirekturBy).startsWith('Ditolak') && item.status !== 'Rejected' && item.status !== 'Draft') {
+                item.approvalDirektur = true;
+              }
+              if (item.approvalKetuaUbm && item.approvalDirektur && (item.status === 'Sent' || item.status === 'Pengajuan' || !item.status)) {
+                item.status = 'Accepted';
               }
               item.items = Array.isArray(item.items) ? item.items : [];
               item.additionalServices = Array.isArray(item.additionalServices) ? item.additionalServices : [];
               item.rabItems = Array.isArray(item.rabItems) ? item.rabItems : [];
-              item.isDraft = item.status === 'Draft' || Boolean(item.isDraft);
+              if (item.status && item.status !== 'Draft') item.isDraft = false;
+              else item.isDraft = item.status === 'Draft' || Boolean(item.isDraft);
               ensureQuotationApprovalData(item);
             }
             if (resource === 'orders') {

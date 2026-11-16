@@ -294,7 +294,20 @@ function isUserAssignedToProject(projectIdOrOrderId, user = null) {
       return false;
     });
 
-    return Boolean(isLead || inTeam);
+    const inTasks = Array.isArray(p.milestones || p.tasks) && (p.milestones || p.tasks).some(ms => {
+      if (!ms) return false;
+      const pics = Array.isArray(ms.pics) && ms.pics.length > 0
+        ? ms.pics
+        : (ms.pic ? String(ms.pic).split(',').map(s => s.trim()).filter(Boolean) : []);
+      return pics.some(pName => {
+        const pLow = String(pName || '').toLowerCase().trim();
+        return pLow === uName || pLow === uEmail ||
+               (uName && uName.length > 2 && (pLow.includes(uName) || uName.includes(pLow))) ||
+               (uEmail && (pLow.includes(uEmail) || uEmail.includes(pLow)));
+      });
+    });
+
+    return Boolean(isLead || inTeam || inTasks);
   });
 }
 window.isUserAssignedToProject = isUserAssignedToProject;

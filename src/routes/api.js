@@ -21,7 +21,10 @@ const {
   embedQuotationApprovalInNotes,
   ensurePurchasingApprovalData,
   embedPurchasingApprovalInNotes,
-  isPurchasingDualApproved
+  isPurchasingDualApproved,
+  syncProjectTasksToSupabase,
+  loadProjectTasksFromSupabase,
+  ensureProjectData
 } = require('../utils/dbHelper');
 const { generateSignatureVerificationPdf } = require('../utils/pdfCertHelper');
 
@@ -1998,6 +2001,14 @@ end run
           if (!updatedItem.poDocument && existingItem.poDocument) {
             updatedItem.poDocument = existingItem.poDocument;
           }
+          const tasks = Array.isArray(updatedItem.tasks) && updatedItem.tasks.length > 0
+            ? updatedItem.tasks
+            : (Array.isArray(updatedItem.milestones) ? updatedItem.milestones : (existingItem.tasks || existingItem.milestones || []));
+          updatedItem.tasks = tasks;
+          updatedItem.milestones = tasks;
+          if (updatedItem.id) {
+            syncProjectTasksToSupabase(updatedItem.id, tasks).catch(() => {});
+          }
         } else if (resourceName === 'purchasing') {
           if (!newItem.status || newItem.status === 'Pending' || newItem.status === 'In Review') {
             newItem.status = 'Pengajuan';
@@ -2157,7 +2168,7 @@ end run
               existingItem.status === 'Draft' ||
               existingItem.status === 'Rejected' ||
               Boolean(existingItem.isDraft)
-            );
+            ) && req.body?.approvalKetuaUbm === undefined && req.body?.approvalDirektur === undefined;
             updatedItem.isDraft = false;
             if (transitioningToSent) {
               updatedItem.publishedAt = new Date().toISOString();
@@ -2170,17 +2181,47 @@ end run
               updatedItem.approvalDirekturDate = null;
             } else {
               updatedItem.publishedAt = updatedItem.publishedAt || existingItem.publishedAt || existingItem.createdAt || new Date().toISOString();
-              if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
+              if (req.body?.approvalKetuaUbm !== undefined) {
+                updatedItem.approvalKetuaUbm = Boolean(req.body.approvalKetuaUbm);
+              } else if (updatedItem.approvalKetuaUbm === undefined && existingItem.approvalKetuaUbm !== undefined) {
                 updatedItem.approvalKetuaUbm = existingItem.approvalKetuaUbm;
+              }
+              if (req.body?.approvalKetuaUbmBy) {
+                updatedItem.approvalKetuaUbmBy = req.body.approvalKetuaUbmBy;
+              } else if (!updatedItem.approvalKetuaUbmBy && existingItem.approvalKetuaUbmBy) {
                 updatedItem.approvalKetuaUbmBy = existingItem.approvalKetuaUbmBy;
+              }
+              if (req.body?.approvalKetuaUbmDate) {
+                updatedItem.approvalKetuaUbmDate = req.body.approvalKetuaUbmDate;
+              } else if (!updatedItem.approvalKetuaUbmDate && existingItem.approvalKetuaUbmDate) {
                 updatedItem.approvalKetuaUbmDate = existingItem.approvalKetuaUbmDate;
               }
-              if (updatedItem.approvalDirektur === undefined && existingItem.approvalDirektur !== undefined) {
+
+              if (req.body?.approvalDirektur !== undefined) {
+                updatedItem.approvalDirektur = Boolean(req.body.approvalDirektur);
+              } else if (updatedItem.approvalDirektur === undefined && existingItem.approvalDirektur !== undefined) {
                 updatedItem.approvalDirektur = existingItem.approvalDirektur;
+              }
+              if (req.body?.approvalDirekturBy) {
+                updatedItem.approvalDirekturBy = req.body.approvalDirekturBy;
+              } else if (!updatedItem.approvalDirekturBy && existingItem.approvalDirekturBy) {
                 updatedItem.approvalDirekturBy = existingItem.approvalDirekturBy;
+              }
+              if (req.body?.approvalDirekturDate) {
+                updatedItem.approvalDirekturDate = req.body.approvalDirekturDate;
+              } else if (!updatedItem.approvalDirekturDate && existingItem.approvalDirekturDate) {
                 updatedItem.approvalDirekturDate = existingItem.approvalDirekturDate;
               }
             }
+          }
+          if (updatedItem.approvalKetuaUbmBy && !String(updatedItem.approvalKetuaUbmBy).startsWith('Ditolak') && updatedItem.status !== 'Rejected') {
+            updatedItem.approvalKetuaUbm = true;
+          }
+          if (updatedItem.approvalDirekturBy && !String(updatedItem.approvalDirekturBy).startsWith('Ditolak') && updatedItem.status !== 'Rejected') {
+            updatedItem.approvalDirektur = true;
+          }
+          if (updatedItem.approvalKetuaUbm && updatedItem.approvalDirektur && (updatedItem.status === 'Sent' || updatedItem.status === 'Pengajuan' || !updatedItem.status)) {
+            updatedItem.status = 'Accepted';
           }
           ensureQuotationApprovalData(updatedItem);
         } else if (resourceName === 'bom') {
@@ -2203,6 +2244,14 @@ end run
           }
           if (!updatedItem.poDocument && existingItem.poDocument) {
             updatedItem.poDocument = existingItem.poDocument;
+          }
+          const tasks = Array.isArray(updatedItem.tasks) && updatedItem.tasks.length > 0
+            ? updatedItem.tasks
+            : (Array.isArray(updatedItem.milestones) ? updatedItem.milestones : (existingItem.tasks || existingItem.milestones || []));
+          updatedItem.tasks = tasks;
+          updatedItem.milestones = tasks;
+          if (updatedItem.id) {
+            syncProjectTasksToSupabase(updatedItem.id, tasks).catch(() => {});
           }
         } else if (resourceName === 'purchasing') {
           if (existingItem && existingItem.id) {
@@ -2344,6 +2393,100 @@ end run
   registerCrudRoutes('bom', 'BOM');
   registerCrudRoutes('delivery', 'DO');
   registerCrudRoutes('projects', 'PRJ');
+  registerCrudRoutes('project_tasks', 'TSK');
+
+  // ---------------- DEDICATED PROJECT TASKS, COMMENTS & REPORTS API ----------------
+  router.get('/projects/:id/tasks', async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const dbTasks = await loadProjectTasksFromSupabase(projectId);
+      if (Array.isArray(dbTasks) && dbTasks.length > 0) {
+        return res.json(dbTasks);
+      }
+      const projects = await fetchAuthoritativeList('projects');
+      const proj = projects.find(p => p.id === projectId || p.orderId === projectId);
+      const tasks = proj?.tasks || proj?.milestones || [];
+      res.json(tasks);
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Gagal memuat task project' });
+    }
+  });
+
+  router.post('/projects/:id/tasks/:taskId/comments', async (req, res) => {
+    try {
+      const { id: projectId, taskId } = req.params;
+      const { sender, role, text } = req.body;
+      if (!text || !text.trim()) {
+        return res.status(400).json({ error: 'Teks catatan diskusi tidak boleh kosong.' });
+      }
+      const projects = await fetchAuthoritativeList('projects');
+      const pIdx = projects.findIndex(p => p.id === projectId || p.orderId === projectId);
+      if (pIdx === -1) {
+        return res.status(404).json({ error: 'Project tidak ditemukan.' });
+      }
+      const proj = projects[pIdx];
+      const tasks = Array.isArray(proj.tasks) && proj.tasks.length > 0 ? proj.tasks : (proj.milestones || []);
+      const tIdx = tasks.findIndex(t => t.id === taskId);
+      if (tIdx === -1) {
+        return res.status(404).json({ error: 'Task tidak ditemukan.' });
+      }
+      if (!tasks[tIdx].comments) tasks[tIdx].comments = [];
+      const newComment = {
+        id: 'cm-' + Date.now(),
+        sender: sender || 'Tim Pelaksana',
+        role: role || 'Member',
+        text: text.trim(),
+        timestamp: new Date().toLocaleDateString('id-ID') + ' ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      };
+      tasks[tIdx].comments.push(newComment);
+      proj.tasks = tasks;
+      proj.milestones = tasks;
+      projects[pIdx] = proj;
+
+      await saveAuthoritativeList('projects', projects);
+      syncProjectTasksToSupabase(proj.id, tasks).catch(() => {});
+      broadcastReload({ type: 'reload', resource: 'projects' });
+      res.json({ success: true, comment: newComment });
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Gagal menyimpan catatan diskusi' });
+    }
+  });
+
+  router.post('/projects/:id/tasks/:taskId/report', async (req, res) => {
+    try {
+      const { id: projectId, taskId } = req.params;
+      const { description, reportUrl, images, status, subtasks } = req.body;
+      const projects = await fetchAuthoritativeList('projects');
+      const pIdx = projects.findIndex(p => p.id === projectId || p.orderId === projectId);
+      if (pIdx === -1) {
+        return res.status(404).json({ error: 'Project tidak ditemukan.' });
+      }
+      const proj = projects[pIdx];
+      const tasks = Array.isArray(proj.tasks) && proj.tasks.length > 0 ? proj.tasks : (proj.milestones || []);
+      const tIdx = tasks.findIndex(t => t.id === taskId);
+      if (tIdx === -1) {
+        return res.status(404).json({ error: 'Task tidak ditemukan.' });
+      }
+
+      if (!tasks[tIdx].report) tasks[tIdx].report = { description: '', reportUrl: '', images: [] };
+      if (description !== undefined) tasks[tIdx].report.description = description;
+      if (reportUrl !== undefined) tasks[tIdx].report.reportUrl = reportUrl;
+      if (images !== undefined) tasks[tIdx].report.images = images;
+      if (status !== undefined) tasks[tIdx].status = status;
+      if (subtasks !== undefined) tasks[tIdx].subtasks = subtasks;
+
+      proj.tasks = tasks;
+      proj.milestones = tasks;
+      projects[pIdx] = proj;
+
+      await saveAuthoritativeList('projects', projects);
+      syncProjectTasksToSupabase(proj.id, tasks).catch(() => {});
+      broadcastReload({ type: 'reload', resource: 'projects' });
+      res.json({ success: true, task: tasks[tIdx] });
+    } catch (err) {
+      res.status(500).json({ error: err.message || 'Gagal menyimpan laporan task' });
+    }
+  });
   registerCrudRoutes('bast', 'BAST');
   registerCrudRoutes('project_reports', 'REP');
   registerCrudRoutes('maintenance', 'MNT');

@@ -45,6 +45,7 @@ const DEFAULT_SCHEMA = {
   partnerships: [],
   service_expenses: [],
   project_finances: [],
+  project_tasks: [],
   settings: {}
 };
 
@@ -447,9 +448,12 @@ function extractQuotationApprovalFromNotes(notes) {
 function ensureQuotationApprovalData(quo, db = null) {
   if (!quo || typeof quo !== 'object') return quo;
 
-  // 0. Guard ketat: Quotation berstatus Draft TIDAK BOLEH memiliki status approval
-  const isDraftQuo = quo.status === 'Draft' || Boolean(quo.isDraft);
-  if (isDraftQuo) {
+  // 0. Guard ketat: Hanya Quotation berstatus Draft murni yang tidak memiliki status approval
+  if (quo.status && quo.status !== 'Draft') {
+    quo.isDraft = false;
+  }
+  const isDraftQuo = quo.status === 'Draft' || (Boolean(quo.isDraft) && (!quo.status || quo.status === 'Draft'));
+  if (isDraftQuo && quo.status !== 'Sent' && quo.status !== 'Accepted' && quo.status !== 'Pengajuan' && quo.status !== 'Rejected') {
     quo.status = 'Draft';
     quo.isDraft = true;
     quo.approvalKetuaUbm = false;
@@ -469,10 +473,10 @@ function ensureQuotationApprovalData(quo, db = null) {
 
   quo.isDraft = false;
 
-  // 1. Ekstrak dari notes jika belum ada di properti objek
+  // 1. Ekstrak dari notes atau _rawNotes jika ada
   const meta = extractQuotationApprovalFromNotes(quo.notes) || extractQuotationApprovalFromNotes(quo._rawNotes);
   if (meta) {
-    if (quo.approvalKetuaUbm === undefined && meta.approvalKetuaUbm !== undefined) {
+    if ((quo.approvalKetuaUbm === undefined || quo.approvalKetuaUbm === null || (quo.approvalKetuaUbm === false && meta.approvalKetuaUbm === true)) && meta.approvalKetuaUbm !== undefined) {
       quo.approvalKetuaUbm = Boolean(meta.approvalKetuaUbm);
     }
     if (!quo.approvalKetuaUbmBy && meta.approvalKetuaUbmBy) {
@@ -481,7 +485,7 @@ function ensureQuotationApprovalData(quo, db = null) {
     if (!quo.approvalKetuaUbmDate && meta.approvalKetuaUbmDate) {
       quo.approvalKetuaUbmDate = meta.approvalKetuaUbmDate;
     }
-    if (quo.approvalDirektur === undefined && meta.approvalDirektur !== undefined) {
+    if ((quo.approvalDirektur === undefined || quo.approvalDirektur === null || (quo.approvalDirektur === false && meta.approvalDirektur === true)) && meta.approvalDirektur !== undefined) {
       quo.approvalDirektur = Boolean(meta.approvalDirektur);
     }
     if (!quo.approvalDirekturBy && meta.approvalDirekturBy) {
@@ -492,7 +496,15 @@ function ensureQuotationApprovalData(quo, db = null) {
     }
   }
 
-  // 2. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau Accepted
+  // 2. Jika ada nama penyetuju dan bukan berstatus ditolak, maka flag approval HARUS TRUE
+  if (quo.approvalKetuaUbmBy && !String(quo.approvalKetuaUbmBy).startsWith('Ditolak') && quo.status !== 'Rejected') {
+    quo.approvalKetuaUbm = true;
+  }
+  if (quo.approvalDirekturBy && !String(quo.approvalDirekturBy).startsWith('Ditolak') && quo.status !== 'Rejected') {
+    quo.approvalDirektur = true;
+  }
+
+  // 3. Kriteria Auto-Approval untuk Quotation legacy/lama yang sudah dikonversi atau Accepted
   const currentDb = db || (typeof readDB === 'function' ? readDB() : null);
   const ordersList = currentDb?.orders || [];
   const isConverted = Boolean(
@@ -519,11 +531,15 @@ function ensureQuotationApprovalData(quo, db = null) {
     // Quotation terbit baru: harus persetujuan eksplisit
     quo.approvalKetuaUbm = Boolean(quo.approvalKetuaUbm);
     quo.approvalDirektur = Boolean(quo.approvalDirektur);
+    if (quo.approvalKetuaUbm && quo.approvalDirektur && (quo.status === 'Sent' || quo.status === 'Pengajuan' || !quo.status)) {
+      quo.status = 'Accepted';
+    }
   }
 
   // Benamkan ke notes agar tidak hilang
   if (quo.approvalKetuaUbm || quo.approvalDirektur) {
     quo.notes = embedQuotationApprovalInNotes(quo.notes, quo);
+    quo._rawNotes = quo.notes;
   }
 
   return quo;
@@ -723,7 +739,82 @@ function ensureProjectData(project) {
     project.notes = cleanDisplayNotes(project.notes);
   }
 
+  const tasks = Array.isArray(project.tasks) && project.tasks.length > 0
+    ? project.tasks
+    : (Array.isArray(project.milestones) ? project.milestones : []);
+  project.tasks = tasks;
+  project.milestones = tasks;
+
   return project;
+}
+
+async function syncProjectTasksToSupabase(projectId, tasks) {
+  if (!supabase || !projectId || !Array.isArray(tasks)) return;
+  try {
+    const rows = tasks.map((t, idx) => ({
+      id: String(t.id || `task-${projectId}-${idx + 1}`),
+      project_id: projectId,
+      title: t.title || t.name || `Task ${idx + 1}`,
+      start_date: toSqlDateOrNull(t.startDate, false),
+      due_date: toSqlDateOrNull(t.dueDate, false),
+      status: t.status || 'Pending',
+      pic: t.pic || (Array.isArray(t.pics) ? t.pics.join(', ') : ''),
+      pics: Array.isArray(t.pics) ? t.pics : (t.pic ? t.pic.split(',').map(s => s.trim()).filter(Boolean) : []),
+      subtasks: Array.isArray(t.subtasks) ? t.subtasks : [],
+      report: t.report || { description: '', reportUrl: '', images: [] },
+      comments: Array.isArray(t.comments) ? t.comments : [],
+      additional_components: Array.isArray(t.additionalComponents) ? t.additionalComponents : [],
+      notes: t.notes || '',
+      order_index: idx,
+      updated_at: new Date().toISOString()
+    }));
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from('project_tasks').upsert(rows, { onConflict: 'id' });
+      if (!error) {
+        const currentIds = rows.map(r => r.id);
+        const { data: existingRows } = await supabase.from('project_tasks').select('id').eq('project_id', projectId);
+        if (Array.isArray(existingRows)) {
+          const toDelete = existingRows.filter(r => !currentIds.includes(r.id)).map(r => r.id);
+          if (toDelete.length > 0) {
+            await supabase.from('project_tasks').delete().in('id', toDelete);
+          }
+        }
+      }
+    } else {
+      await supabase.from('project_tasks').delete().eq('project_id', projectId);
+    }
+  } catch (err) {
+    // Graceful fallback if table does not exist in Supabase yet
+  }
+}
+
+async function loadProjectTasksFromSupabase(projectId) {
+  if (!supabase || !projectId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('project_tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('order_index', { ascending: true });
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+    return data.map(row => ({
+      id: row.id,
+      title: row.title,
+      startDate: row.start_date || '',
+      dueDate: row.due_date || '',
+      status: row.status || 'Pending',
+      pic: row.pic || '',
+      pics: Array.isArray(row.pics) ? row.pics : (row.pic ? row.pic.split(',').map(s => s.trim()).filter(Boolean) : []),
+      subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
+      report: row.report || { description: '', reportUrl: '', images: [] },
+      comments: Array.isArray(row.comments) ? row.comments : [],
+      additionalComponents: Array.isArray(row.additional_components) ? row.additional_components : [],
+      notes: row.notes || ''
+    }));
+  } catch (e) {
+    return null;
+  }
 }
 
 function prepareNativeTablePayload(resourceName, rawItem) {
@@ -1150,11 +1241,21 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
       if (cloudRecord.rejectionNotes && !merged.rejectionNotes) {
         merged.rejectionNotes = cloudRecord.rejectionNotes;
       }
+      if (cloudRecord.approvalKetuaUbm !== undefined) {
+        if (merged.approvalKetuaUbm === undefined || merged.approvalKetuaUbm === null || (merged.approvalKetuaUbm === false && cloudRecord.approvalKetuaUbm === true && merged.status !== 'Rejected')) {
+          merged.approvalKetuaUbm = cloudRecord.approvalKetuaUbm;
+        }
+      }
       if (cloudRecord.approvalKetuaUbmBy && !merged.approvalKetuaUbmBy) {
         merged.approvalKetuaUbmBy = cloudRecord.approvalKetuaUbmBy;
       }
       if (cloudRecord.approvalKetuaUbmDate && !merged.approvalKetuaUbmDate) {
         merged.approvalKetuaUbmDate = cloudRecord.approvalKetuaUbmDate;
+      }
+      if (cloudRecord.approvalDirektur !== undefined) {
+        if (merged.approvalDirektur === undefined || merged.approvalDirektur === null || (merged.approvalDirektur === false && cloudRecord.approvalDirektur === true && merged.status !== 'Rejected')) {
+          merged.approvalDirektur = cloudRecord.approvalDirektur;
+        }
       }
       if (cloudRecord.approvalDirekturBy && !merged.approvalDirekturBy) {
         merged.approvalDirekturBy = cloudRecord.approvalDirekturBy;
@@ -1162,6 +1263,21 @@ function mergeNativeAndCloudRecord(nativeCamel, cloudRecord, resourceName) {
       if (cloudRecord.approvalDirekturDate && !merged.approvalDirekturDate) {
         merged.approvalDirekturDate = cloudRecord.approvalDirekturDate;
       }
+      if (cloudRecord.status === 'Accepted' && (merged.status === 'Sent' || merged.status === 'Pengajuan' || !merged.status)) {
+        merged.status = 'Accepted';
+      }
+      if (cloudRecord._rawNotes && !merged._rawNotes) {
+        merged._rawNotes = cloudRecord._rawNotes;
+      }
+    }
+    if (merged.approvalKetuaUbmBy && !String(merged.approvalKetuaUbmBy).startsWith('Ditolak') && merged.status !== 'Rejected' && merged.status !== 'Draft') {
+      merged.approvalKetuaUbm = true;
+    }
+    if (merged.approvalDirekturBy && !String(merged.approvalDirekturBy).startsWith('Ditolak') && merged.status !== 'Rejected' && merged.status !== 'Draft') {
+      merged.approvalDirektur = true;
+    }
+    if (merged.approvalKetuaUbm && merged.approvalDirektur && (merged.status === 'Sent' || merged.status === 'Pengajuan' || !merged.status)) {
+      merged.status = 'Accepted';
     }
     ensureQuotationApprovalData(merged);
   }
@@ -1325,6 +1441,17 @@ async function saveAuthoritativeList(resourceName, items) {
       ensurePurchasingApprovalData(p);
     });
   }
+  if (resourceName === 'projects') {
+    cleanList.forEach(p => {
+      ensureProjectData(p);
+      const tasks = p.tasks || p.milestones || [];
+      p.tasks = tasks;
+      p.milestones = tasks;
+      if (p.id) {
+        syncProjectTasksToSupabase(p.id, tasks).catch(() => {});
+      }
+    });
+  }
   const db = readDB();
   db[resourceName] = cleanList;
   writeDB(db);
@@ -1363,6 +1490,8 @@ module.exports = {
   cleanDisplayNotes,
   ensureOrderPOData,
   ensureProjectData,
+  syncProjectTasksToSupabase,
+  loadProjectTasksFromSupabase,
   embedApprovalInNotes,
   extractApprovalFromNotes,
   ensureOrderApprovalData,

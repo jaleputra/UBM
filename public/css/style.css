@@ -1978,7 +1978,7 @@ textarea.form-control {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 15mm 15mm 15mm 15mm;
+    margin: 10mm 12mm;
   }
 
   *,
@@ -1996,7 +1996,7 @@ textarea.form-control {
     height: auto !important;
     min-height: 100% !important;
     overflow: visible !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     margin: 0 !important;
     padding: 0 !important;
   }
@@ -2083,8 +2083,9 @@ textarea.form-control {
 
   .doc-table th,
   .doc-table td {
-    padding: 8px 10px !important;
+    padding: 4px 6px !important;
     border: 1px solid #cbd5e1 !important;
+    font-size: 10.5px !important;
   }
 
   .doc-table th {
@@ -2095,6 +2096,16 @@ textarea.form-control {
   .badge {
     border: 1px solid #cbd5e1 !important;
     padding: 2px 6px !important;
+  }
+
+  .doc-signatures {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .doc-totals {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 
