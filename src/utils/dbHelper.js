@@ -981,12 +981,22 @@ function prepareNativeTablePayload(resourceName, rawItem) {
     item.approvalDirekturDate = isDraftQuo ? null : toSqlTimestampOrNull(item.approvalDirekturDate, false);
   } else if (resourceName === 'projects') {
     item.projectName = item.projectName || item.customerName || 'Project UBM';
+    item.customerName = item.customerName || 'Internal UBM';
     item.startDate = toSqlDateOrNull(item.startDate, true);
     item.endDate = toSqlDateOrNull(item.endDate || item.dueDate, false);
+    item.dueDate = toSqlDateOrNull(item.dueDate, false);
     item.status = item.status || 'Planning';
     item.progressPercent = Number(item.progressPercent ?? 0);
-    item.milestones = Array.isArray(item.milestones) ? item.milestones : [];
+    item.isService = Boolean(item.isService || String(item.quotationType || '').toLowerCase() === 'jasa');
+    const normalizedTasks = Array.isArray(item.tasks) && item.tasks.length > 0
+      ? item.tasks
+      : (Array.isArray(item.milestones) ? item.milestones : []);
+    item.milestones = normalizedTasks;
+    item.tasks = normalizedTasks;
     item.team = Array.isArray(item.team) ? item.team : [];
+    if (item.orderId && typeof item.notes === 'string' && item.notes.includes('<!--UBM_PO_DATA:')) {
+      item.notes = cleanDisplayNotes(item.notes);
+    }
   } else if (resourceName === 'activity_logs') {
     item.task = item.task || 'Kegiatan Operasional';
     item.pic = item.pic || 'Tim UBM';
@@ -1076,6 +1086,21 @@ function prepareNativeTablePayload(resourceName, rawItem) {
       snake[key] = toSqlDateOrNull(snake[key], true);
     } else if (NULLABLE_DATE_COLS.has(key) || key.endsWith('_date')) {
       snake[key] = toSqlDateOrNull(snake[key], false);
+    }
+  }
+
+  // Untuk tabel projects, batasi ke kolom native agar tidak melakukan belasan retry PGRST204 yang memperlambat/timeout
+  if (resourceName === 'projects') {
+    const allowedProjectCols = new Set([
+      'id', 'order_id', 'quotation_id', 'bom_id', 'project_name', 'customer_name',
+      'project_lead', 'department', 'start_date', 'end_date', 'due_date',
+      'status', 'progress_percent', 'is_service', 'service_expense_approved',
+      'milestones', 'tasks', 'team', 'modal_cost', 'notes', 'created_at', 'updated_at'
+    ]);
+    for (const col of Object.keys(snake)) {
+      if (!allowedProjectCols.has(col)) {
+        delete snake[col];
+      }
     }
   }
 

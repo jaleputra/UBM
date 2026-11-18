@@ -217,7 +217,7 @@ function renderProjectsTableView() {
       : 'Lihat Detail Timeline & Milestone (Mode Lihat)';
 
     return `
-      <tr style="cursor: pointer; transition: background-color 0.15s ease;" class="project-row" onclick="openProjectTimelinePage('${p.id || p.orderId}')" title="${timelineBtnTitle}">
+      <tr style="cursor: pointer; transition: background-color 0.15s ease;" class="project-row" data-project-id="${p.id}" data-order-id="${p.orderId || ''}" onclick="openProjectTimelinePage('${p.id || p.orderId}')" title="${timelineBtnTitle}">
         <td>
           <span class="mono-id font-bold text-primary" style="font-size: 11px;">${p.id}</span>
           ${p.orderId ? `<div class="font-xs text-muted font-mono" style="font-size: 10px; margin-top: 2px;">Ref: ${p.orderId}</div>` : `<div class="font-xs text-muted" style="font-size: 10px; margin-top: 2px;"><span class="badge badge-outline" style="font-size: 9px; padding: 1px 5px; color: #4338ca; border-color: #c7d2fe; background: #eef2ff;">Direct / Mandiri</span></div>`}
@@ -634,33 +634,27 @@ async function saveDirectProject(openTimeline = false) {
     createdAt: new Date().toISOString()
   };
 
-  try {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      const created = await res.json();
-      closeModal('modal-create-direct-project');
-      showToast(`Project Management "${escapeHtml(name)}" berhasil dibuat!`, 'success');
+  const saveResult = await persistProjectRecord(payload, false, null);
+  if (saveResult && saveResult.ok) {
+    const created = saveResult.data;
+    closeModal('modal-create-direct-project');
+    showToast(`Project Management "${escapeHtml(name)}" berhasil dibuat!`, 'success');
+    try {
       await fetchResource('projects');
-      renderProjectsTableView();
-      updateSidebarBadges();
-      loadDashboardData();
-
-      if (openTimeline) {
-        state.timelineReturnView = 'projects';
-        openProjectTimelinePage(created.id || created.orderId);
+      if (created && created.id && !(state.projects || []).some(p => p.id === created.id)) {
+        state.projects.unshift(created);
       }
-    } else {
-      const errData = await res.json().catch(() => ({}));
-      showToast(errData.error || 'Gagal membuat project baru', 'error');
+    } catch (e) {}
+    try { renderProjectsTableView(); } catch (e) {}
+    try { updateSidebarBadges(); } catch (e) {}
+    try { loadDashboardData(); } catch (e) {}
+
+    if (openTimeline && created) {
+      state.timelineReturnView = 'projects';
+      openProjectTimelinePage(created.id || created.orderId);
     }
-  } catch (err) {
-    console.error('Error creating direct project:', err);
-    showToast('Terjadi kesalahan jaringan', 'error');
+  } else {
+    showToast(saveResult?.error || 'Gagal membuat project baru', 'error');
   }
 }
 window.saveDirectProject = saveDirectProject;
@@ -1016,6 +1010,149 @@ function addProjectTeamMemberRow(member = null) {
 }
 window.addProjectTeamMemberRow = addProjectTeamMemberRow;
 
+function sanitizeProjectPayloadForSave(rawPayload, linkedOrder = null) {
+  const payload = { ...(rawPayload || {}) };
+  delete payload._rawNotes;
+  delete payload._syncedNative;
+
+  if (!payload.id) {
+    payload.id = `PRJ-2026-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`;
+  }
+
+  payload.projectName = payload.projectName || linkedOrder?.projectName || 'Project UBM';
+  payload.customerName = payload.customerName || linkedOrder?.customerName || 'Internal UBM';
+  payload.status = payload.status || 'Planning';
+  payload.progressPercent = Number(payload.progressPercent ?? 0);
+  payload.startDate = payload.startDate || linkedOrder?.orderDate || new Date().toISOString().split('T')[0];
+  payload.dueDate = payload.dueDate || linkedOrder?.dueDate || '';
+  payload.endDate = payload.endDate || payload.dueDate || null;
+  payload.team = Array.isArray(payload.team) ? payload.team : [];
+
+  const normalizedTasks = Array.isArray(payload.tasks) && payload.tasks.length > 0
+    ? payload.tasks
+    : (Array.isArray(payload.milestones) ? payload.milestones : []);
+  payload.tasks = normalizedTasks;
+  payload.milestones = normalizedTasks;
+
+  const isSvc = typeof payload.isService === 'boolean'
+    ? payload.isService
+    : (linkedOrder && typeof isServiceOrder === 'function'
+      ? isServiceOrder(linkedOrder)
+      : String(payload.quotationType || '').toLowerCase() === 'jasa');
+  payload.isService = Boolean(isSvc);
+  if (!payload.quotationType) {
+    payload.quotationType = payload.isService ? 'jasa' : 'produk';
+  }
+
+  // Hindari menyalin blob base64 PDF berukuran besar ke record project jika sudah terhubung ke order
+  if (payload.orderId) {
+    if (typeof payload.notes === 'string' && payload.notes.includes('<!--UBM_PO_DATA:') && typeof cleanDisplayNotes === 'function') {
+      payload.notes = cleanDisplayNotes(payload.notes);
+    }
+    const poUrl = payload.poDocument?.url || payload.poFileUrl || '';
+    if (typeof poUrl === 'string' && poUrl.startsWith('data:') && poUrl.length > 150000) {
+      const poName = payload.poFileName || payload.poDocument?.name || linkedOrder?.poFileName || linkedOrder?.poDocument?.name || 'PO-Pelanggan.pdf';
+      payload.poFileName = poName;
+      payload.poFileUrl = '';
+      payload.poDocument = {
+        name: poName,
+        fromOrderId: payload.orderId,
+        uploadedAt: payload.poDocument?.uploadedAt || new Date().toISOString()
+      };
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  payload.createdAt = payload.createdAt || nowIso;
+  payload.updatedAt = nowIso;
+  return payload;
+}
+
+async function persistProjectRecord(rawPayload, isEditMode = false, linkedOrder = null) {
+  const projectItem = sanitizeProjectPayloadForSave(rawPayload, linkedOrder);
+
+  if (!Array.isArray(state.projects)) state.projects = [];
+  const existingIdx = state.projects.findIndex(p =>
+    p.id === projectItem.id || (projectItem.orderId && p.orderId === projectItem.orderId)
+  );
+  if (existingIdx !== -1) {
+    projectItem.id = state.projects[existingIdx].id || projectItem.id;
+    state.projects[existingIdx] = { ...state.projects[existingIdx], ...projectItem };
+  } else {
+    state.projects.unshift(projectItem);
+  }
+
+  let apiOk = false;
+  let apiErrorMsg = '';
+  let finalRecord = projectItem;
+
+  // 1. Simpan ke API server (/api/projects) secara terisolasi agar gagal API tidak menghalangi penyimpanan Supabase
+  try {
+    const usePut = Boolean(isEditMode && projectItem.id);
+    const url = usePut ? `/api/projects/${encodeURIComponent(projectItem.id)}` : '/api/projects';
+    const method = usePut ? 'PUT' : 'POST';
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 12000) : null;
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(projectItem),
+      ...(controller ? { signal: controller.signal } : {})
+    });
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (res.ok) {
+      apiOk = true;
+      const saved = await res.json().catch(() => null);
+      if (saved && typeof saved === 'object' && saved.id) {
+        finalRecord = { ...projectItem, ...saved };
+        const idxAfter = state.projects.findIndex(p => p.id === finalRecord.id || (finalRecord.orderId && p.orderId === finalRecord.orderId));
+        if (idxAfter !== -1) state.projects[idxAfter] = finalRecord;
+        else state.projects.unshift(finalRecord);
+      }
+    } else {
+      const errBody = await res.json().catch(() => ({}));
+      apiErrorMsg = errBody.error || errBody.message || `HTTP ${res.status}`;
+      if ((res.status === 400 || res.status === 403) && errBody.error) {
+        return { ok: false, status: res.status, error: apiErrorMsg };
+      }
+    }
+  } catch (err) {
+    apiErrorMsg = err?.name === 'AbortError' ? 'Timeout menghubungi API server' : (err?.message || 'Gagal menghubungi API server');
+    console.warn('⚠️ [persistProjectRecord API Notice]:', apiErrorMsg);
+  }
+
+  // 2. Pastikan tersimpan langsung di Supabase (Native Table public.projects & Cloud Sync Store __SYS_SYNC_projects__)
+  let nativeOk = Boolean(finalRecord?._syncedNative);
+  let cloudOk = false;
+
+  const supabaseJobs = [];
+  if (!nativeOk && typeof directSupabaseUpsertNativeRow === 'function') {
+    supabaseJobs.push(
+      directSupabaseUpsertNativeRow('projects', finalRecord)
+        .then(ok => { nativeOk = Boolean(ok); })
+        .catch(() => {})
+    );
+  }
+  if (typeof directSupabaseSyncResource === 'function') {
+    supabaseJobs.push(
+      directSupabaseSyncResource('projects', state.projects)
+        .then(ok => { cloudOk = Boolean(ok); })
+        .catch(() => {})
+    );
+  }
+  if (supabaseJobs.length > 0) {
+    await Promise.allSettled(supabaseJobs);
+  }
+
+  if (apiOk || nativeOk || cloudOk) {
+    return { ok: true, data: finalRecord, viaApi: apiOk, syncedNative: nativeOk, syncedCloud: cloudOk };
+  }
+  return { ok: false, error: apiErrorMsg || 'Gagal menyimpan data project ke database maupun server' };
+}
+window.persistProjectRecord = persistProjectRecord;
+
 async function saveTeamAssignmentData() {
   if (!currentActiveProjectOrderId) {
     showToast('Pilih order atau project terlebih dahulu', 'warning');
@@ -1023,13 +1160,16 @@ async function saveTeamAssignmentData() {
   }
 
   const activeUser = typeof getAuthUser === 'function' ? getAuthUser() : null;
+  const activeRole = typeof getNormalizedRole === 'function' ? getNormalizedRole(activeUser) : '';
   const existingProject = (state.projects || []).find(p => p.id === currentActiveProjectOrderId || p.orderId === currentActiveProjectOrderId);
-  const order = state.orders.find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
+  const order = (state.orders || []).find(o => o.id === (existingProject?.orderId || currentActiveProjectOrderId));
 
   const canAssignLead = (typeof hasRolePermission === 'function') ? hasRolePermission('canAssignLead') : true;
-  const isExistingLeadAssigned = Boolean(existingProject?.projectLead && existingProject.projectLead !== 'Belum diassign');
-  const isLead = isExistingLeadAssigned ? ((typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : true) || canAssignLead) : canAssignLead;
-  if (!isLead) {
+  const canRegisterMembers = (typeof hasRolePermission === 'function') ? hasRolePermission('canRegisterMembers') : true;
+  const isAssignedLead = typeof isUserProjectLead === 'function' ? isUserProjectLead(currentActiveProjectOrderId, activeUser) : false;
+
+  const canSave = canAssignLead || isAssignedLead || canRegisterMembers || ['Administrator', 'Direktur', 'Wakil Direktur I', 'Ketua UBM', 'PPIC', 'Lead Project'].includes(activeRole);
+  if (!canSave) {
     showToast('⚠️ Hanya Lead Project yang ditugaskan atau Administrator yang berwenang mendaftarkan dan mengubah tim pelaksana project.', 'warning');
     return;
   }
@@ -1051,10 +1191,13 @@ async function saveTeamAssignmentData() {
   const leadSelectEl = document.getElementById('pm-lead-name');
   const leadName = canAssignLead
     ? (leadSelectEl?.value?.trim() || existingProject?.projectLead || 'Belum diassign')
-    : (existingProject?.projectLead || 'Belum diassign');
+    : (existingProject?.projectLead || leadSelectEl?.value?.trim() || 'Belum diassign');
   const leadOptEmail = leadSelectEl?.options?.[leadSelectEl.selectedIndex]?.getAttribute('data-email') || existingProject?.leadEmail || '';
   const leadEmail = resolveAccountEmailByName(leadName, leadOptEmail);
   const department = document.getElementById('pm-department')?.value?.trim() || 'Engineering';
+
+  const rawNotes = (order && order.notes !== undefined) ? order.notes : (existingProject?.notes || '');
+  const cleanNotes = (order && typeof cleanDisplayNotes === 'function') ? cleanDisplayNotes(rawNotes) : rawNotes;
 
   const payload = {
     ...(existingProject || {}),
@@ -1068,49 +1211,102 @@ async function saveTeamAssignmentData() {
     orderDate: order?.orderDate || existingProject?.orderDate || existingProject?.startDate || '',
     startDate: existingProject?.startDate || order?.orderDate || new Date().toISOString().split('T')[0],
     dueDate: order?.dueDate || existingProject?.dueDate || '',
-    notes: (order && order.notes !== undefined) ? order.notes : (existingProject?.notes || ''),
+    status: existingProject?.status || 'Planning',
+    progressPercent: Number(existingProject?.progressPercent ?? 0),
+    notes: cleanNotes,
     items: (Array.isArray(order?.items) && order.items.length > 0) ? order.items : (existingProject?.items || []),
     additionalServices: (Array.isArray(order?.additionalServices) && order.additionalServices.length > 0) ? order.additionalServices : (existingProject?.additionalServices || []),
-    poFileName: order?.poFileName || existingProject?.poFileName || '',
+    poFileName: order?.poFileName || order?.poDocument?.name || existingProject?.poFileName || '',
     poDocument: order?.poDocument || existingProject?.poDocument || null,
     projectLead: leadName,
     leadEmail: leadEmail,
     department: department,
     team: team,
-    isLeadLocked: true
+    isLeadLocked: Boolean(leadName && leadName !== 'Belum diassign')
   };
 
-  try {
-    let res;
-    if (existingProject && existingProject.id) {
-      res = await fetch(`/api/projects/${existingProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      res = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
+  const saveBtn = document.querySelector('#team-assignment-modal button[onclick*="saveTeamAssignmentData"]');
+  const originalBtnHtml = saveBtn ? saveBtn.innerHTML : '';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Menyimpan...';
+    if (window.lucide) lucide.createIcons();
+  }
 
-    if (res.ok) {
-      closeModal('team-assignment-modal');
-      showToast('Penugasan Tim berhasil disimpan! Project Lead terkunci permanen. Sekarang Anda dapat melanjutkan ke pengisian BOM.', 'success');
-      await fetchResource('projects');
-      renderProjectsTableView();
-      renderTeamAssignmentWorkspace(currentActiveProjectOrderId);
-      renderOrdersTable();
-      updateSidebarBadges();
-      loadDashboardData();
-    } else {
-      showToast('Gagal menyimpan penugasan tim', 'error');
-    }
+  let saveResult;
+  try {
+    saveResult = await persistProjectRecord(payload, Boolean(existingProject && existingProject.id), order);
   } catch (err) {
     console.error('Error saving team data:', err);
-    showToast('Terjadi kesalahan jaringan', 'error');
+    saveResult = { ok: false, error: err?.message || 'Gagal menyimpan penugasan tim' };
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = originalBtnHtml;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  if (!saveResult || !saveResult.ok) {
+    showToast(saveResult?.error || 'Gagal menyimpan penugasan tim ke database', 'error');
+    return;
+  }
+
+  const savedProject = saveResult.data;
+  currentActiveProjectOrderId = savedProject?.id || savedProject?.orderId || currentActiveProjectOrderId;
+  closeModal('team-assignment-modal');
+  showToast('✅ Penugasan Tim berhasil disimpan! Mengalihkan ke Project Management...', 'success');
+
+  // Sinkronkan ulang state dari database sambil memastikan data yang baru disimpan tidak pernah hilang
+  try {
+    await fetchResource('projects');
+    if (savedProject && savedProject.id) {
+      const idxCheck = (state.projects || []).findIndex(p =>
+        p.id === savedProject.id || (savedProject.orderId && p.orderId === savedProject.orderId)
+      );
+      if (idxCheck === -1) {
+        if (!Array.isArray(state.projects)) state.projects = [];
+        state.projects.unshift(savedProject);
+        if (typeof directSupabaseSyncResource === 'function') {
+          directSupabaseSyncResource('projects', state.projects).catch(() => {});
+        }
+      } else {
+        state.projects[idxCheck] = { ...state.projects[idxCheck], ...savedProject };
+      }
+    }
+  } catch (refreshErr) {
+    console.warn('Refresh projects notice:', refreshErr);
+  }
+
+  try { if (typeof renderProjectsTableView === 'function') renderProjectsTableView(); } catch (e) {}
+  try { if (typeof renderOrdersTable === 'function') renderOrdersTable(); } catch (e) {}
+  try { if (typeof updateSidebarBadges === 'function') updateSidebarBadges(); } catch (e) {}
+  try { if (typeof loadDashboardData === 'function') loadDashboardData(); } catch (e) {}
+
+  // Navigasi langsung ke halaman Project Management (atau Dashboard jika kategori Jasa)
+  try {
+    if (typeof navigateTo === 'function') {
+      const isSvcProj = typeof isProjectService === 'function' ? isProjectService(savedProject) : false;
+      if (!isSvcProj) {
+        navigateTo('projects');
+        setTimeout(() => {
+          const targetId = savedProject?.id || existingProject?.id || currentActiveProjectOrderId;
+          if (targetId) {
+            const row = document.querySelector(`tr[data-project-id="${targetId}"], tr[data-order-id="${targetId}"]`);
+            if (row) {
+              row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              row.style.transition = 'background-color 0.4s ease';
+              row.style.backgroundColor = '#ecfdf5';
+              setTimeout(() => { row.style.backgroundColor = ''; }, 2200);
+            }
+          }
+        }, 300);
+      } else {
+        navigateTo('dashboard');
+      }
+    }
+  } catch (navErr) {
+    console.warn('Navigation notice:', navErr);
   }
 }
 window.saveTeamAssignmentData = saveTeamAssignmentData;
@@ -3350,42 +3546,31 @@ async function saveProjectTimelineData(redirect = true, isPicOrMemberUpdate = fa
     tasks: milestones
   };
 
-  try {
-    let res;
-    if (existingProject && existingProject.id) {
-      res = await fetch(`/api/projects/${existingProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } else {
-      res = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    if (res.ok) {
-      showToast('Seluruh data Timeline, Sub-Task, Laporan & Diskusi berhasil disimpan!', 'success');
-      const notesEl = document.getElementById('timeline-notes');
-      if (notesEl) notesEl.value = cleanInputNotes;
+  const saveResult = await persistProjectRecord(payload, Boolean(existingProject && existingProject.id), order);
+  if (saveResult && saveResult.ok) {
+    const savedProj = saveResult.data;
+    showToast('Seluruh data Timeline, Sub-Task, Laporan & Diskusi berhasil disimpan!', 'success');
+    const notesEl = document.getElementById('timeline-notes');
+    if (notesEl) notesEl.value = cleanInputNotes;
+    try {
       await fetchResource('projects');
-      renderOrdersTable();
-      renderProjectsTableView();
-      updateSidebarBadges();
-      loadDashboardData();
-      if (redirect) {
-        const returnTarget = (state.timelineReturnView === 'projects') ? 'projects' : 'orders';
-        navigateTo(returnTarget);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (savedProj && savedProj.id) {
+        const idxCheck = (state.projects || []).findIndex(p => p.id === savedProj.id);
+        if (idxCheck === -1) state.projects.unshift(savedProj);
+        else state.projects[idxCheck] = { ...state.projects[idxCheck], ...savedProj };
       }
-    } else {
-      showToast('Gagal menyimpan timeline project', 'error');
+    } catch (e) {}
+    try { renderOrdersTable(); } catch (e) {}
+    try { renderProjectsTableView(); } catch (e) {}
+    try { updateSidebarBadges(); } catch (e) {}
+    try { loadDashboardData(); } catch (e) {}
+    if (redirect) {
+      const returnTarget = (state.timelineReturnView === 'projects') ? 'projects' : 'orders';
+      navigateTo(returnTarget);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  } catch (err) {
-    console.error('Error saving timeline data:', err);
-    showToast('Terjadi kesalahan jaringan', 'error');
+  } else {
+    showToast(saveResult?.error || 'Gagal menyimpan timeline project', 'error');
   }
 }
 
@@ -4168,20 +4353,8 @@ async function sendTeamAssignmentEmail(orderId = null) {
         team: data.team,
         isLeadLocked: true
       };
-      if (existingProject && existingProject.id) {
-        await fetch(`/api/projects/${existingProject.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      }
-      await fetchResource('projects');
+      await persistProjectRecord(payload, Boolean(existingProject && existingProject.id), order);
+      try { await fetchResource('projects'); } catch (e) {}
       closeModal('team-assignment-modal');
     } catch (saveErr) {
       console.warn('Auto-save before email failed:', saveErr);

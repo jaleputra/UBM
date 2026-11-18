@@ -299,7 +299,9 @@ function renderDashboardGanttChart() {
     processedOrderIds.add(order.id);
     const project = projects.find(p => p.orderId === order.id);
     const firstItemName = order.items?.[0]?.itemName || 'Produk Pesanan';
-    const milestones = project?.milestones || [];
+    const milestones = (Array.isArray(project?.tasks) && project.tasks.length > 0)
+      ? project.tasks
+      : (Array.isArray(project?.milestones) ? project.milestones : []);
     const totalMs = milestones.length;
     const completedMs = milestones.filter(m => m.status === 'Completed').length;
     const inProgressMs = milestones.filter(m => m.status === 'In Progress').length;
@@ -433,7 +435,9 @@ function renderDashboardGanttChart() {
         isDirect: true
       };
 
-      const milestones = project.milestones || [];
+      const milestones = (Array.isArray(project.tasks) && project.tasks.length > 0)
+        ? project.tasks
+        : (Array.isArray(project.milestones) ? project.milestones : []);
       const totalMs = milestones.length;
       const completedMs = milestones.filter(m => m.status === 'Completed').length;
       const inProgressMs = milestones.filter(m => m.status === 'In Progress').length;
@@ -1397,7 +1401,10 @@ function renderDashboardProjectGantt() {
     const isSvc = isProjectService(p) || (matchingOrder ? isServiceOrder(matchingOrder) : false);
     if (isSvc) return; // Project Management & Timeline khusus Produk / Project Non-Jasa
 
-    const msList = Array.isArray(p.milestones) ? p.milestones.filter(m => m && m.title) : [];
+    const rawTasks = (Array.isArray(p.tasks) && p.tasks.length > 0)
+      ? p.tasks
+      : (Array.isArray(p.milestones) ? p.milestones : []);
+    const msList = rawTasks.filter(m => m && m.title);
     // Jika belum menginput timeline/milestone di Project Management, JANGAN tampilkan di Gantt Chart Dashboard
     if (msList.length === 0) return;
 

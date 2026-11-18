@@ -561,6 +561,36 @@ async function directSupabaseUpsertNativeRow(resource, item) {
       if (payload.customer_name === null || payload.customer_name === undefined) {
         payload.customer_name = isDraftQuo ? '' : 'Calon Pelanggan (Ditulis Tangan)';
       }
+    } else if (resource === 'projects') {
+      payload.project_name = payload.project_name || payload.customer_name || 'Project UBM';
+      payload.customer_name = payload.customer_name || 'Internal UBM';
+      if (!payload.start_date) payload.start_date = new Date().toISOString().split('T')[0];
+      if (!payload.end_date && payload.due_date) payload.end_date = payload.due_date;
+      if (!payload.status) payload.status = 'Planning';
+      payload.progress_percent = Number(payload.progress_percent ?? 0);
+      const normTasks = Array.isArray(payload.tasks) && payload.tasks.length > 0
+        ? payload.tasks
+        : (Array.isArray(payload.milestones) ? payload.milestones : []);
+      payload.milestones = normTasks;
+      payload.tasks = normTasks;
+      payload.team = Array.isArray(payload.team) ? payload.team : [];
+      if (payload.is_service === undefined) {
+        payload.is_service = String(payload.quotation_type || '').toLowerCase() === 'jasa';
+      }
+      if (payload.order_id && typeof payload.notes === 'string' && payload.notes.includes('<!--UBM_PO_DATA:')) {
+        payload.notes = cleanDisplayNotes(payload.notes);
+      }
+      const allowedProjectCols = new Set([
+        'id', 'order_id', 'quotation_id', 'bom_id', 'project_name', 'customer_name',
+        'project_lead', 'department', 'start_date', 'end_date', 'due_date',
+        'status', 'progress_percent', 'is_service', 'service_expense_approved',
+        'milestones', 'tasks', 'team', 'modal_cost', 'notes', 'created_at', 'updated_at'
+      ]);
+      for (const col of Object.keys(payload)) {
+        if (!allowedProjectCols.has(col)) {
+          delete payload[col];
+        }
+      }
     }
 
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -1122,12 +1152,14 @@ async function directSupabaseFetchResource(resource) {
       if (nativeRes.ok) {
         const nativeRows = await nativeRes.json();
         if (Array.isArray(nativeRows)) {
-          // If resource is orders, bom, quotations, or purchasing, also fetch cloud sync to merge rich relational data
+          // If resource is orders, bom, quotations, purchasing, or projects, also fetch cloud sync to merge rich relational data
           let cloudOrdersMap = null;
           let cloudBOMMap = null;
           let cloudQuotationsMap = null;
           let cloudPurchasingMap = null;
-          if (resource === 'orders' || resource === 'bom' || resource === 'quotations' || resource === 'purchasing') {
+          let cloudProjectsMap = null;
+          let cloudProjectsList = null;
+          if (resource === 'orders' || resource === 'bom' || resource === 'quotations' || resource === 'purchasing' || resource === 'projects') {
             try {
               const syncKey = `__SYS_SYNC_${resource}__`;
               const cRes = await fetch(`${UBM_SUPABASE_URL}/rest/v1/delivery?id=eq.${syncKey}&select=items`, {
@@ -1148,13 +1180,16 @@ async function directSupabaseFetchResource(resource) {
                     cloudQuotationsMap = new Map(cData[0].items.map(q => [q.id, q]));
                   } else if (resource === 'purchasing') {
                     cloudPurchasingMap = new Map(cData[0].items.map(p => [p.id, p]));
+                  } else if (resource === 'projects') {
+                    cloudProjectsList = cData[0].items;
+                    cloudProjectsMap = new Map(cData[0].items.map(p => [p.id, p]));
                   }
                 }
               }
             } catch (e) {}
           }
 
-          return nativeRows.map(r => {
+          const mappedNative = nativeRows.map(r => {
             const item = convertObjToCamel(r);
             if (resource === 'quotations') {
               if (cloudQuotationsMap && cloudQuotationsMap.has(item.id)) {
@@ -1259,6 +1294,31 @@ async function directSupabaseFetchResource(resource) {
               ensureBOMProjectData(item);
             }
             if (resource === 'projects') {
+              if (cloudProjectsMap && cloudProjectsMap.has(item.id)) {
+                const cProj = cloudProjectsMap.get(item.id);
+                if (!item.leadEmail && cProj.leadEmail) item.leadEmail = cProj.leadEmail;
+                if (item.isLeadLocked === undefined && cProj.isLeadLocked !== undefined) item.isLeadLocked = cProj.isLeadLocked;
+                if (!item.quotationType && cProj.quotationType) item.quotationType = cProj.quotationType;
+                if (!item.orderDate && cProj.orderDate) item.orderDate = cProj.orderDate;
+                if (!item.customerPhone && cProj.customerPhone) item.customerPhone = cProj.customerPhone;
+                if (!item.customerAddress && cProj.customerAddress) item.customerAddress = cProj.customerAddress;
+                if ((!Array.isArray(item.items) || item.items.length === 0) && Array.isArray(cProj.items)) item.items = cProj.items;
+                if ((!Array.isArray(item.additionalServices) || item.additionalServices.length === 0) && Array.isArray(cProj.additionalServices)) item.additionalServices = cProj.additionalServices;
+                if (!item.poFileName && cProj.poFileName) item.poFileName = cProj.poFileName;
+                if (!item.poDocument && cProj.poDocument) item.poDocument = cProj.poDocument;
+                if (!item.poFileUrl && cProj.poFileUrl) item.poFileUrl = cProj.poFileUrl;
+                if (!item.actualUsageReport && cProj.actualUsageReport) item.actualUsageReport = cProj.actualUsageReport;
+                if (item.isDirect === undefined && cProj.isDirect !== undefined) item.isDirect = cProj.isDirect;
+                if ((!Array.isArray(item.team) || item.team.length === 0) && Array.isArray(cProj.team) && cProj.team.length > 0) item.team = cProj.team;
+                if ((!Array.isArray(item.tasks) || item.tasks.length === 0) && Array.isArray(cProj.tasks) && cProj.tasks.length > 0) item.tasks = cProj.tasks;
+                if ((!Array.isArray(item.milestones) || item.milestones.length === 0) && Array.isArray(cProj.milestones) && cProj.milestones.length > 0) item.milestones = cProj.milestones;
+              }
+              const mergedTasks = Array.isArray(item.tasks) && item.tasks.length > 0
+                ? item.tasks
+                : (Array.isArray(item.milestones) ? item.milestones : []);
+              item.tasks = mergedTasks;
+              item.milestones = mergedTasks;
+              item.team = Array.isArray(item.team) ? item.team : [];
               ensureProjectData(item);
             }
             if (resource === 'po') {
@@ -1267,6 +1327,26 @@ async function directSupabaseFetchResource(resource) {
             }
             return item;
           });
+
+          if (resource === 'projects' && Array.isArray(cloudProjectsList) && cloudProjectsList.length > 0) {
+            const seenIds = new Set(mappedNative.map(p => p.id));
+            cloudProjectsList.forEach(cProj => {
+              if (cProj && cProj.id && !seenIds.has(cProj.id)) {
+                const clone = { ...cProj };
+                const mergedTasks = Array.isArray(clone.tasks) && clone.tasks.length > 0
+                  ? clone.tasks
+                  : (Array.isArray(clone.milestones) ? clone.milestones : []);
+                clone.tasks = mergedTasks;
+                clone.milestones = mergedTasks;
+                clone.team = Array.isArray(clone.team) ? clone.team : [];
+                ensureProjectData(clone);
+                mappedNative.push(clone);
+                seenIds.add(clone.id);
+              }
+            });
+          }
+
+          return mappedNative;
         }
       }
     }

@@ -1992,22 +1992,38 @@ end run
             ? Number(newItem.totalEstimatedCost)
             : (matCost + labCost + ovhCost);
         } else if (resourceName === 'projects') {
-          if (!updatedItem.poFileUrl && existingItem.poFileUrl) {
-            updatedItem.poFileUrl = existingItem.poFileUrl;
+          if (newItem.orderId) {
+            const orders = Array.isArray(db.orders) ? db.orders : [];
+            const linkedOrder = orders.find(o => o.id === newItem.orderId);
+            if (linkedOrder) {
+              if (!newItem.poFileName && (linkedOrder.poFileName || linkedOrder.poDocument?.name)) {
+                newItem.poFileName = linkedOrder.poFileName || linkedOrder.poDocument?.name || '';
+              }
+              const orderPoUrl = linkedOrder.poFileUrl || linkedOrder.poDocument?.url || '';
+              const isHugeBase64 = typeof orderPoUrl === 'string' && orderPoUrl.startsWith('data:') && orderPoUrl.length > 150000;
+              if (!isHugeBase64) {
+                if (!newItem.poFileUrl && linkedOrder.poFileUrl) newItem.poFileUrl = linkedOrder.poFileUrl;
+                if (!newItem.poDocument && linkedOrder.poDocument) newItem.poDocument = linkedOrder.poDocument;
+              } else if (!newItem.poDocument && newItem.poFileName) {
+                newItem.poDocument = { name: newItem.poFileName, fromOrderId: linkedOrder.id, uploadedAt: linkedOrder.poDocument?.uploadedAt || new Date().toISOString() };
+              }
+            }
+            // Hindari duplikasi blob base64 PO yang sangat besar pada catatan project
+            if (typeof newItem.notes === 'string' && newItem.notes.includes('<!--UBM_PO_DATA:')) {
+              newItem.notes = cleanDisplayNotes(newItem.notes);
+            }
           }
-          if (!updatedItem.poFileName && existingItem.poFileName) {
-            updatedItem.poFileName = existingItem.poFileName;
-          }
-          if (!updatedItem.poDocument && existingItem.poDocument) {
-            updatedItem.poDocument = existingItem.poDocument;
-          }
-          const tasks = Array.isArray(updatedItem.tasks) && updatedItem.tasks.length > 0
-            ? updatedItem.tasks
-            : (Array.isArray(updatedItem.milestones) ? updatedItem.milestones : (existingItem.tasks || existingItem.milestones || []));
-          updatedItem.tasks = tasks;
-          updatedItem.milestones = tasks;
-          if (updatedItem.id) {
-            syncProjectTasksToSupabase(updatedItem.id, tasks).catch(() => {});
+          newItem.status = newItem.status || 'Planning';
+          newItem.progressPercent = Number(newItem.progressPercent ?? 0);
+          newItem.team = Array.isArray(newItem.team) ? newItem.team : [];
+          ensureProjectData(newItem);
+          const tasks = Array.isArray(newItem.tasks) && newItem.tasks.length > 0
+            ? newItem.tasks
+            : (Array.isArray(newItem.milestones) ? newItem.milestones : []);
+          newItem.tasks = tasks;
+          newItem.milestones = tasks;
+          if (newItem.id) {
+            syncProjectTasksToSupabase(newItem.id, tasks).catch(() => {});
           }
         } else if (resourceName === 'purchasing') {
           if (!newItem.status || newItem.status === 'Pending' || newItem.status === 'In Review') {
@@ -2236,15 +2252,36 @@ end run
             ? Number(req.body.totalEstimatedCost)
             : (matCost + labCost + ovhCost);
         } else if (resourceName === 'projects') {
-          if (!updatedItem.poFileUrl && existingItem.poFileUrl) {
-            updatedItem.poFileUrl = existingItem.poFileUrl;
-          }
           if (!updatedItem.poFileName && existingItem.poFileName) {
             updatedItem.poFileName = existingItem.poFileName;
           }
-          if (!updatedItem.poDocument && existingItem.poDocument) {
-            updatedItem.poDocument = existingItem.poDocument;
+          if (updatedItem.orderId) {
+            const orders = Array.isArray(db.orders) ? db.orders : [];
+            const linkedOrder = orders.find(o => o.id === updatedItem.orderId);
+            if (linkedOrder) {
+              if (!updatedItem.poFileName && (linkedOrder.poFileName || linkedOrder.poDocument?.name)) {
+                updatedItem.poFileName = linkedOrder.poFileName || linkedOrder.poDocument?.name || '';
+              }
+              const orderPoUrl = linkedOrder.poFileUrl || linkedOrder.poDocument?.url || '';
+              const isHugeBase64 = typeof orderPoUrl === 'string' && orderPoUrl.startsWith('data:') && orderPoUrl.length > 150000;
+              if (!isHugeBase64) {
+                if (!updatedItem.poFileUrl && linkedOrder.poFileUrl) updatedItem.poFileUrl = linkedOrder.poFileUrl;
+                if (!updatedItem.poDocument && linkedOrder.poDocument) updatedItem.poDocument = linkedOrder.poDocument;
+              } else if (!updatedItem.poDocument && updatedItem.poFileName) {
+                updatedItem.poDocument = { name: updatedItem.poFileName, fromOrderId: linkedOrder.id, uploadedAt: linkedOrder.poDocument?.uploadedAt || new Date().toISOString() };
+              }
+            }
+            if (typeof updatedItem.notes === 'string' && updatedItem.notes.includes('<!--UBM_PO_DATA:')) {
+              updatedItem.notes = cleanDisplayNotes(updatedItem.notes);
+            }
+          } else {
+            if (!updatedItem.poFileUrl && existingItem.poFileUrl) updatedItem.poFileUrl = existingItem.poFileUrl;
+            if (!updatedItem.poDocument && existingItem.poDocument) updatedItem.poDocument = existingItem.poDocument;
           }
+          updatedItem.status = updatedItem.status || existingItem.status || 'Planning';
+          updatedItem.progressPercent = Number(updatedItem.progressPercent ?? existingItem.progressPercent ?? 0);
+          updatedItem.team = Array.isArray(updatedItem.team) ? updatedItem.team : (Array.isArray(existingItem.team) ? existingItem.team : []);
+          ensureProjectData(updatedItem);
           const tasks = Array.isArray(updatedItem.tasks) && updatedItem.tasks.length > 0
             ? updatedItem.tasks
             : (Array.isArray(updatedItem.milestones) ? updatedItem.milestones : (existingItem.tasks || existingItem.milestones || []));
